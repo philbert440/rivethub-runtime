@@ -1,3 +1,4 @@
+mod coalesce;
 mod consolidate;
 mod gate;
 mod held;
@@ -30,6 +31,7 @@ struct SummaryRow {
     content: String,
     session_key: Option<String>,
     owner_user_id: String,
+    created_at: DateTime<Utc>,
 }
 
 #[derive(Debug, sqlx::FromRow)]
@@ -179,6 +181,15 @@ impl WikiBuilderStore for PostgresMemory {
         held::cite(&self.pool, summary_id, &cited, now).await
     }
 
+    async fn coalescable(
+        &self,
+        lead: Uuid,
+        topic: kernel::topics::TopicId,
+        limit: u32,
+    ) -> Result<Vec<kernel::wiki::builder::Coalescable>, WikiStoreError> {
+        coalesce::candidates(&self.pool, lead, topic, limit).await
+    }
+
     async fn uncite_wiki(&self, summary_id: Uuid, slug: &WikiSlug) -> Result<(), WikiStoreError> {
         let placed = self.place_note_page(slug, None).await?;
         let cited = WikiSlug::try_from(placed.key)
@@ -245,6 +256,7 @@ impl PostgresMemory {
             topic_page,
             merged: &routing.merged,
             home,
+            also: &routing.also,
         };
         let mut touched = Vec::new();
         let mut last_sha = None;
@@ -254,19 +266,15 @@ impl PostgresMemory {
             last_sha = Some(sha);
         }
         for slug in &cited {
-            topics::cite(&mut tx, slug.as_ref(), &summary, now).await?;
+            for cited_by in std::iter::once(&summary).chain(&routing.also) {
+                topics::cite(&mut tx, slug.as_ref(), cited_by, now).await?;
+            }
         }
         touched.sort();
         touched.dedup();
-        sqlx::query(
-            "INSERT INTO rh_wiki_extractions (summary_id, status, pipeline_version, topics_touched, extracted_at, git_sha, owner_user_id)
-             VALUES ($1, 'done', $2, $3, $4, $5, $6)
-             ON CONFLICT (summary_id) DO UPDATE SET status = 'done', pipeline_version = EXCLUDED.pipeline_version,
-                topics_touched = EXCLUDED.topics_touched, error = NULL, extracted_at = EXCLUDED.extracted_at, git_sha = EXCLUDED.git_sha",
-        )
-        .bind(job.summary_id).bind(WIKI_PIPELINE_VERSION).bind(&touched).bind(now).bind(last_sha)
-        .bind(summary.owner.as_ref().map(Owner::as_str))
-        .execute(&mut *tx).await.map_err(query_error)?;
+        let mut summaries = vec![&summary];
+        summaries.extend(&routing.also);
+        coalesce::record(&mut tx, &summaries, &touched, last_sha.as_ref(), now).await?;
         tx.commit().await.map_err(query_error)?;
         Ok(touched)
     }
@@ -293,7 +301,7 @@ async fn load_summary(
     lock: bool,
 ) -> Result<WikiSummary, WikiStoreError> {
     let mut query = sqlx::QueryBuilder::<Postgres>::new(
-        "SELECT s.id, s.conversation_id, s.content, c.session_key, s.owner_user_id FROM rh_summaries s
+        "SELECT s.id, s.conversation_id, s.content, c.session_key, s.owner_user_id, s.created_at FROM rh_summaries s
          LEFT JOIN rh_conversations c ON c.id = s.conversation_id WHERE s.id = ",
     );
     query.push_bind(job.summary_id);
@@ -321,6 +329,7 @@ async fn load_summary(
             Owner::new(row.owner_user_id)
                 .map_err(|error| WikiStoreError::Query(Box::new(error)))?,
         ),
+        created_at: Some(row.created_at),
     })
 }
 

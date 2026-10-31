@@ -1224,6 +1224,22 @@ summary stands. `rh memory recompile-wiki --since <iso> [--min-bytes <n>]
 `--slug`. SQLite (`rh local`) applies the merged rewrite, the rebase and the budgets to its stored pages but keeps no
 archive: it has no repository and stores no History.
 
+(101) Coalesced wiki extraction (Phil, 2026-10-31): when an extract-wiki job's summary routes to a topic page (or a
+section of one), the wiki builder also claims up to 7 more queued, unclaimed extract-wiki jobs whose summaries are
+placed in the same topic and route to the same page and section, highest priority then newest first, while the
+summaries stay within 24,000 characters, and sends them in one extraction call: the input carries `summaries`
+(`{id, date, content}`, oldest first) in place of the single summary's fields, with the same `topic` and `types`. The
+prompt still forbids invented facts, folds what every summary supports into the same patches, keeping each one's
+specific names, numbers, versions and paths, lets the newer summary win where they disagree, and writes one history
+entry for them together. The result is applied once, under the lead job's summary. Every coalesced summary cites the
+topic page (they are all placed in its topic) and gets a `done` extraction row with the same pages and commit; any
+other page a patch writes (an entity, or a topic of its own) is cited, with its page citation, source, provenance and
+citation row, only by the summaries whose text names the patch's title, slug or an alias, or by the lead summary alone
+when none does. The
+claimed jobs are completed with it, or released (their attempt not counted) when the call or the write fails. A job
+whose summary is already extracted is completed; one that routes elsewhere is released. A summary that routes to no
+topic is extracted alone, as before. Each extraction call logs its summary count and prompt and completion tokens.
+
 ## 4. Gaps to close before building the affected slice
 
 - MCP `tools/list` and sample-call recording (B7); CLI golden transcripts (B9); ACP conformance runs against installed

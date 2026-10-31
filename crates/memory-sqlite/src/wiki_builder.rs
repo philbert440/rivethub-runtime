@@ -315,6 +315,7 @@ pub(crate) fn load_summary(
             .map(Owner::new)
             .transpose()
             .map_err(|error| WikiStoreError::Query(Box::new(error)))?,
+        created_at: None,
     })
 }
 

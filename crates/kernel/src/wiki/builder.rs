@@ -12,6 +12,7 @@ use super::page::WikiSlugError;
 use crate::BoxError;
 use crate::filing::Target;
 use crate::owner::Owner;
+use crate::queue::JobId;
 use crate::topics::Slug;
 use crate::topics::TopicId;
 
@@ -70,6 +71,8 @@ pub struct WikiSummary {
     pub session_key: Option<String>,
     #[serde(skip)]
     pub owner: Option<Owner>,
+    #[serde(skip)]
+    pub created_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -77,6 +80,13 @@ pub struct WikiRouting {
     pub topic_page: Option<WikiSlug>,
     pub cited: Vec<WikiSlug>,
     pub merged: Vec<MergedPage>,
+    pub also: Vec<WikiSummary>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Coalescable {
+    pub job: JobId,
+    pub extract: ExtractWiki,
 }
 
 impl WikiRouting {
@@ -172,6 +182,16 @@ pub trait WikiBuilderStore: Send + Sync {
     ) -> Result<(), WikiStoreError>;
 
     async fn uncite_wiki(&self, summary_id: Uuid, slug: &WikiSlug) -> Result<(), WikiStoreError>;
+
+    async fn coalescable(
+        &self,
+        lead: Uuid,
+        topic: TopicId,
+        limit: u32,
+    ) -> Result<Vec<Coalescable>, WikiStoreError> {
+        let _: (Uuid, TopicId, u32) = (lead, topic, limit);
+        Ok(Vec::new())
+    }
 }
 
 #[derive(Debug, Error)]
