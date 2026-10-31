@@ -2925,6 +2925,9 @@
         },
         "vector": {
           "$ref": "#/$defs/VectorState"
+        },
+        "truncated": {
+          "type": "boolean"
         }
       },
       "required": [

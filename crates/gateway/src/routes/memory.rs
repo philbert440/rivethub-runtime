@@ -99,6 +99,10 @@ pub(crate) fn router() -> Router<Arc<Gateway>> {
             routing::get(super::memory_archive::summaries).fallback(super::method_not_allowed),
         )
         .route(
+            "/summaries/{session}/{summary}",
+            routing::get(super::memory_archive::summary).fallback(super::method_not_allowed),
+        )
+        .route(
             "/conversations/{id}/summaries",
             routing::get(super::memory_archive::conversation_summaries)
                 .fallback(super::method_not_allowed),
@@ -158,6 +162,7 @@ struct SearchParams {
     tool_name: Option<String>,
     tag: Option<TagFilter>,
     limit: Option<RawLimit>,
+    snippet: Option<bool>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -213,8 +218,8 @@ async fn search(
         .store()
         .search(query.resolve_window(chrono::Utc::now(), &chrono::Local))
         .await?;
+    let snippets = params.snippet == Some(true);
     Ok(Json(MemorySearchResponse {
-        query: text,
         scope,
         degraded: results.degraded.map(memory_body::memory_degraded_body),
         fallback: results.fallback.map(memory_body::memory_fallback_body),
@@ -224,7 +229,17 @@ async fn search(
             .map(memory_body::memory_entry_body)
             .collect(),
         synthesis: results.synthesis,
-        results: results.results.into_iter().map(search_hit).collect(),
+        results: results
+            .results
+            .into_iter()
+            .map(|mut hit| {
+                if snippets {
+                    hit.content = super::memory_snippet::snippet(&hit.content, &text);
+                }
+                search_hit(hit)
+            })
+            .collect(),
+        query: text,
     }))
 }
 

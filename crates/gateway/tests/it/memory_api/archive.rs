@@ -76,6 +76,7 @@ fn node(
         created_at: at("2026-10-10T12:10:00Z"),
         source_message_ids: vec!["00000000-0000-4000-8000-000000000101".to_owned()],
         vector,
+        truncated: false,
     }
 }
 
@@ -149,6 +150,55 @@ fn summaries_route_returns_the_session_dag_root_first() {
         parsed.messages,
         wire::gateway::memory::MemoryMessageTally::default()
     );
+}
+
+#[test]
+fn an_outline_drops_sources_and_one_summary_reads_whole_and_compressed() {
+    let (gateway, store) = common::gateway();
+    let leaf = "00000000-0000-4000-8000-000000000002";
+    let mut long = node(leaf, None, 0, SummaryKind::Leaf, VectorState::Embedded);
+    long.content = "summary text ".repeat(60);
+    let dag = SummaryDag {
+        session_key: Some(SESSION.to_owned()),
+        summaries: vec![long.clone()],
+        messages: MemoryMessageTally::default(),
+    };
+    block_on(store.script_summary_dag(SummaryOwner::Session(SESSION.to_owned()), dag));
+    let app = gateway.router(false);
+    let response = get(
+        &app,
+        &format!("/api/memory/summaries/{SESSION}?outline=true"),
+    );
+    assert_eq!(response.status, 200);
+    let parsed: MemorySummaryDagResponse =
+        serde_json::from_slice(&response.body).expect("summary outline");
+    let shown = parsed.summaries.first().expect("leaf");
+    assert!(shown.truncated && shown.source_message_ids.is_empty());
+    assert!(long.content.starts_with(&shown.content) && shown.content.len() < long.content.len());
+    let one = get(&app, &format!("/api/memory/summaries/{SESSION}/{leaf}"));
+    assert_eq!(one.status, 200);
+    let whole: wire::gateway::memory::MemorySummaryNode =
+        serde_json::from_slice(&one.body).expect("one summary");
+    assert_eq!(whole.content, long.content);
+    assert!(!whole.truncated && whole.source_message_ids.len() == 1);
+    assert_eq!(
+        get(
+            &app,
+            &format!("/api/memory/summaries/{SESSION}/00000000-0000-4000-8000-000000000009")
+        )
+        .status,
+        404
+    );
+    let mut request = recorded(
+        "GET",
+        &format!("/api/memory/summaries/{SESSION}"),
+        Vec::new(),
+    );
+    request
+        .headers
+        .push(("Accept-Encoding".to_owned(), "gzip".to_owned()));
+    let packed = block_on(answer(app, request)).expect("in-process answer");
+    assert_eq!(header(&packed, "content-encoding"), Some("gzip"));
 }
 
 #[test]

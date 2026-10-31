@@ -1223,6 +1223,21 @@ summary stands. `rh memory recompile-wiki --since <iso> [--min-bytes <n>]
 [--slug <slug>]... [--dry-run] [--json]` queues one job per page at or over `--min-bytes` (default 61440) or per
 `--slug`. SQLite (`rh local`) applies the merged rewrite, the rebase and the budgets to its stored pages but keeps no
 archive: it has no repository and stores no History.
+(101) Lighter memory reads (Phil, 2026-10-31; desktop smoothness): `GET /api/memory/summaries/{session}` and
+`GET /api/memory/conversations/{id}/summaries` take `outline=true`, which answers the same DAG with each node's
+`content` cut to its first 320 bytes on a character boundary, `truncated: true` on a node that was cut and
+`sourceMessageIds` empty; without it the body is unchanged (`truncated` is left out when false). `GET
+/api/memory/summaries/{session}/{summary}` answers one summary of that session's DAG whole, as a
+`MemorySummaryNode`, and `404` for an id outside it. `GET /api/memory/search` takes `snippet=true`, which answers each
+hit's `content` as at most 480 characters around the first query word of three or more characters (or the first 480),
+marked with `…` where it was cut; a client that does not show `expanded` should also pass `expand=false`. Search no
+longer answers a message or summary twice when it was captured twice: hits with the same source, session, time and
+content keep the best-ranked one. `GET /api/topics/{topic}/page` for a sub-topic answers its root's page as a view of
+that sub-topic: `markdown` is the page title, its summary and the sub-topic's `##` section (the last one headed with its
+name, up to the next `##`), `citations` only those filed in the sub-topic, and `aliases`, `entities` and `sources` empty;
+`currentState` and `article` stay the root's, so an edit from the view still edits the whole page. The gateway compresses
+responses with gzip or brotli when the request accepts them, except event streams, audio, video, archives, octet streams
+and NDJSON.
 
 ## 4. Gaps to close before building the affected slice
 

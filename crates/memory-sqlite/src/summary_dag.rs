@@ -174,6 +174,7 @@ fn summary_node(
         created_at: time::stored(&row.created_at, "created_at")?,
         source_message_ids,
         vector: row.vector,
+        truncated: false,
     })
 }
 
