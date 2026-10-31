@@ -636,7 +636,8 @@ removed (a path with a `.` or `..` segment, plain or percent-encoded, or a segme
 and drops the caller's `Authorization`, cookies and every `x-rivethub-*` header it sent (a name rh cannot put in a
 header fails the call with `500` rather than reach the plug-in without it). On `views`, `actions`, `canvas` and `tools` rh parses the request and the answer as their `wire::plugin`
 types and sends the client the answer as it parsed it: an answer that does not parse is `502` `plugin_invalid_response`
-with the field path as `detail` and a `host` log line; an action's `422` reaches the client as it is, and any other
+with the field path as `detail` (the full path to the offending value, such as `blocks[1].items[1].title`, found by
+checking the answer against its type's schema, where serde stops at a tagged block) and a `host` log line; an action's `422` reaches the client as it is, and any other
 status but `200` is `502` `plugin_error` with a `host` log line naming the status and the answer's first 1 KiB; a
 `tools` call reaches only an installed plug-in. `panel` and `http` pass status, headers (less hop-by-hop headers and
 `Set-Cookie`) and body through, streamed. An unknown plug-in is `404`, one not running `503` `plugin_unavailable`
