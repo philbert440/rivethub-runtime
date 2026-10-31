@@ -18,11 +18,18 @@ fn unconfigured_sweeps_use_the_datahub_defaults() -> Result<(), WorkerError> {
         backfill_max: 6,
         model_slots: 8,
         claim_ceiling: None,
+        backfill_enabled: false,
     };
-    assert_eq!(MemoryJobSettings::standard(), expected);
     assert_eq!(
         MemoryJobSettings::from_environment(&Environment::default())?,
         expected
+    );
+    assert_eq!(
+        MemoryJobSettings::standard(),
+        MemoryJobSettings {
+            backfill_enabled: true,
+            ..expected
+        }
     );
     assert!(EmbedSettings::standard().chunks_enabled);
     assert_eq!(EmbedSettings::standard().chars_per_chunk, 6000);
@@ -45,6 +52,7 @@ fn environment_overrides_are_typed_and_the_wiki_cap_is_clamped() -> Result<(), W
         with("RIVETHUB_CLAIM_MAX_PRIORITY", "49")?.claim_ceiling,
         Some(49)
     );
+    assert!(with("RIVETHUB_WIKI_BACKFILL", "1")?.backfill_enabled);
     assert_eq!(
         with("RIVETHUB_WIKI_SWEEP_LIMIT", "500")?.wiki_sweep_limit,
         200

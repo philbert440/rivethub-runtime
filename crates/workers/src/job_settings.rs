@@ -14,6 +14,7 @@ pub struct MemoryJobSettings {
     pub backfill_max: u32,
     pub model_slots: u32,
     pub claim_ceiling: Option<i16>,
+    pub backfill_enabled: bool,
 }
 
 impl MemoryJobSettings {
@@ -28,6 +29,7 @@ impl MemoryJobSettings {
             backfill_max: 6,
             model_slots: 8,
             claim_ceiling: None,
+            backfill_enabled: true,
         }
     }
 
@@ -58,6 +60,7 @@ impl MemoryJobSettings {
                 })?;
             }
         }
+        settings.backfill_enabled = env.text("RIVETHUB_WIKI_BACKFILL") == Some("1");
         let name = "RIVETHUB_CLAIM_MAX_PRIORITY";
         if let Some(parsed) = number(env, name)? {
             settings.claim_ceiling =

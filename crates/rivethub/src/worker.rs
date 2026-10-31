@@ -141,7 +141,9 @@ async fn run(
             .await
             .map_err(StartupError::from)?
             .flagging_after(settings.flag_after)
-            .claiming_at_most(settings.claim_ceiling);
+            .claiming_at_most(settings.claim_ceiling.or_else(|| {
+                (!settings.backfill_enabled).then_some(kernel::wiki::builder::BACKFILL_PRIORITY - 1)
+            }));
         let targets: Arc<dyn EmbeddingStore> = memory.clone();
         let summaries: Arc<dyn SummaryStore> = memory.clone();
         let wiki: Arc<dyn WikiBuilderStore> = memory.clone();

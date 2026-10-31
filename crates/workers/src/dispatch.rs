@@ -215,11 +215,15 @@ async fn dispatch_wiki<Q: JobQueue>(
             Some(probe) => model_load(probe.as_ref()).await,
             None => None,
         };
-        let budget = crate::wiki_builder::backfill_budget(
-            load,
-            env.settings.backfill_max,
-            env.settings.model_slots,
-        );
+        let budget = if env.settings.backfill_enabled {
+            crate::wiki_builder::backfill_budget(
+                load,
+                env.settings.backfill_max,
+                env.settings.model_slots,
+            )
+        } else {
+            kernel::wiki::builder::BackfillBudget::flat(0)
+        };
         handle_wiki_backfill(&wiki_env, budget).await.map(|_| ())
     }
 }
