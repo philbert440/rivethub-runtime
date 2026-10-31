@@ -132,9 +132,12 @@ fn late_text(task: &Task) -> String {
         .filter(|summary| !summary.is_empty())
         .or(task.error.as_deref())
         .unwrap_or("(no reply)");
-    let child = task.child.as_deref().unwrap_or("no session");
+    let ran = match task.child.as_deref() {
+        Some(child) => format!("Child session {child} on {}.", task.target.node),
+        None => format!("No session ran it on {}.", task.target.node),
+    };
     format!(
-        "Task {} finished ({}) after your delegate_task call stopped waiting.\n\n{said}\n\nChild session {child} on {}.",
-        task.id, task.status, task.target.node
+        "Task {} finished ({}) after your delegate_task call stopped waiting.\n\n{said}\n\n{ran}",
+        task.id, task.status
     )
 }
