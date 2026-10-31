@@ -29,6 +29,20 @@ impl Gateway {
         self
     }
 
+    #[must_use]
+    pub fn with_tenancy_store(mut self, store: Arc<dyn kernel::tenancy::TenancyStore>) -> Self {
+        self.tenancy_store = Some(store);
+        self
+    }
+
+    pub(crate) fn tenancy_store(
+        &self,
+    ) -> Result<&Arc<dyn kernel::tenancy::TenancyStore>, crate::error::ApiError> {
+        self.tenancy_store.as_ref().ok_or_else(|| {
+            crate::error::ApiError::Unavailable("visibility store unavailable".into())
+        })
+    }
+
     pub(crate) fn filing(
         &self,
     ) -> Result<&Arc<dyn kernel::filing::FilingStore>, crate::error::ApiError> {

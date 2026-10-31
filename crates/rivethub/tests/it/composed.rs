@@ -104,6 +104,7 @@ fn write_registry(directory: &std::path::Path) -> TestResult {
         owner_user_id: "owner".into(),
         unmapped_is_owner: false,
         local_stores: None,
+        spaces: None,
         users: BTreeMap::from([(
             "device-user".into(),
             wire::gateway::users::UserRecord {

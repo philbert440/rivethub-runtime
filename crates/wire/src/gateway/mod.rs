@@ -8,6 +8,7 @@ pub mod notifications;
 pub mod roster;
 pub mod session_delete;
 pub mod sessions;
+pub mod tenancy;
 pub mod term;
 pub mod tidy;
 pub mod topics;

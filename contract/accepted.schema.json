@@ -5942,6 +5942,174 @@
         "ptys"
       ]
     },
+    "SpaceKind": {
+      "type": "string",
+      "enum": [
+        "household",
+        "team",
+        "compartment"
+      ]
+    },
+    "SpaceConfig": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/SpaceKind"
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "members": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "kind",
+        "members"
+      ]
+    },
+    "SpaceRecord": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/SpaceKind"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "name"
+      ]
+    },
+    "UserSettings": {
+      "type": "object",
+      "properties": {
+        "defaultVisibility": {
+          "type": "string"
+        },
+        "chosen": {
+          "type": "boolean",
+          "default": false
+        },
+        "defaultSince": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64"
+        }
+      },
+      "required": [
+        "defaultVisibility"
+      ]
+    },
+    "UserSettingsUpdate": {
+      "type": "object",
+      "properties": {
+        "defaultVisibility": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "defaultVisibility"
+      ]
+    },
+    "MeResponse": {
+      "type": "object",
+      "properties": {
+        "user": {
+          "type": "string"
+        },
+        "spaces": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SpaceRecord"
+          }
+        },
+        "settings": {
+          "$ref": "#/$defs/UserSettings"
+        }
+      },
+      "required": [
+        "user",
+        "spaces",
+        "settings"
+      ]
+    },
+    "VisibilityUpdate": {
+      "type": "object",
+      "properties": {
+        "visibility": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "additionalProperties": false
+    },
+    "SessionVisibilityRecord": {
+      "type": "object",
+      "properties": {
+        "sessionId": {
+          "$ref": "#/$defs/SessionId"
+        },
+        "visibility": {
+          "type": "string"
+        },
+        "mark": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "owner": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "sessionId",
+        "visibility"
+      ]
+    },
+    "TopicVisibilityRecord": {
+      "type": "object",
+      "properties": {
+        "topicId": {
+          "type": "string"
+        },
+        "visibility": {
+          "type": "string"
+        },
+        "mark": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "topicId",
+        "visibility"
+      ]
+    },
     "TermCommand": {
       "type": "object",
       "properties": {
@@ -6350,6 +6518,15 @@
           "type": "object",
           "additionalProperties": {
             "$ref": "#/$defs/UserRecord"
+          }
+        },
+        "spaces": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": {
+            "$ref": "#/$defs/SpaceConfig"
           }
         }
       },
@@ -7516,6 +7693,24 @@
             "null"
           ],
           "format": "int64"
+        },
+        "owner": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "visibility": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "visibilityMark": {
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "required": [
@@ -7579,6 +7774,24 @@
             "null"
           ],
           "format": "int64"
+        },
+        "owner": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "visibility": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "visibilityMark": {
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "sessionCount": {
           "type": "integer",
@@ -7883,6 +8096,18 @@
           ]
         },
         "taskId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "visibility": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "visibilityMark": {
           "type": [
             "string",
             "null"

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id, parent_id, kind FROM rh_topics ORDER BY id FOR UPDATE",
+  "query": "SELECT id, parent_id, kind FROM rh_topics ORDER BY id",
   "describe": {
     "columns": [
       {
@@ -46,5 +46,5 @@
       false
     ]
   },
-  "hash": "fd2b34fc5970b01dcd68d032a75103efc692e1a7540721c4f6d0f8f267743c5c"
+  "hash": "cbdab10b470fa023b7f9bd0c154f60f86c648588544b46d395c1f6e8ea20c152"
 }

@@ -75,7 +75,15 @@ fn step(conn: &mut Connection, to: SchemaVersion, now: DateTime<Utc>) -> Result<
         SchemaVersion::V29 => in_transaction(conn, to, |tx| {
             tx.execute_batch(include_str!("schema/session_keeps_v29.sql"))
         }),
+        SchemaVersion::V30 => in_transaction(conn, to, add_visibility),
     }
+}
+
+fn add_visibility(tx: &Transaction<'_>) -> rusqlite::Result<()> {
+    if column_present(tx, "rh_topics", "visibility")? {
+        return Ok(());
+    }
+    tx.execute_batch(include_str!("schema/visibility_v30.sql"))
 }
 
 fn add_owners(tx: &Transaction<'_>) -> rusqlite::Result<()> {

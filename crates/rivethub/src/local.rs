@@ -518,12 +518,12 @@ fn spawn_workers(
     for (role, runner) in runners {
         let failed = failed.clone();
         let token = shutdown.clone();
-        tracker.spawn(async move {
+        tracker.spawn(kernel::tenancy::Scope::carry(async move {
             tracing::info!("worker running {role}");
             if let Err(error) = runner.run(token).await {
                 deliver(&failed, LocalError::Worker(RootError::Worker(error)));
             }
-        });
+        }));
     }
 }
 

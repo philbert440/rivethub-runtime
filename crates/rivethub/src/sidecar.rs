@@ -150,7 +150,18 @@ async fn run(
     crate::identity::announce_resolved("mcp", &config, env).map_err(StartupError::from)?;
     let memory =
         Arc::new(postgres(&config, env, &shutdown, activities).await?) as Arc<dyn MemoryStore>;
-    let result = run_server(&config, env, Arc::clone(&memory), selected, &shutdown).await;
+    let scope = crate::composition::identities::load(&config, env)
+        .await?
+        .owner_scope();
+    let result = scope
+        .run(run_server(
+            &config,
+            env,
+            Arc::clone(&memory),
+            selected,
+            &shutdown,
+        ))
+        .await;
     shutdown.cancel();
     let closed = memory.close().await.map_err(StartupError::from);
     closed?;
@@ -323,7 +334,9 @@ async fn serve_stdio(server: mcp::Server, shutdown: CancellationToken) -> Result
     tracing::info!("mcp serving stdio");
     let tracker = TaskTracker::new();
     let token = shutdown.child_token();
-    let task = tracker.spawn(async move { mcp::transport::serve_stdio(server, token).await });
+    let task = tracker.spawn(kernel::tenancy::Scope::carry(async move {
+        mcp::transport::serve_stdio(server, token).await
+    }));
     let joined = join_task(&shutdown, task).await;
     tracker.close();
     tracker.wait().await;
@@ -339,7 +352,9 @@ async fn serve_network(
 ) -> Result<(), SidecarError> {
     let tracker = TaskTracker::new();
     let token = shutdown.clone();
-    let driver = tracker.spawn(async move { drive_network(server, tcp, unix, token).await });
+    let driver = tracker.spawn(kernel::tenancy::Scope::carry(async move {
+        drive_network(server, tcp, unix, token).await
+    }));
     let joined = join_task(&shutdown, driver).await;
     tracker.close();
     tracker.wait().await;
@@ -357,11 +372,15 @@ async fn drive_network(
     if let Some(endpoint) = tcp {
         let server = server.clone();
         let token = shutdown.child_token();
-        tasks.spawn(async move { listen_tcp(server, endpoint, token).await });
+        tasks.spawn(kernel::tenancy::Scope::carry(async move {
+            listen_tcp(server, endpoint, token).await
+        }));
     }
     if let Some(endpoint) = unix {
         let token = shutdown.child_token();
-        tasks.spawn(async move { listen_unix(server, endpoint, token).await });
+        tasks.spawn(kernel::tenancy::Scope::carry(async move {
+            listen_unix(server, endpoint, token).await
+        }));
     }
     let mut failure = None;
     loop {

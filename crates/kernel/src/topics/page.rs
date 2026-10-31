@@ -208,7 +208,7 @@ pub async fn sync_topic_page(
 enum Landing {
     Article,
     Section(TopicId),
-    Elsewhere(Topic),
+    Elsewhere(Box<Topic>),
     Plain,
 }
 
@@ -345,7 +345,7 @@ impl PageSync<'_> {
                 Some(_) => match self.landing(root, &subtopics, section).await? {
                     Landing::Article => into_article.push(section.body.clone()),
                     Landing::Section(id) => into_sections.push((id, section.body.clone())),
-                    Landing::Elsewhere(target) => moved.push((target, section.body.clone())),
+                    Landing::Elsewhere(target) => moved.push((*target, section.body.clone())),
                     Landing::Plain => plain.push(PageSection {
                         topic: None,
                         ..section.clone()
@@ -431,7 +431,7 @@ impl PageSync<'_> {
             Some(topic) if subtopics.iter().any(|sub| sub.id == topic.id) => {
                 Landing::Section(topic.id)
             }
-            Some(topic) => Landing::Elsewhere(topic),
+            Some(topic) => Landing::Elsewhere(Box::new(topic)),
         })
     }
 

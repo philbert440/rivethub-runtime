@@ -422,7 +422,7 @@ where
         let id = job.id;
         let activities = self.activities.clone();
         let activity = format!("job {} {id}", job.name);
-        tasks.spawn(async move {
+        tasks.spawn(kernel::tenancy::Scope::carry(async move {
             let _activity = activities.enter(activity);
             let result = settle(gate.as_ref(), queue.as_ref(), &env, job, &cancel).await;
             {
@@ -432,7 +432,7 @@ where
             drop(permit);
             wake.notify_one();
             result
-        });
+        }));
     }
 
     async fn park(

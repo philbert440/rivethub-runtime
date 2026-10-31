@@ -4,6 +4,7 @@ use std::str::FromStr;
 use chrono::DateTime;
 use chrono::Utc;
 use kernel::owner::Owner;
+use kernel::tenancy::Visibility;
 use kernel::topics::Alias;
 use kernel::topics::PlacedSession;
 use kernel::topics::Placement;
@@ -36,6 +37,8 @@ pub(super) struct TopicRow {
     pub(super) updated_at: DateTime<Utc>,
     pub(super) closed_at: Option<DateTime<Utc>>,
     pub(super) owner_user_id: Option<String>,
+    pub(super) visibility: String,
+    pub(super) visibility_mark: Option<String>,
 }
 
 pub(super) struct AliasRow {
@@ -105,7 +108,13 @@ pub(super) fn topic(row: TopicRow, aliases: Vec<Alias>) -> Result<Topic, TopicEr
         updated_at: row.updated_at,
         closed_at: row.closed_at,
         owner: row.owner_user_id.map(owner).transpose()?,
+        visibility: visibility(&row.visibility)?,
+        visibility_mark: row.visibility_mark.as_deref().map(visibility).transpose()?,
     })
+}
+
+pub(super) fn visibility(text: &str) -> Result<Visibility, TopicError> {
+    Visibility::parse(text).map_err(|error| stored("visibility")(Box::new(error)))
 }
 
 pub(super) fn placement(row: PlacementRow) -> Result<Placement, TopicError> {
@@ -173,6 +182,29 @@ pub(super) async fn aliases_of(
     rows.iter().map(|row| Alias::new(&row.alias)).collect()
 }
 
+pub(super) async fn visible(
+    conn: &mut PgConnection,
+    id: TopicId,
+) -> Result<Option<Topic>, TopicError> {
+    let row = sqlx::query_as!(
+        TopicRow,
+        "SELECT id, kind, slug, name, parent_id, directory_kind, directory_node, directory_path,
+                created_at, updated_at, closed_at, owner_user_id, visibility, visibility_mark
+           FROM rh_topics WHERE id = $1",
+        id.uuid()
+    )
+    .fetch_optional(&mut *conn)
+    .await
+    .map_err(failed("topic read"))?;
+    match row {
+        Some(row) => {
+            let aliases = aliases_of(conn, row.id).await?;
+            topic(row, aliases).map(Some)
+        }
+        None => Ok(None),
+    }
+}
+
 pub(super) async fn by_id(
     conn: &mut PgConnection,
     id: TopicId,
@@ -180,7 +212,7 @@ pub(super) async fn by_id(
     let row = sqlx::query_as!(
         TopicRow,
         "SELECT id, kind, slug, name, parent_id, directory_kind, directory_node, directory_path,
-                created_at, updated_at, closed_at, owner_user_id
+                created_at, updated_at, closed_at, owner_user_id, visibility, visibility_mark
            FROM rh_topics WHERE id = $1 FOR UPDATE",
         id.uuid()
     )
@@ -204,7 +236,8 @@ pub(super) async fn by_slug(
     let row = sqlx::query_as!(
         TopicRow,
         "SELECT t.id, t.kind, t.slug, t.name, t.parent_id, t.directory_kind, t.directory_node,
-                t.directory_path, t.created_at, t.updated_at, t.closed_at, t.owner_user_id
+                t.directory_path, t.created_at, t.updated_at, t.closed_at, t.owner_user_id,
+                t.visibility, t.visibility_mark
            FROM rh_topics t
           WHERE t.kind = $2
             AND (t.slug = $1

@@ -297,7 +297,9 @@ async fn drive<Q: JobQueue + 'static>(
     shutdown: CancellationToken,
 ) -> Result<(), RootError> {
     let token = shutdown.child_token();
-    let task = tokio::spawn(async move { runner.run(token).await });
+    let task = tokio::spawn(kernel::tenancy::Scope::carry(async move {
+        runner.run(token).await
+    }));
     let _abort = crate::shutdown::AbortOnDrop::arm(&task);
     tokio::pin!(task);
     let joined = tokio::select! {

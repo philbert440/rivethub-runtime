@@ -496,13 +496,7 @@ impl crate::PostgresMemory {
             .begin()
             .await
             .map_err(|source| Error::operation("vector search", source))?;
-        sqlx::query_scalar!(
-            r#"select set_config('hnsw.ef_search', $1, true) as "ok!""#,
-            ef_search.to_string()
-        )
-        .fetch_one(&mut *tx)
-        .await
-        .map_err(|source| Error::operation("vector search", source))?;
+        crate::search::tune_hnsw(&mut tx, ef_search).await?;
         let context = ArmContext {
             options,
             tag_filter,

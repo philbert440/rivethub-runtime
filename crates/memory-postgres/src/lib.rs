@@ -31,6 +31,7 @@ mod task_db;
 mod task_jobs;
 mod task_rows;
 mod task_watch;
+mod tenancy;
 mod tidy;
 mod title;
 mod topics;
@@ -41,11 +42,14 @@ pub mod wiki_writer;
 
 #[cfg(test)]
 mod resilience;
+mod scope;
+pub use scope::scoped;
 
 pub use agent_presets::PostgresPresets;
 pub use cleanup::DatabaseIdentity;
 pub use hub_state::PostgresHubState;
 pub use task_db::PostgresTasks;
+pub use tenancy::PostgresTenancy;
 pub use title::Untitled;
 
 use std::cmp::Ordering;
@@ -67,7 +71,7 @@ pub use queue::PostgresQueue;
 use sqlx::PgPool;
 use sqlx::postgres::PgPoolOptions;
 
-pub const SCHEMA_VERSION: i64 = 43;
+pub const SCHEMA_VERSION: i64 = 44;
 pub(crate) const ACQUIRE_TIMEOUT: Duration = Duration::from_secs(3);
 
 #[derive(Debug)]
@@ -206,10 +210,12 @@ async fn check_when_reachable(pool: PgPool) {
 }
 
 fn pool_options(max_connections: u32, idle_timeout: Option<Duration>) -> PgPoolOptions {
-    let options = PgPoolOptions::new()
-        .max_connections(max_connections)
-        .acquire_timeout(ACQUIRE_TIMEOUT)
-        .test_before_acquire(true);
+    let options = scoped(
+        PgPoolOptions::new()
+            .max_connections(max_connections)
+            .acquire_timeout(ACQUIRE_TIMEOUT)
+            .test_before_acquire(false),
+    );
     match idle_timeout {
         Some(idle) => options.idle_timeout(idle),
         None => options,

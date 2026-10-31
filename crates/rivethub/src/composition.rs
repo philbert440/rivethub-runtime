@@ -136,6 +136,7 @@ struct Backing {
     summaries: Option<Arc<dyn kernel::memory::SummaryWatch>>,
     deletions: Option<Arc<dyn kernel::memory::SessionDeletion>>,
     tasks: Option<tasks::TaskPorts>,
+    tenancy: Option<Arc<dyn kernel::tenancy::TenancyStore>>,
 }
 
 fn with_backing(gateway: Gateway, backing: &Backing) -> Gateway {
@@ -169,6 +170,10 @@ fn with_backing(gateway: Gateway, backing: &Backing) -> Gateway {
     };
     let gateway = match backing.deletions.clone() {
         Some(deletions) => gateway.with_session_deletion(deletions),
+        None => gateway,
+    };
+    let gateway = match backing.tenancy.clone() {
+        Some(store) => gateway.with_tenancy_store(store),
         None => gateway,
     };
     match backing.startup.clone() {
@@ -260,6 +265,9 @@ impl Composition {
             deletions: Some(memory.clone()),
             summaries: Some(memory.clone()),
             tasks: Some(ports),
+            tenancy: Some(Arc::new(memory_postgres::PostgresTenancy::new(
+                memory.pool().clone(),
+            ))),
         };
         let factory = crate::models::ModelFactory::from_config(config, env, shutdown)
             .await?
@@ -293,6 +301,7 @@ impl Composition {
             deletions: Some(store.clone()),
             summaries: Some(store.clone()),
             tasks: Some(tasks::TaskPorts::of(store.as_ref())),
+            tenancy: Some(store.clone()),
         };
         let factory = crate::models::ModelFactory::from_config(config, env, shutdown)
             .await?
@@ -334,6 +343,7 @@ impl Composition {
         })
         .await?;
         let identity = identities::load(config, env).await?;
+        let owner_scope = identity.owner_scope();
         let sessions = Arc::new(
             session_registry(
                 gateway::sessions::owners_file(&settings.state_dir),
@@ -353,6 +363,7 @@ impl Composition {
         gateway = with_backing(with_session_stores(gateway, env), &backing);
         gateway = devices::attach(gateway, config, env, &identity.owner, shutdown).await?;
         let tracker = tokio_util::task::TaskTracker::new();
+        identities::keep_spaces(&tracker, backing.tenancy.clone(), &identity, shutdown);
         if config.terminal_enabled() {
             let owner = identity.tenancy.local_user().cloned().ok_or_else(|| {
                 ComposeError::Invalid("a local user is required for terminals".into())
@@ -368,16 +379,17 @@ impl Composition {
         } else {
             std::collections::BTreeMap::new()
         };
-        let mut background = mesh::start(config, env, agents, identity.tenancy, shutdown).await?;
+        let mesh = mesh::start(config, env, agents, identity.tenancy, shutdown);
+        let mut background = Box::pin(owner_scope.clone().run(mesh)).await?;
         let delegating = backing.tasks.is_some();
         if let Some(ports) = backing.tasks {
             let files_root = gateway.settings().files_root.clone();
             gateway = tasks::attach(gateway, ports, config, env, files_root).await?;
         }
-        let gateway =
-            plugins::started(gateway, env, plugins::node_ports(config, bind.port)).await?;
+        let started = plugins::started(gateway, env, plugins::node_ports(config, bind.port));
+        let gateway = Box::pin(owner_scope.clone().run(started)).await?;
         if delegating && gateway.has_tasks() {
-            tasks::serve(&gateway, shutdown, &mut background);
+            owner_scope.enter(|| tasks::serve(&gateway, shutdown, &mut background));
         }
         Ok(Self {
             gateway,

@@ -4,6 +4,7 @@ mod filing;
 mod map;
 mod page;
 mod startup;
+mod visibility;
 
 use std::sync::Arc;
 
@@ -128,6 +129,7 @@ pub(crate) fn router() -> Router<Arc<Gateway>> {
                 .fallback(super::method_not_allowed),
         )
         .merge(filing::router())
+        .merge(visibility::router())
         .merge(page::router())
         .layer(DefaultBodyLimit::max(super::BODY_LIMIT))
 }
@@ -145,7 +147,7 @@ pub(super) async fn resolve_id(store: &dyn TopicStore, key: &str) -> Result<Topi
     Ok(resolve(store, key).await?.id)
 }
 
-fn canonical(segment: &str) -> Result<SessionId, ApiError> {
+pub(super) fn canonical(segment: &str) -> Result<SessionId, ApiError> {
     let decoded = wire::session_id::decode_segment(segment)
         .map_err(|error| ApiError::BadRequest(error.to_string()))?;
     match decoded.session {

@@ -7,6 +7,8 @@ use axum::extract::ConnectInfo;
 use axum::extract::FromRequestParts;
 use axum::http::request::Parts;
 use kernel::owner::Owner;
+use kernel::tenancy::Space;
+use kernel::tenancy::Viewer;
 use sha2::{Digest, Sha256};
 use subtle::ConstantTimeEq;
 
@@ -78,9 +80,32 @@ pub struct Tenancy {
     tokens: Vec<([u8; 32], UserId)>,
     devices: BTreeMap<String, UserId>,
     unmapped_device_owner: Option<UserId>,
+    spaces: Vec<Space>,
 }
 
 impl Tenancy {
+    #[must_use]
+    pub fn with_spaces(mut self, spaces: Vec<Space>) -> Self {
+        self.spaces = spaces;
+        self
+    }
+
+    #[must_use]
+    pub fn spaces(&self) -> &[Space] {
+        &self.spaces
+    }
+
+    #[must_use]
+    pub fn viewer(&self, user: &UserId) -> Viewer {
+        let spaces = self
+            .spaces
+            .iter()
+            .filter(|space| space.members.contains(user.owner()))
+            .map(|space| space.id.clone())
+            .collect();
+        Viewer::new(user.owner().clone(), spaces)
+    }
+
     #[must_use]
     pub fn local_user(&self) -> Option<&UserId> {
         self.local.as_ref()
@@ -189,7 +214,7 @@ impl FromRequestParts<std::sync::Arc<crate::Gateway>> for UserId {
     }
 }
 
-fn caller(gateway: &crate::Gateway, parts: &Parts) -> Result<UserId, ApiError> {
+pub(crate) fn caller(gateway: &crate::Gateway, parts: &Parts) -> Result<UserId, ApiError> {
     if parts
         .extensions
         .get::<crate::plugins::PluginCaller>()

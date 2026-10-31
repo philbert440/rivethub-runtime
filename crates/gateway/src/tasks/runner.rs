@@ -142,12 +142,12 @@ impl Tasks {
             }
             match self.jobs.claim(&selector).await {
                 Ok(Some(claimed)) => {
-                    children.spawn(child::run(
+                    children.spawn(kernel::tenancy::Scope::carry(child::run(
                         Arc::clone(gateway),
                         Arc::clone(self),
                         claimed,
                         stopping.child_token(),
-                    ));
+                    )));
                 }
                 Ok(None) => return,
                 Err(error) => {
@@ -180,7 +180,9 @@ impl Tasks {
         if !hosted {
             self.waits.forget(id);
         } else if self.waits.deliver(id) {
-            tokio::spawn(Arc::clone(self).deliver_late(Arc::clone(gateway), task));
+            tokio::spawn(kernel::tenancy::Scope::carry(
+                Arc::clone(self).deliver_late(Arc::clone(gateway), task),
+            ));
         }
     }
 }
