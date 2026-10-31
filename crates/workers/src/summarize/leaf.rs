@@ -6,8 +6,8 @@ use kernel::memory::SummaryNode;
 use kernel::memory::SummarySource;
 use kernel::memory::SummaryWrite;
 use kernel::memory::WindowMessage;
+use kernel::model::FinishReason;
 use uuid::Uuid;
-use wire::stream::openai::FinishReason;
 
 use super::SummarizeEnv;
 use super::llm::chat;
@@ -53,6 +53,7 @@ pub(super) async fn write_leaves(
         let stored = env.store.write_summary(summary).await?;
         if stored == SummaryWrite::FirstLeaf {
             enqueue_filing(env, conversation_id).await?;
+            super::title::title_first_leaf(env, &window.conversation, &node.content).await?;
         }
         window.leaves.push(node);
         written = written.checked_add(1).ok_or(WorkerError::Count)?;

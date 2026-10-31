@@ -1,5 +1,5 @@
+use kernel::memory::SummaryKind;
 use serde::Deserialize;
-use wire::gateway::memory::SummaryKind;
 use wire::message::Role;
 
 pub(crate) const CONVERSATION_SQL: &str = "INSERT INTO ros_conversations \

@@ -12,7 +12,8 @@ fn main() -> ExitCode {
     };
     let exit = match build_runtime() {
         Ok(runtime) => {
-            let exit = runtime.block_on(dispatch(cli, &env));
+            let exit =
+                runtime.block_on(kernel::tenancy::Scope::Maintenance.run(dispatch(cli, &env)));
             runtime.shutdown_timeout(SHUTDOWN_GRACE);
             exit
         }

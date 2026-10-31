@@ -1,6 +1,7 @@
 use crate::catalog::ToolInput as _;
 use crate::{Error, text};
 use kernel::memory::MemoryStore;
+use kernel::wiki::WikiPageResponse;
 use kernel::wiki::page::WikiSlug;
 use kernel::wiki::page::{FullPageRefused, ReadSection, format_wiki_read};
 use kernel::wiki::{WikiFilter, WikiLookup};
@@ -8,7 +9,6 @@ use rmcp::model::{CallToolResult, ToolAnnotations};
 use schemars::JsonSchema;
 use serde::Deserialize;
 use std::collections::HashSet;
-use wire::gateway::wiki::WikiPageResponse;
 
 const FULL_PAGE_REFUSED: &str = "wiki page exceeds 24,000 characters; choose a section";
 

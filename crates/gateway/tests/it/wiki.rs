@@ -37,6 +37,14 @@ async fn answer(app: &axum::Router, request: Request) -> Response {
 
 #[expect(
     clippy::expect_used,
+    reason = "the fixture page is the contract's shape, which the kernel's page record shares"
+)]
+fn stored(page: WikiPageResponse) -> kernel::wiki::WikiPageResponse {
+    serde_json::from_value(serde_json::to_value(page).expect("page")).expect("kernel page")
+}
+
+#[expect(
+    clippy::expect_used,
     reason = "the page fixture uses a constant calendar date and instant"
 )]
 fn page() -> WikiPageResponse {
@@ -81,7 +89,7 @@ fn page() -> WikiPageResponse {
 
 async fn seeded() -> (axum::Router, Arc<testkit::FakeMemoryStore>) {
     let (gateway, store) = common::gateway();
-    store.insert_wiki_page(page()).await;
+    store.insert_wiki_page(stored(page())).await;
     (gateway.router(false), store)
 }
 
@@ -185,7 +193,7 @@ async fn redirects_are_local_and_preserve_ordinary_slug_characters() {
     let (app, store) = seeded().await;
     let mut target = page();
     target.slug = "quotes 'and' $(substitutions) 🚀".to_owned();
-    store.insert_wiki_page(target.clone()).await;
+    store.insert_wiki_page(stored(target.clone())).await;
     store
         .insert_wiki_redirect("old".to_owned(), target.slug.clone())
         .await;

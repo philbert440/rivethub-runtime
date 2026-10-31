@@ -48,7 +48,7 @@ impl PageEdit {
                 kind: WikiSourceKind::User,
                 ids: Vec::new(),
                 conversation_id: None,
-                extra: wire::Extra::default(),
+                extra: values::Extra::default(),
             });
         }
     }

@@ -1,13 +1,15 @@
+pub(crate) mod body;
 mod context;
+mod offering;
 mod preview;
 mod rows;
 
 use std::collections::HashMap;
 
 use chrono::Utc;
+use kernel::transcript::HarnessToolOutput;
 use kernel::transcript::{StoreSession, StoreTranscript, ToolOutputRead, TranscriptRead};
 use parking_lot::RwLock;
-use wire::gateway::sessions::HarnessToolOutput;
 use wire::harness::{HarnessCode, HarnessId, HarnessOffering, HarnessSessionSummary};
 use wire::session_id::{SessionId, SessionRef, decode_segment};
 
@@ -62,7 +64,12 @@ pub(crate) async fn offered(gateway: &Gateway) -> Result<Vec<HarnessOffering>, A
     let Some(adapter) = gateway.terminal().and_then(|terminal| terminal.adapter()) else {
         return Ok(Vec::new());
     };
-    let mut harnesses = adapter.offerings().await?;
+    let mut harnesses: Vec<HarnessOffering> = adapter
+        .offerings()
+        .await?
+        .into_iter()
+        .map(offering::harness_offering_body)
+        .collect();
     let images = gateway.uploads().is_some();
     let listed = gateway.session_lister().is_some();
     for offering in &mut harnesses {

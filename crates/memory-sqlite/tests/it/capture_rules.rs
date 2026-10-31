@@ -5,8 +5,8 @@ use common::batch;
 use common::fresh_store;
 use common::instant;
 use common::table;
+use kernel::memory::CaptureBatchRequest;
 use testkit::Json;
-use wire::capture::CaptureBatchRequest;
 use wire::message::Role;
 
 async fn stored_updated_at(store: &memory_sqlite::SqliteStore) -> TestResult<String> {
@@ -21,7 +21,7 @@ async fn stored_updated_at(store: &memory_sqlite::SqliteStore) -> TestResult<Str
 
 #[tokio::test]
 async fn updated_at_only_moves_forward() -> TestResult {
-    let fresh = fresh_store(None)?;
+    let fresh = fresh_store()?;
     let now = instant(common::RECORDED_START)?;
     let stamped = |updated_at: &str| -> TestResult<CaptureBatchRequest> {
         let mut capture = batch("old-task", "rivet", "cli");
@@ -30,11 +30,21 @@ async fn updated_at_only_moves_forward() -> TestResult {
     };
     fresh
         .store
-        .capture(stamped("2025-03-01T01:00:00+01:00")?, None, now)
+        .capture(
+            stamped("2025-03-01T01:00:00+01:00")?,
+            &testkit::owner()?,
+            None,
+            now,
+        )
         .await?;
     fresh
         .store
-        .capture(stamped("2024-06-01T00:00:00Z")?, None, now)
+        .capture(
+            stamped("2024-06-01T00:00:00Z")?,
+            &testkit::owner()?,
+            None,
+            now,
+        )
         .await?;
     assert_eq!(
         stored_updated_at(&fresh.store).await?,
@@ -42,7 +52,12 @@ async fn updated_at_only_moves_forward() -> TestResult {
     );
     fresh
         .store
-        .capture(batch("old-task", "rivet", "cli"), None, now)
+        .capture(
+            batch("old-task", "rivet", "cli"),
+            &testkit::owner()?,
+            None,
+            now,
+        )
         .await?;
     assert_eq!(
         stored_updated_at(&fresh.store).await?,
@@ -85,13 +100,14 @@ async fn only_job(store: &memory_sqlite::SqliteStore) -> TestResult<Json> {
 
 #[tokio::test]
 async fn a_filled_tool_result_is_queued_again() -> TestResult {
-    let fresh = fresh_store(None)?;
+    let fresh = fresh_store()?;
     fresh.store.arm_embed();
     let now = instant(common::RECORDED_START)?;
     fresh
         .store
         .capture(
             tool_call(None, r#"{"tool_use_id":"tu1","pending_result":true}"#)?,
+            &testkit::owner()?,
             None,
             now,
         )
@@ -109,6 +125,7 @@ async fn a_filled_tool_result_is_queued_again() -> TestResult {
                 Some("deployed build 42"),
                 r#"{"tool_use_id":"tu1","pending_result":false}"#,
             )?,
+            &testkit::owner()?,
             None,
             now,
         )
@@ -131,13 +148,14 @@ async fn a_filled_tool_result_is_queued_again() -> TestResult {
 
 #[tokio::test]
 async fn a_queued_tool_job_stays_when_the_result_arrives() -> TestResult {
-    let fresh = fresh_store(None)?;
+    let fresh = fresh_store()?;
     fresh.store.arm_embed();
     let now = instant(common::RECORDED_START)?;
     fresh
         .store
         .capture(
             tool_call(None, r#"{"tool_use_id":"tu1","pending_result":true}"#)?,
+            &testkit::owner()?,
             None,
             now,
         )
@@ -149,6 +167,7 @@ async fn a_queued_tool_job_stays_when_the_result_arrives() -> TestResult {
                 Some("deployed build 42"),
                 r#"{"tool_use_id":"tu1","pending_result":false}"#,
             )?,
+            &testkit::owner()?,
             None,
             now,
         )
@@ -187,7 +206,7 @@ async fn stored_title(store: &memory_sqlite::SqliteStore) -> TestResult<Option<S
 
 #[tokio::test]
 async fn a_placeholder_title_never_replaces_the_person_s_words() -> TestResult {
-    let fresh = fresh_store(None)?;
+    let fresh = fresh_store()?;
     let now = instant(common::RECORDED_START)?;
     let titled = |title: &str| {
         let mut capture = batch("cli:titled", "rivet", "cli");
@@ -196,13 +215,14 @@ async fn a_placeholder_title_never_replaces_the_person_s_words() -> TestResult {
     };
     fresh
         .store
-        .capture(titled("Kimi Code session"), None, now)
+        .capture(titled("Kimi Code session"), &testkit::owner()?, None, now)
         .await?;
     assert_eq!(stored_title(&fresh.store).await?, None);
     fresh
         .store
         .capture(
             titled("<user_instructions>be brief</user_instructions>\nport the parser"),
+            &testkit::owner()?,
             None,
             now,
         )
@@ -213,11 +233,16 @@ async fn a_placeholder_title_never_replaces_the_person_s_words() -> TestResult {
     );
     fresh
         .store
-        .capture(titled("Kimi Code session"), None, now)
+        .capture(titled("Kimi Code session"), &testkit::owner()?, None, now)
         .await?;
     fresh
         .store
-        .capture(titled("<recommended_plugins> Here is a list"), None, now)
+        .capture(
+            titled("<recommended_plugins> Here is a list"),
+            &testkit::owner()?,
+            None,
+            now,
+        )
         .await?;
     assert_eq!(
         stored_title(&fresh.store).await?.as_deref(),

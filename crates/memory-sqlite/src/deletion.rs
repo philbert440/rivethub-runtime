@@ -463,4 +463,60 @@ impl SessionDeletion for SqliteStore {
         .await
         .map_err(Into::into)
     }
+
+    async fn keep_session(
+        &self,
+        session_key: &str,
+        kept_by: Option<&str>,
+        now: DateTime<Utc>,
+    ) -> Result<(), MemoryStoreError> {
+        let session_key = session_key.to_owned();
+        let kept_by = kept_by.map(str::to_owned);
+        self.with_conn(move |conn| {
+            conn.execute(
+                "INSERT INTO rh_session_keeps (session_key, kept_at, kept_by)
+                 VALUES (?1, ?2, ?3)
+                 ON CONFLICT (session_key) DO UPDATE
+                    SET kept_at = excluded.kept_at, kept_by = excluded.kept_by",
+                params![session_key, time::stamp(now), kept_by],
+            )
+            .map_err(SqliteError::query("session keep"))?;
+            Ok(())
+        })
+        .await
+        .map_err(Into::into)
+    }
+
+    async fn kept(
+        &self,
+        session_keys: &[String],
+    ) -> Result<BTreeMap<String, DateTime<Utc>>, MemoryStoreError> {
+        let keys = json_keys(session_keys)?;
+        self.with_conn(move |conn| kept_at(conn, &keys))
+            .await
+            .map_err(Into::into)
+    }
+}
+
+fn kept_at(conn: &Connection, keys: &str) -> Result<BTreeMap<String, DateTime<Utc>>, SqliteError> {
+    let mut statement = conn
+        .prepare(
+            "SELECT session_key, kept_at FROM rh_session_keeps
+              WHERE session_key IN (SELECT value FROM json_each(?1))",
+        )
+        .map_err(SqliteError::query("session keeps"))?;
+    let rows = statement
+        .query_map([keys], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        })
+        .map_err(SqliteError::query("session keeps"))?;
+    let mut kept = BTreeMap::new();
+    for row in rows {
+        let (session_key, stored) = row.map_err(SqliteError::query("session keeps"))?;
+        kept.insert(
+            session_key,
+            time::stored(&stored, "rh_session_keeps.kept_at")?,
+        );
+    }
+    Ok(kept)
 }

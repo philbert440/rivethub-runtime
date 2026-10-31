@@ -2,12 +2,12 @@ use chrono::DateTime;
 use chrono::Local;
 use chrono::Utc;
 use kernel::memory::BrowseFilter;
+use kernel::memory::MemoryBrowseOrder;
+use kernel::memory::MemoryEntry;
 use kernel::memory_core::TimeRange;
 use kernel::memory_core::resolve_window;
 use rusqlite::OptionalExtension as _;
 use rusqlite::params;
-use wire::gateway::memory::MemoryBrowseOrder;
-use wire::memory::MemoryEntry;
 
 use crate::SqliteStore;
 use crate::error::SqliteError;

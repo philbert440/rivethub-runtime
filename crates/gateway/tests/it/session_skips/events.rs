@@ -77,11 +77,11 @@ pub(crate) const EVENTS: &[(&str, &str)] = &[
     ),
     (
         "ws-main/upgrade-audio-mic-disabled",
-        "B1: legacy raw-socket destruction and process shutdown framing differ from Axum; serving and cancellation tests cover the boundary",
+        "B1: note 90 removed the mic bridge",
     ),
     (
         "ws-main/upgrade-alias-audio-mic",
-        "B1: legacy raw-socket destruction and process shutdown framing differ from Axum; serving and cancellation tests cover the boundary",
+        "B1: note 90 removed the mic bridge",
     ),
     (
         "ws-main/upgrade-missing-key",

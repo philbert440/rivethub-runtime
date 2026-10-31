@@ -52,6 +52,7 @@ pub fn store_roots(env: &Environment) -> StoreRoots {
         omp: overridable(env, "PI_CODING_AGENT_DIR", ".omp/agent"),
         cursor: home_dir(env, ".cursor"),
         cowork: cowork_roots(env),
+        dsh: overridable(env, "DSH_HOME", ".dsh"),
     }
 }
 

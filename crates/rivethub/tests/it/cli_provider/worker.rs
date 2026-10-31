@@ -22,7 +22,7 @@ async fn composed_summarizer_runs_cli_model_without_embedder(pool: sqlx::PgPool)
     let (config, _) = configured(home.path(), config::ProviderType::ClaudeCli, "")?;
     let store = Arc::new(memory_postgres::PostgresMemory::new(pool.clone()));
     let messages = (0..10)
-        .map(|index| wire::memory::MemoryEntry {
+        .map(|index| kernel::memory::MemoryEntry {
             id: None,
             session_id: "cli:summary".into(),
             agent: "main".into(),
@@ -36,7 +36,7 @@ async fn composed_summarizer_runs_cli_model_without_embedder(pool: sqlx::PgPool)
             created_at: Some(chrono::Utc::now()),
         })
         .collect();
-    store.append(messages).await?;
+    store.append(&testkit::owner()?, messages).await?;
     let id: String = sqlx::query_scalar(
         "SELECT id::text FROM rh_conversations WHERE session_key = 'cli:summary'",
     )
@@ -67,6 +67,7 @@ async fn composed_summarizer_runs_cli_model_without_embedder(pool: sqlx::PgPool)
         summaries: store.clone(),
         wiki: store.clone(),
         consolidate: None,
+        recompile: None,
         topics: store.clone(),
         filing: store.clone(),
         pages: store.clone(),
@@ -75,6 +76,8 @@ async fn composed_summarizer_runs_cli_model_without_embedder(pool: sqlx::PgPool)
         lineage: Arc::new(capture::listing::StoreSessionLister::new(
             capture::listing::StoreRoots::default(),
         )),
+        load: None,
+        scopes: None,
     };
     for role in [workers::ProcessRole::Embedder, workers::ProcessRole::All] {
         let refused = with_models(

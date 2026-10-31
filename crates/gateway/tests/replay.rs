@@ -83,20 +83,6 @@ const CLAIMS: &[&str] = &[
     "plain-main/alias-uppercase",
     "plain-main/alias-api-events-trailing-slash",
     "plain-main/alias-api-events-unknown-child",
-    "plain-main/layout-bad-key-slash",
-    "plain-main/layout-bad-key-empty",
-    "plain-main/layout-bad-key-65",
-    "plain-main/layout-missing",
-    "plain-main/layout-missing-default",
-    "plain-main/layout-post-invalid-json",
-    "plain-main/layout-post-bad-key",
-    "plain-main/layout-post-valid",
-    "plain-main/layout-get-written",
-    "plain-main/layout-post-default",
-    "plain-main/layout-get-fallback",
-    "plain-main/layout-key-dots",
-    "plain-main/layout-put",
-    "plain-main/body-too-large-layout",
     "plain-main/mesh-valid-before-ingest",
     "plain-main/mesh-no-file",
     "plain-main/mesh-invalid-json",
@@ -104,8 +90,6 @@ const CLAIMS: &[&str] = &[
     "plain-main/mesh-flat-array",
     "plain-main/mesh-nodes-number",
     "plain-main/mesh-post",
-    "plain-main/capabilities",
-    "plain-main/capabilities-post",
     "plain-redirect/redirect-get-root",
     "plain-redirect/redirect-get-root-query",
     "plain-redirect/redirect-head-root",
@@ -117,7 +101,6 @@ const CLAIMS: &[&str] = &[
     "plain-nostatic/nostatic-root",
     "plain-nostatic/nostatic-root-html",
     "plain-nostatic/nostatic-spa",
-    "plain-nostatic/capabilities-no-mesh",
 ];
 
 const OUT_OF_SCOPE: &[(&str, &str, &str)] = &[
@@ -159,11 +142,7 @@ const OUT_OF_SCOPE: &[(&str, &str, &str)] = &[
         "static-term-nested",
         "terminal lane owns the disabled handler",
     ),
-    (
-        "plain-main",
-        "static-audio-nested",
-        "audio lane owns the disabled handler",
-    ),
+    ("plain-main", "static-audio-nested", "removed"),
     (
         "plain-main",
         "static-uppercase-extension",
@@ -293,29 +272,17 @@ const OUT_OF_SCOPE: &[(&str, &str, &str)] = &[
         "alias-api-terminal-prefix",
         "terminal lane owns the destination",
     ),
-    ("plain-main", "alias-api-audio", "audio lane owns the alias"),
-    (
-        "plain-main",
-        "alias-api-audio-status",
-        "audio lane owns the alias",
-    ),
-    (
-        "plain-main",
-        "alias-api-audio-health",
-        "audio lane owns the alias",
-    ),
-    (
-        "plain-main",
-        "alias-api-audio-mic-http",
-        "audio lane owns the alias",
-    ),
+    ("plain-main", "alias-api-audio", "removed"),
+    ("plain-main", "alias-api-audio-status", "removed"),
+    ("plain-main", "alias-api-audio-health", "removed"),
+    ("plain-main", "alias-api-audio-mic-http", "removed"),
     ("plain-main", "delete-session-known", "2"),
     ("plain-main", "delete-session-again", "2"),
     ("plain-main", "delete-session-missing-param", "2"),
     ("plain-main", "delete-session-canonical", "2"),
     ("plain-main", "session-get", "2"),
     ("plain-main", "sessions-after-delete", "2"),
-    ("plain-main", "audio-disabled", "3"),
+    ("plain-main", "audio-disabled", "removed"),
     ("plain-main", "term-post-disabled", "2"),
     ("plain-main", "body-exactly-256k", "2"),
     ("plain-main", "body-too-large-event", "2"),
@@ -325,6 +292,23 @@ const OUT_OF_SCOPE: &[(&str, &str, &str)] = &[
         "mesh-valid",
         "session registry owns sessions and latest",
     ),
+    ("plain-main", "layout-bad-key-slash", "removed"),
+    ("plain-main", "layout-bad-key-empty", "removed"),
+    ("plain-main", "layout-bad-key-65", "removed"),
+    ("plain-main", "layout-missing", "removed"),
+    ("plain-main", "layout-missing-default", "removed"),
+    ("plain-main", "layout-post-invalid-json", "removed"),
+    ("plain-main", "layout-post-bad-key", "removed"),
+    ("plain-main", "layout-post-valid", "removed"),
+    ("plain-main", "layout-get-written", "removed"),
+    ("plain-main", "layout-post-default", "removed"),
+    ("plain-main", "layout-get-fallback", "removed"),
+    ("plain-main", "layout-key-dots", "removed"),
+    ("plain-main", "layout-put", "removed"),
+    ("plain-main", "body-too-large-layout", "removed"),
+    ("plain-main", "capabilities", "removed"),
+    ("plain-main", "capabilities-post", "removed"),
+    ("plain-nostatic", "capabilities-no-mesh", "removed"),
     ("plain-tenancy", "tenancy-ingest-owner-session", "2"),
     ("plain-tenancy", "tenancy-ingest-alice-session", "2"),
     ("plain-tenancy", "tenancy-sessions-owner", "2"),
@@ -372,8 +356,8 @@ const SKIP_REASONS: &[(&str, &str)] = &[
         "terminal lane owns the disabled handler",
     ),
     (
-        "audio lane owns the disabled handler",
-        "audio lane owns the disabled handler",
+        "removed",
+        "B1: note 90 removed the mic bridge, /layout and /api/capabilities; the recording keeps the den's answers",
     ),
     (
         "mime guessing is case-insensitive; the recording pins a case-sensitive octet-stream quirk",
@@ -411,7 +395,6 @@ const SKIP_REASONS: &[(&str, &str)] = &[
         "terminal lane owns the destination",
         "terminal lane owns the destination",
     ),
-    ("audio lane owns the alias", "audio lane owns the alias"),
 ];
 
 fn golden(name: &str) -> PathBuf {
@@ -479,11 +462,10 @@ fn start(args: &Arguments, runtime: &tokio::runtime::Runtime) -> libtest_mimic::
         Err(error) => return failed(args, error),
     };
     let mut trials = Vec::new();
-    let mut layout = Vec::new();
     match testkit::http::cases(&golden(RECORDING)) {
         Ok(cases) => {
             for case in cases {
-                push_case(&mut trials, &mut layout, case, &apps, &handle);
+                push_case(&mut trials, case, &apps, &handle);
             }
         }
         Err(error) => trials.push(Trial::test("gateway golden load".to_string(), {
@@ -493,9 +475,6 @@ fn start(args: &Arguments, runtime: &tokio::runtime::Runtime) -> libtest_mimic::
                 )))
             }
         })),
-    }
-    if !layout.is_empty() {
-        trials.push(layout_trial(layout, handle));
     }
     trials.push(Trial::test(
         "gateway claims are recorded".to_string(),
@@ -533,7 +512,6 @@ fn app_for(settings: gateway::Settings) -> axum::Router {
 
 fn push_case(
     trials: &mut Vec<Trial>,
-    layout: &mut Vec<testkit::http::HttpCase>,
     case: testkit::http::HttpCase,
     apps: &Apps,
     handle: &tokio::runtime::Handle,
@@ -549,7 +527,6 @@ fn push_case(
         return;
     }
     match fixture::kind(&case.id) {
-        fixture::Kind::Layout => layout.push(case),
         fixture::Kind::Mesh => trials.push(mesh_trial(case, handle.clone())),
         fixture::Kind::Static => {
             trials.push(shared_trial(case, apps.statik.clone(), handle.clone()));
@@ -617,18 +594,6 @@ fn mesh_trial(case: testkit::http::HttpCase, handle: tokio::runtime::Handle) -> 
             mask.port = port.to_string();
         }
         play_masked(&case, &app_for(settings), &handle, &mask)
-    })
-}
-
-fn layout_trial(cases: Vec<testkit::http::HttpCase>, handle: tokio::runtime::Handle) -> Trial {
-    Trial::test("gateway layout sequence", move || {
-        let scratch =
-            tempfile::tempdir().map_err(|error| Failed::from(format!("layout dir: {error}")))?;
-        let app = app_for(fixture::layout_settings(scratch.path()));
-        for case in cases {
-            play(&case, &app, &handle)?;
-        }
-        Ok(())
     })
 }
 

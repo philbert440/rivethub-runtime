@@ -81,11 +81,27 @@ pub(crate) fn router() -> Router<Arc<Gateway>> {
             "/api/wiki/{slug}/raw",
             get(raw).fallback(super::method_not_allowed),
         )
+        .route(
+            "/api/wiki/{slug}/archive",
+            get(archive_raw).fallback(super::method_not_allowed),
+        )
+        .route(
+            "/api/wiki/{slug}/archive/{month}",
+            get(archive_month_raw).fallback(super::method_not_allowed),
+        )
         .route("/wiki", get(index).fallback(super::method_not_allowed))
         .route("/wiki/", get(index).fallback(super::method_not_allowed))
         .route(
             "/wiki/{slug}",
             get(article).fallback(super::method_not_allowed),
+        )
+        .route(
+            "/wiki/{slug}/archive",
+            get(archive_html).fallback(super::method_not_allowed),
+        )
+        .route(
+            "/wiki/{slug}/archive/{month}",
+            get(archive_month_html).fallback(super::method_not_allowed),
         )
 }
 
@@ -93,14 +109,18 @@ async fn topics(
     State(gateway): State<Arc<Gateway>>,
     Query(query): Query<WikiQuery>,
 ) -> Result<Json<WikiTopicList>, ApiError> {
-    Ok(Json(gateway.store().wiki_topics(filter(query)).await?))
+    Ok(Json(crate::memory_body::wiki_topic_list_body(
+        gateway.store().wiki_topics(filter(query)).await?,
+    )))
 }
 
 async fn gaps(
     State(gateway): State<Arc<Gateway>>,
     Query(query): Query<WikiQuery>,
 ) -> Result<Json<WikiGapsResponse>, ApiError> {
-    Ok(Json(gateway.store().wiki_gaps(filter(query).limit).await?))
+    Ok(Json(crate::memory_body::wiki_gaps_response_body(
+        gateway.store().wiki_gaps(filter(query).limit).await?,
+    )))
 }
 
 async fn page(
@@ -117,6 +137,71 @@ async fn raw(
     respond(&gateway, requested_slug(slug)?, Format::Raw).await
 }
 
+async fn archive_raw(
+    State(gateway): State<Arc<Gateway>>,
+    Path(slug): Path<String>,
+) -> Result<Response, WikiError> {
+    archive(&gateway, slug, None, Format::Raw).await
+}
+
+async fn archive_month_raw(
+    State(gateway): State<Arc<Gateway>>,
+    Path((slug, month)): Path<(String, String)>,
+) -> Result<Response, WikiError> {
+    archive(&gateway, slug, Some(month), Format::Raw).await
+}
+
+async fn archive_html(
+    State(gateway): State<Arc<Gateway>>,
+    Path(slug): Path<String>,
+) -> Result<Response, WikiError> {
+    archive(&gateway, slug, None, Format::Html).await
+}
+
+async fn archive_month_html(
+    State(gateway): State<Arc<Gateway>>,
+    Path((slug, month)): Path<(String, String)>,
+) -> Result<Response, WikiError> {
+    archive(&gateway, slug, Some(month), Format::Html).await
+}
+
+async fn archive(
+    gateway: &Gateway,
+    slug: String,
+    month: Option<String>,
+    format: Format,
+) -> Result<Response, WikiError> {
+    let slug = requested_slug(slug)?;
+    let markdown = gateway
+        .store()
+        .wiki_archive(&slug, month.as_deref())
+        .await
+        .map_err(ApiError::from)?;
+    Ok(match (markdown, format) {
+        (Some(markdown), Format::Html) => {
+            html::response(StatusCode::OK, html::archive(slug.as_ref(), &markdown)?)
+        }
+        (Some(markdown), Format::Raw | Format::Json) => (
+            [(header::CONTENT_TYPE, "text/markdown; charset=utf-8")],
+            markdown,
+        )
+            .into_response(),
+        (None, Format::Html) => {
+            html::response(StatusCode::NOT_FOUND, html::missing(&archive_missing())?)
+        }
+        (None, Format::Raw | Format::Json) => {
+            (StatusCode::NOT_FOUND, Json(archive_missing())).into_response()
+        }
+    })
+}
+
+fn archive_missing() -> WikiMissBody {
+    WikiMissBody {
+        error: "wiki archive not found".to_owned(),
+        suggestions: Vec::new(),
+    }
+}
+
 async fn page_query(
     State(gateway): State<Arc<Gateway>>,
     Query(query): Query<WikiPageQuery>,
@@ -129,11 +214,13 @@ async fn index(
     Query(query): Query<WikiQuery>,
 ) -> Result<Response, WikiError> {
     let filter = filter(query);
-    let topics = gateway
-        .store()
-        .wiki_topics(filter.clone())
-        .await
-        .map_err(ApiError::from)?;
+    let topics = crate::memory_body::wiki_topic_list_body(
+        gateway
+            .store()
+            .wiki_topics(filter.clone())
+            .await
+            .map_err(ApiError::from)?,
+    );
     Ok(html::response(
         StatusCode::OK,
         html::index(&topics, &filter)?,
@@ -196,13 +283,18 @@ async fn respond(gateway: &Gateway, slug: WikiSlug, format: Format) -> Result<Re
         .map_err(ApiError::from)?
     {
         WikiLookup::Page(page) => match format {
-            Format::Json => Ok(Json(*page).into_response()),
+            Format::Json => {
+                Ok(Json(crate::memory_body::wiki_page_response_body(*page)).into_response())
+            }
             Format::Raw => Ok((
                 [(header::CONTENT_TYPE, "text/markdown; charset=utf-8")],
                 page.markdown,
             )
                 .into_response()),
-            Format::Html => Ok(html::response(StatusCode::OK, html::article(&page)?)),
+            Format::Html => Ok(html::response(
+                StatusCode::OK,
+                html::article(&crate::memory_body::wiki_page_response_body(*page))?,
+            )),
         },
         WikiLookup::Redirect(target) => {
             let target = WikiSlug::try_from(target)?;

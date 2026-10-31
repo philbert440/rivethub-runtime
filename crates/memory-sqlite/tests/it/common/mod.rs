@@ -4,6 +4,8 @@ use std::fs;
 
 use chrono::DateTime;
 use chrono::Utc;
+use kernel::memory::CaptureBatchRequest;
+use kernel::memory::CaptureMessage;
 use memory_sqlite::SqliteError;
 use memory_sqlite::SqliteStore;
 use serde::Deserialize;
@@ -13,8 +15,6 @@ use sha2::Sha256;
 use tempfile::TempDir;
 use testkit::Json;
 use wire::JsonObject;
-use wire::capture::CaptureBatchRequest;
-use wire::capture::CaptureMessage;
 use wire::message::Role;
 
 pub(crate) type TestError = Box<dyn std::error::Error>;
@@ -67,15 +67,11 @@ pub(crate) struct Fresh {
     pub(crate) store: SqliteStore,
 }
 
-pub(crate) fn fresh_store(owner: Option<&str>) -> TestResult<Fresh> {
+pub(crate) fn fresh_store() -> TestResult<Fresh> {
     let dir = tempfile::tempdir()?;
     let path = dir.path().join("memory.sqlite");
     migrate::sqlite_at(&path, instant(RECORDED_START)?)?;
     let store = SqliteStore::open(&path)?;
-    let store = match owner {
-        Some(owner) => store.with_owner(owner),
-        None => store,
-    };
     Ok(Fresh { _dir: dir, store })
 }
 
@@ -411,4 +407,14 @@ fn uuid_bytes(bytes: &[u8]) -> bool {
         8 | 13 | 18 | 23 => *byte == b'-',
         _ => byte.is_ascii_hexdigit(),
     })
+}
+
+pub(crate) fn owned_by_the_caller(rows: &mut [Json]) {
+    for row in rows {
+        if let Some(row) = row.as_object_mut()
+            && row.get("owner_user_id") == Some(&Json::Null)
+        {
+            row.insert("owner_user_id".to_owned(), Json::from(testkit::OWNER));
+        }
+    }
 }

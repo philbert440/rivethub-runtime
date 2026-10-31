@@ -454,4 +454,41 @@ impl SessionDeletion for PostgresMemory {
     async fn purge_tombstoned(&self, limit: u32) -> Result<DeletedSession, MemoryStoreError> {
         self.purge_all(limit).await.map_err(Into::into)
     }
+
+    async fn keep_session(
+        &self,
+        session_key: &str,
+        kept_by: Option<&str>,
+        now: DateTime<Utc>,
+    ) -> Result<(), MemoryStoreError> {
+        sqlx::query!(
+            "INSERT INTO rh_session_keeps (session_key, kept_at, kept_by) VALUES ($1, $2, $3)
+             ON CONFLICT (session_key) DO UPDATE
+                SET kept_at = EXCLUDED.kept_at, kept_by = EXCLUDED.kept_by",
+            session_key,
+            now,
+            kept_by
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|source| Error::operation("session keep", source))?;
+        Ok(())
+    }
+
+    async fn kept(
+        &self,
+        session_keys: &[String],
+    ) -> Result<BTreeMap<String, DateTime<Utc>>, MemoryStoreError> {
+        let found = sqlx::query!(
+            "SELECT session_key, kept_at FROM rh_session_keeps WHERE session_key = ANY($1)",
+            session_keys
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|source| Error::operation("session keeps", source))?;
+        Ok(found
+            .into_iter()
+            .map(|row| (row.session_key, row.kept_at))
+            .collect())
+    }
 }

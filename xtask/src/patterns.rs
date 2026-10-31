@@ -47,7 +47,6 @@ pub fn checks() -> &'static [&'static str] {
         "FALLBACK",
         "JSMODEL",
         "JSONBYTES",
-        "KERNELWIRE",
         "LABPATH",
         "LANGUAGES",
         "LINTPOLICY",

@@ -68,7 +68,7 @@ async fn context_replay_matches_the_recording() -> TestResult {
 }
 
 async fn replay_checklist(scenario: &Scenario) -> TestResult {
-    let fresh = fresh_store(None)?;
+    let fresh = fresh_store()?;
     seed_checklist(&fresh.store, scenario).await?;
     expect_context(
         &fresh.store,
@@ -98,7 +98,7 @@ async fn replay_checklist(scenario: &Scenario) -> TestResult {
 }
 
 async fn replay_wiki(scenario: &Scenario) -> TestResult {
-    let fresh = fresh_store(None)?;
+    let fresh = fresh_store()?;
     let shown = step(scenario, "context with wiki")?;
     let text = shown_text(shown)?;
     seed_wiki_context(&fresh.store, &text).await?;

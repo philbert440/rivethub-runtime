@@ -3,25 +3,25 @@ use chrono::DateTime;
 use chrono::Utc;
 use kernel::memory::Limit;
 use kernel::memory::MemoryStoreError;
+use kernel::memory::PendingTagAction;
+use kernel::memory::PendingTagWire;
 use kernel::memory::TagAdd;
+use kernel::memory::TagCount;
 use kernel::memory::TagCountsQuery;
 use kernel::memory::TagDecision;
 use kernel::memory::TagEntity;
+use kernel::memory::TagEntityType;
 use kernel::memory::TagId;
 use kernel::memory::TagListQuery;
 use kernel::memory::TagLookup;
+use kernel::memory::TagState;
+use kernel::memory::TagWire;
 use sqlx::PgPool;
 use sqlx::Postgres;
 use sqlx::QueryBuilder;
 use std::collections::BTreeMap;
 use std::str::FromStr as _;
 use uuid::Uuid;
-use wire::gateway::memory::PendingTagAction;
-use wire::gateway::memory::PendingTagWire;
-use wire::gateway::memory::TagCount;
-use wire::gateway::memory::TagEntityType;
-use wire::gateway::memory::TagState;
-use wire::gateway::memory::TagWire;
 
 mod suggest;
 mod taxonomy;
@@ -167,6 +167,35 @@ fn push_wire_columns(builder: &mut QueryBuilder<Postgres>) {
          t.display, t.source, t.state, t.confidence, t.proposed_by, t.reason, t.decided_by, \
          t.decided_at, t.created_at, t.updated_at from rh_tags t where true",
     );
+}
+
+pub(crate) async fn summary_conversation_tags(
+    pool: &PgPool,
+    summaries: &[Uuid],
+) -> Result<BTreeMap<Uuid, Vec<TagWire>>, MemoryStoreError> {
+    let mut builder = QueryBuilder::new("");
+    push_wire_columns(&mut builder);
+    builder
+        .push(" and t.entity_type = ")
+        .push_bind(TagEntityType::Conversation.to_string())
+        .push(" and t.state = ")
+        .push_bind(TagState::Accepted.to_string())
+        .push(" and t.entity_id in (select conversation_id from rh_summaries where id = any(")
+        .push_bind(summaries.to_vec())
+        .push(")) order by t.entity_id, t.key, t.value");
+    let rows = read_rows(
+        "tags list",
+        builder.build_query_as::<TagWireRow>().fetch_all(pool).await,
+    )?;
+    let mut grouped: BTreeMap<Uuid, Vec<TagWire>> = BTreeMap::new();
+    for row in rows.shape() {
+        let entity = Uuid::parse_str(&row.entity_id).map_err(Error::from)?;
+        grouped
+            .entry(entity)
+            .or_default()
+            .push(TagWire::try_from(row).map_err(MemoryStoreError::from)?);
+    }
+    Ok(grouped)
 }
 
 async fn list_tags(pool: &PgPool, query: &TagListQuery) -> Result<Vec<TagWire>, MemoryStoreError> {

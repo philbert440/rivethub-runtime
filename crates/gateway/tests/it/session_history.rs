@@ -10,6 +10,9 @@ use futures::{SinkExt as _, StreamExt as _};
 use gateway::sessions::{SessionRegistry, owners_file};
 use kernel::harness::{SessionEvent, ToolCallInfo};
 use kernel::transcript::{
+    HarnessTranscriptTurn, MessageUsage, SessionMessageRole, TranscriptAttachment,
+};
+use kernel::transcript::{
     ListLimit, SessionLister, SessionRenameError, StoreSession, StoreTranscript, ToolOutputRead,
     TranscriptRead, TranscriptReaderError,
 };
@@ -22,9 +25,8 @@ use wire::events::ContextSource;
 use wire::gateway::GatewayError;
 use wire::gateway::sessions::{
     HarnessSessionResponse, HarnessSessionTranscriptResponse, HarnessSocketRefusal,
-    HarnessSocketRefusalCode, HarnessTranscriptTurn, MessageUsage, SessionMessageRole,
-    SessionPostRequest, SessionPreviewKind, SessionPreviewList, SessionSteerResponse,
-    TranscriptAttachment,
+    HarnessSocketRefusalCode, SessionPostRequest, SessionPreviewKind, SessionPreviewList,
+    SessionSteerResponse,
 };
 use wire::harness::{
     HarnessEvent, HarnessId, HarnessOfferingList, HarnessSessionList, HarnessSessionStatus,
@@ -1161,7 +1163,10 @@ fn image_turn(text: &str) -> HarnessTranscriptTurn {
     }
 }
 
-async fn transcript_turns(setup: &Setup, session: &str) -> Vec<HarnessTranscriptTurn> {
+async fn transcript_turns(
+    setup: &Setup,
+    session: &str,
+) -> Vec<wire::gateway::sessions::HarnessTranscriptTurn> {
     let (status, body) = get(
         setup,
         &format!("/api/harness-sessions/{}/transcript", enc(session)),
@@ -1197,7 +1202,7 @@ async fn a_reloaded_transcript_names_the_uploads_its_user_turn_carried() {
     assert_eq!(status, 200, "{}", String::from_utf8_lossy(&body));
     setup.harness.finish.add_permits(1);
     setup.harness.traced("ended").await;
-    let named = vec![TranscriptAttachment {
+    let named = vec![wire::gateway::sessions::TranscriptAttachment {
         media_type: "image/png".to_owned(),
         name: Some("shot.png".to_owned()),
         uri: Some(shot.uri.clone()),

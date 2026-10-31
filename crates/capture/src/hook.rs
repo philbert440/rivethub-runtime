@@ -1,14 +1,17 @@
-pub mod grok;
+mod pending;
+pub mod store;
 mod transcript_batch;
 
 use std::os::unix::fs::PermissionsExt as _;
 use std::path::Path;
 use std::path::PathBuf;
+use std::time::Duration;
 
 use chrono::DateTime;
 use chrono::SecondsFormat;
 use chrono::Utc;
-use kernel::memory::spoken_title;
+use pending::Pending;
+use pending::PendingPrompts;
 use thiserror::Error;
 use tokio::io::AsyncWriteExt as _;
 use wire::JsonObject;
@@ -28,9 +31,8 @@ use crate::records::PromptSettings;
 use crate::records::SOURCE;
 use crate::records::TranscriptSettings;
 use crate::transcript::Line;
-use crate::transcript::LineKind;
 use crate::transcript::parse_lines;
-use crate::transcript::read_capped_async;
+use crate::transcript::read_uncapped_async;
 use crate::transcript::report_skipped;
 use crate::writer::CaptureTransport;
 use crate::writer::CaptureWriter;
@@ -42,6 +44,8 @@ const FALLBACK_TITLE: &str = "Claude Code session";
 const LOG_FILE: &str = "claude-capture.log";
 const LOG_MODE: u32 = 0o644;
 const INGEST_TOKEN_CHARS: usize = 9;
+const REPLY_WAIT: Duration = Duration::from_secs(5);
+const REPLY_POLL: Duration = Duration::from_millis(100);
 
 #[derive(Debug, Error)]
 pub enum HookError {
@@ -79,6 +83,7 @@ impl HookRun {
 #[derive(Debug)]
 pub struct ClaudeHook<T: CaptureTransport> {
     writer: CaptureWriter<T>,
+    pending: PendingPrompts,
     log_file: PathBuf,
 }
 
@@ -87,6 +92,7 @@ impl<T: CaptureTransport> ClaudeHook<T> {
     pub fn new(writer: CaptureWriter<T>, paths: &config::Paths) -> Self {
         Self {
             writer,
+            pending: PendingPrompts::new(&paths.state_dir()),
             log_file: paths.state_dir().join(LOG_FILE),
         }
     }
@@ -113,18 +119,36 @@ impl<T: CaptureTransport> ClaudeHook<T> {
         let Some(session) = payload.session_id.clone() else {
             return HookRun::done();
         };
-        let transcript = load_transcript(&payload).await;
+        if event == HookEvent::UserPromptSubmit {
+            return self
+                .hold_prompt(&payload, session.native(), now, ingest_key)
+                .await;
+        }
+        let transcript = match event {
+            HookEvent::Stop => settled_transcript(&payload).await,
+            HookEvent::PostToolUse
+            | HookEvent::SubagentStop
+            | HookEvent::SessionEnd
+            | HookEvent::UserPromptSubmit
+            | HookEvent::Other => load_transcript(&payload).await,
+        };
         let batch = match event {
-            HookEvent::UserPromptSubmit => {
-                user_prompt_batch(&payload, session.as_str(), &transcript, ingest_key)
-            }
             HookEvent::PostToolUse => {
                 tool_batch(&payload, session.as_str(), &transcript, ingest_key)
             }
             HookEvent::Stop | HookEvent::SubagentStop | HookEvent::SessionEnd => {
-                transcript_batch::build(&payload, session.as_str(), &transcript, event)
+                match self.pending.take(session.native()).await {
+                    Ok(pending) => transcript_batch::build(
+                        &payload,
+                        session.as_str(),
+                        &transcript,
+                        event,
+                        &pending,
+                    ),
+                    Err(error) => return HookRun::failed(error.to_string()),
+                }
             }
-            HookEvent::Other => return HookRun::done(),
+            HookEvent::UserPromptSubmit | HookEvent::Other => return HookRun::done(),
         };
         let batch = batch.and_then(|mut batch| {
             batch.settings = Some(settings_for(&payload, &session, event, now)?);
@@ -141,6 +165,31 @@ impl<T: CaptureTransport> ClaudeHook<T> {
                 HookRun::done()
             }
             Err(error) => HookRun::failed(error.to_string()),
+        }
+    }
+
+    async fn hold_prompt(
+        &self,
+        payload: &HookPayload,
+        native: &str,
+        now: DateTime<Utc>,
+        ingest_key: &str,
+    ) -> HookRun {
+        let Some(prompt) = payload
+            .prompt
+            .as_ref()
+            .filter(|prompt| !prompt.trim().is_empty())
+        else {
+            return HookRun::done();
+        };
+        let pending = Pending {
+            key: ingest_key.to_owned(),
+            prompt: prompt.clone(),
+            at: now,
+        };
+        match self.pending.add(native, &pending).await {
+            Ok(()) => HookRun::done(),
+            Err(error) => HookRun::failed(format!("prompt was not held for capture: {error}")),
         }
     }
 
@@ -175,7 +224,7 @@ async fn load_transcript(payload: &HookPayload) -> Vec<Line> {
     let Some(path) = &payload.transcript_path else {
         return Vec::new();
     };
-    match read_capped_async(path).await {
+    match read_uncapped_async(path).await {
         Ok(text) => {
             let parsed = parse_lines(&text);
             report_skipped(&parsed.skipped);
@@ -186,6 +235,26 @@ async fn load_transcript(payload: &HookPayload) -> Vec<Line> {
             Vec::new()
         }
     }
+}
+
+async fn settled_transcript(payload: &HookPayload) -> Vec<Line> {
+    let mut transcript = load_transcript(payload).await;
+    let Some(reply) = payload
+        .last_assistant_message
+        .as_deref()
+        .map(str::trim)
+        .filter(|reply| !reply.is_empty())
+    else {
+        return transcript;
+    };
+    let deadline = tokio::time::Instant::now() + REPLY_WAIT;
+    while !transcript_batch::holds_reply(&transcript, reply)
+        && tokio::time::Instant::now() < deadline
+    {
+        tokio::time::sleep(REPLY_POLL).await;
+        transcript = load_transcript(payload).await;
+    }
+    transcript
 }
 
 #[must_use]
@@ -259,44 +328,6 @@ fn event_metadata(event: &str, ingest_key: &str) -> Result<JsonObject, HookError
         hook_event: event,
         ingest_key,
     })?)
-}
-
-fn is_prompt(line: &Line) -> bool {
-    line.r#type == LineKind::User && line.tool_result_text().is_none()
-}
-
-fn user_prompt_batch(
-    payload: &HookPayload,
-    session_key: &str,
-    transcript: &[Line],
-    ingest_key: &str,
-) -> Result<CaptureBatchRequest, HookError> {
-    let mut batch = base_batch(session_key);
-    let prompt = payload.prompt.clone().unwrap_or_default();
-    batch.title =
-        Some(spoken_title(&prompt).map_or_else(|| FALLBACK_TITLE.to_owned(), str::to_owned));
-    let suffix = user_ordinal(transcript, &prompt);
-    batch.messages.push(CaptureMessage {
-        event_id: format!("{session_key}:u{suffix}"),
-        role: Role::User,
-        content: prompt,
-        tool_name: None,
-        tool_args: None,
-        tool_result: None,
-        metadata: Some(event_metadata("UserPromptSubmit", ingest_key)?),
-        created_at: None,
-    });
-    Ok(batch)
-}
-
-fn user_ordinal(transcript: &[Line], prompt: &str) -> usize {
-    let latest = transcript
-        .iter()
-        .rposition(|line| is_prompt(line) && line.text().as_deref() == Some(prompt));
-    match latest {
-        Some(position) => position + 1,
-        None => transcript.iter().filter(|line| is_prompt(line)).count() + 1,
-    }
 }
 
 fn tool_batch(

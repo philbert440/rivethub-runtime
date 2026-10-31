@@ -1,4 +1,6 @@
 use kernel::terminal::TerminalId;
+use kernel::terminal::TerminalMuxError;
+use tokio::sync::mpsc;
 
 use crate::manager::registry::Runtime;
 use crate::mux::MuxPlan;
@@ -18,6 +20,31 @@ impl TerminalManager {
             }
             MuxPlan::Unavailable(unavailable) => Err(unavailable.reason.to_error()),
         }
+    }
+
+    pub(super) fn port_turn_ends(
+        &self,
+        id: &TerminalId,
+    ) -> Result<mpsc::Receiver<kernel::terminal::PaneTurn>, TerminalMuxError> {
+        let server = self.inner.port_backends.lock().get(id).cloned();
+        let events = {
+            let state = self.inner.state.lock();
+            match server.as_ref().and_then(|server| state.get(server)) {
+                Some(Runtime::Herdr { session, .. }) => session.client.subscribe_events(),
+                Some(Runtime::Pty { .. }) | None => {
+                    return Err(TerminalMuxError::Unsupported("turn_ends"));
+                }
+            }
+        };
+        let (ends, receiver) = mpsc::channel(4);
+        let shutdown = self.inner.shutdown.clone();
+        self.inner.tasks.spawn(async move {
+            tokio::select! {
+                () = shutdown.cancelled() => {}
+                () = crate::herdr::turns::follow(events, ends) => {}
+            }
+        });
+        Ok(receiver)
     }
 
     async fn port_herdr(&self, spec: SpawnSpec) -> Result<TerminalId, Error> {

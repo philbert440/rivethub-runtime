@@ -1,9 +1,10 @@
 use chrono::DateTime;
 use chrono::Utc;
-use wire::session_id::SessionId;
+use values::SessionId;
 
 use super::TopicId;
 use super::TopicName;
+use crate::owner::Owner;
 
 #[derive(
     Debug,
@@ -42,6 +43,7 @@ pub struct Placement {
     pub topic: TopicId,
     pub by: PlacementSource,
     pub at: DateTime<Utc>,
+    pub owner: Option<Owner>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

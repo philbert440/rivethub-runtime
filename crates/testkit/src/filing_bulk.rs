@@ -1,6 +1,8 @@
 use kernel::filing::ConversationPlacement;
 use kernel::filing::Filed;
 use kernel::filing::FilingStore;
+use kernel::memory::CaptureBatchRequest;
+use kernel::memory::CaptureMessage;
 use kernel::memory::MemoryStore;
 use kernel::topics::HistoryMark;
 use kernel::topics::Placement;
@@ -9,8 +11,6 @@ use kernel::topics::Suggestion;
 use kernel::topics::TopicName;
 use kernel::topics::TopicStore;
 use uuid::Uuid;
-use wire::capture::CaptureBatchRequest;
-use wire::capture::CaptureMessage;
 use wire::message::Role;
 
 use crate::topics::Outcome;
@@ -45,6 +45,7 @@ where
                 topic,
                 by,
                 at: at(4),
+                owner: Some(crate::owner()?),
             })
             .await?;
     }
@@ -141,6 +142,7 @@ async fn captured<S: MemoryStore>(
                     created_at: Some(at(minute)),
                 }],
             },
+            &crate::owner()?,
             Some("node-a"),
         )
         .await?;

@@ -19,14 +19,19 @@ use kernel::memory::TagAdd;
 use kernel::memory::TagCountsQuery;
 use kernel::memory::TagDecision;
 use kernel::memory::TagEntity;
+use kernel::memory::TagEntityType;
+use kernel::memory::TagEntryPair;
 use kernel::memory::TagId;
 use kernel::memory::TagListQuery;
 use kernel::memory::TagLiteral;
 use kernel::memory::TagLookup;
+use kernel::memory::TagState;
 use kernel::memory::TagSuggestKind;
 use kernel::memory::TagSuggestionRow;
 use kernel::memory::TagSuggestionWrite;
 use kernel::memory::TagTaxonomyDecision;
+use kernel::memory::TagTaxonomyEntry;
+use kernel::memory::TagTaxonomyMerge;
 use kernel::memory::TagTaxonomyQuery;
 use kernel::memory::TagTaxonomyUpsert;
 use kernel::memory::TagVocabularyProposal;
@@ -35,11 +40,6 @@ use rusqlite::params;
 use serde::Deserialize;
 use testkit::Json;
 use uuid::Uuid;
-use wire::gateway::memory::TagEntityType;
-use wire::gateway::memory::TagEntryPair;
-use wire::gateway::memory::TagState;
-use wire::gateway::memory::TagTaxonomyEntry;
-use wire::gateway::memory::TagTaxonomyMerge;
 
 const LIFECYCLE: &str = "tag store lifecycle";
 const VOCAB: &str = "vocabulary: upsert, nest, decide, propose, merge";
@@ -136,7 +136,7 @@ async fn every_tag_scenario_is_replayed_or_skipped() -> TestResult {
 async fn tag_lifecycle_matches_the_recording() -> TestResult {
     let file: ScenarioFile = recording("tags.json")?;
     let scenario = named(&file, LIFECYCLE)?;
-    let fresh = fresh_store(None)?;
+    let fresh = fresh_store()?;
     seed_sessions(&fresh.store).await?;
     let mut ids = Ids::default();
     let acmekit = replay_adds(&fresh.store, scenario, &mut ids).await?;
@@ -149,7 +149,7 @@ async fn tag_lifecycle_matches_the_recording() -> TestResult {
 async fn vocabulary_matches_the_recording() -> TestResult {
     let file: ScenarioFile = recording("tags.json")?;
     let scenario = named(&file, VOCAB)?;
-    let fresh = fresh_store(None)?;
+    let fresh = fresh_store()?;
     let at = instant(common::RECORDED_START)?;
     let store = fresh.store.clone().with_clock(move || at);
     let mut ids = Ids::default();
@@ -162,7 +162,7 @@ async fn vocabulary_matches_the_recording() -> TestResult {
 
 #[tokio::test]
 async fn an_add_defaults_a_blank_display_to_the_value() -> TestResult {
-    let fresh = fresh_store(None)?;
+    let fresh = fresh_store()?;
     seed_sessions(&fresh.store).await?;
 
     let omitted = fresh
@@ -195,7 +195,7 @@ async fn an_add_defaults_a_blank_display_to_the_value() -> TestResult {
 
 #[tokio::test]
 async fn a_session_key_does_not_address_a_summary() -> TestResult {
-    let fresh = fresh_store(None)?;
+    let fresh = fresh_store()?;
     let outcome = fresh
         .store
         .add_tag(TagAdd {

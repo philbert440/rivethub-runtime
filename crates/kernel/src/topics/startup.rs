@@ -1,15 +1,15 @@
 use std::collections::HashSet;
 
+use crate::memory::MemoryHitSource;
+use crate::memory::MemoryScope;
+use crate::memory::MemorySearchResult;
+use crate::memory::SummaryKind;
 use async_trait::async_trait;
 use chrono::DateTime;
 use chrono::Utc;
 use serde::Deserialize;
 use serde::Serialize;
-use wire::gateway::memory::MemoryHitSource;
-use wire::gateway::memory::MemoryScope;
-use wire::gateway::memory::SummaryKind;
-use wire::memory::MemorySearchResult;
-use wire::session_id::SessionId;
+use values::SessionId;
 
 use super::PlacedSession;
 use super::Topic;
@@ -51,13 +51,6 @@ const fn share(kind: StartupKind) -> usize {
     }
 }
 
-#[cfg_attr(
-    dylint_lib = "rr_lints",
-    expect(
-        duptype,
-        reason = "KERNELWIRE: the kernel owns a startup section's kind; wire::gateway::topics::StartupKind is the contract's copy, translated by the gateway"
-    )
-)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum StartupKind {
@@ -66,13 +59,6 @@ pub enum StartupKind {
     Relevant,
 }
 
-#[cfg_attr(
-    dylint_lib = "rr_lints",
-    expect(
-        duptype,
-        reason = "KERNELWIRE: the kernel owns how a startup context was delivered; wire::gateway::topics::DeliveredVia is the contract's copy, translated by the gateway"
-    )
-)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, strum::Display, strum::EnumString)]
 #[strum(serialize_all = "camelCase")]
 pub enum DeliveredVia {

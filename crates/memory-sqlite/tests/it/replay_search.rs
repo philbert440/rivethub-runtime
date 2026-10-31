@@ -19,7 +19,12 @@ use common::expect_logs;
 use common::fresh_store;
 use common::instant;
 use common::message;
+use kernel::memory::BrowseWindow;
+use kernel::memory::CaptureBatchRequest;
 use kernel::memory::Limit;
+use kernel::memory::MemoryHitSource;
+use kernel::memory::MemoryScope;
+use kernel::memory::MemorySearchResult;
 use kernel::memory::SearchMode;
 use kernel::memory::SearchOutcome;
 use kernel::memory::SearchQuery;
@@ -30,11 +35,6 @@ use memory_sqlite::SqliteStore;
 use rusqlite::params;
 use serde::Serialize;
 use testkit::Json;
-use wire::capture::CaptureBatchRequest;
-use wire::gateway::memory::BrowseWindow;
-use wire::gateway::memory::MemoryHitSource;
-use wire::gateway::memory::MemoryScope;
-use wire::memory::MemorySearchResult;
 use wire::message::Role;
 
 const CLOCK: &str = "2026-10-10T12:03:00.000Z";
@@ -114,7 +114,7 @@ async fn fts_only_replay_matches_the_recording() -> TestResult {
 async fn tag_pool_widening_returns_the_buried_hit() -> TestResult {
     let file: Json = common::recording("search.json")?;
     let pool = file.get("tag_pool_widening").ok_or("tag_pool_widening")?;
-    let fresh = fresh_store(None)?;
+    let fresh = fresh_store()?;
     let now = instant(POOL_CLOCK)?;
     seed_tag_pool(&fresh.store, now).await?;
     let step = pool
@@ -147,7 +147,7 @@ async fn tag_pool_widening_returns_the_buried_hit() -> TestResult {
 
 #[tokio::test]
 async fn search_modes_and_request_validation() -> TestResult {
-    let fresh = fresh_store(None)?;
+    let fresh = fresh_store()?;
     let now = instant(CLOCK)?;
     for mode in [SearchMode::Fts, SearchMode::Hybrid, SearchMode::Vector] {
         let mut query = asked("deploy", MemoryScope::Both, 10);

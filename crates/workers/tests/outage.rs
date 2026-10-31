@@ -25,6 +25,7 @@ use common::settings;
 use common::target_payload;
 use common::width;
 use kernel::model::Embedding;
+use kernel::model::LlmResponse;
 use kernel::model::ModelCallFailure;
 use kernel::model::ModelProvider;
 use kernel::model::ModelProviderError;
@@ -39,7 +40,6 @@ use tokio::sync::mpsc::Receiver;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 use wire::JsonObject;
-use wire::stream::LlmResponse;
 use workers::EmbedTable;
 use workers::OutageCause;
 use workers::ProcessRole;
@@ -288,6 +288,7 @@ fn deps(
         provider,
         embed: settings(),
         summary: SummarySettings::standard("fake-chat").expect("summary settings"),
+        scopes: None,
     }
 }
 
@@ -312,6 +313,14 @@ impl kernel::memory::SummaryStore for IdleSummaries {
         &self,
         _summary: kernel::memory::NewSummary,
     ) -> Result<kernel::memory::SummaryWrite, kernel::memory::SummaryStoreError> {
+        Err(kernel::memory::SummaryStoreError::Closed)
+    }
+
+    async fn retitle(
+        &self,
+        _id: uuid::Uuid,
+        _title: &str,
+    ) -> Result<bool, kernel::memory::SummaryStoreError> {
         Err(kernel::memory::SummaryStoreError::Closed)
     }
 }

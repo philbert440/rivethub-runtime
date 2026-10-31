@@ -1,14 +1,14 @@
 use std::collections::HashMap;
 
+use kernel::transcript::{HarnessTranscriptTurn, SessionMessageRole};
 use parking_lot::RwLock;
 use strum::IntoEnumIterator;
 use wire::events::ContextSource;
-use wire::gateway::sessions::{HarnessTranscriptTurn, SessionMessageRole};
 use wire::harness::HarnessId;
 use wire::session_id::SessionId;
 
 const MILLION: u64 = 1_000_000;
-const CLAUDE_WINDOW: u64 = 200_000;
+const EARLIER_CLAUDE_WINDOW: u64 = 200_000;
 const GROK_WINDOW: u64 = 500_000;
 const CODEX_WINDOW: u64 = 400_000;
 const DEFAULT_WINDOW: u64 = 262_144;
@@ -45,13 +45,34 @@ pub(crate) fn window_for(harness: HarnessId, model: Option<&str>) -> u64 {
     } else if harness == HarnessId::ClaudeCode
         || ClaudeFamily::iter().any(|family| model.contains(&family.to_string()))
     {
-        CLAUDE_WINDOW
+        if long_context_claude(&model) {
+            MILLION
+        } else {
+            EARLIER_CLAUDE_WINDOW
+        }
     } else if harness == HarnessId::GrokBuild {
         GROK_WINDOW
     } else if harness == HarnessId::Codex || model.starts_with("gpt-5") || model.contains("codex") {
         CODEX_WINDOW
     } else {
         DEFAULT_WINDOW
+    }
+}
+
+fn long_context_claude(model: &str) -> bool {
+    let versions: Vec<u32> = model
+        .split(|c: char| !c.is_ascii_alphanumeric())
+        .filter(|part| (1..=2).contains(&part.len()) && part.bytes().all(|b| b.is_ascii_digit()))
+        .map(|part| part.bytes().fold(0, |n, b| n * 10 + u32::from(b - b'0')))
+        .collect();
+    if model.contains("fable") || model.contains("mythos") {
+        return true;
+    }
+    match versions.as_slice() {
+        [] => true,
+        [major, ..] if *major >= 5 => true,
+        [4, minor, ..] => *minor >= 6 && !model.contains("haiku"),
+        _ => false,
     }
 }
 
@@ -126,6 +147,39 @@ impl Stamps {
                 compact_at: default_compact_at(window),
                 source,
             },
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use wire::harness::HarnessId;
+
+    use super::window_for;
+
+    #[test]
+    fn current_claude_models_have_a_million_tokens_and_earlier_ones_two_hundred_thousand() {
+        let window = |model: Option<&str>| window_for(HarnessId::ClaudeCode, model);
+        for current in [
+            None,
+            Some("haiku"),
+            Some("claude-haiku-5-5"),
+            Some("claude-opus-5-5"),
+            Some("claude-sonnet-4-6"),
+            Some("claude-opus-4-6"),
+            Some("claude-fable-5-1"),
+            Some("claude-sonnet-4-5[1m]"),
+        ] {
+            assert_eq!(window(current), 1_000_000, "{current:?}");
+        }
+        for earlier in [
+            "claude-haiku-4-5",
+            "claude-sonnet-4-5-20250929",
+            "claude-opus-4-1",
+            "claude-sonnet-4-20250514",
+            "claude-3-7-sonnet-20250219",
+        ] {
+            assert_eq!(window(Some(earlier)), 200_000, "{earlier}");
         }
     }
 }

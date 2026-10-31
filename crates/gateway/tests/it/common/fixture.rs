@@ -25,16 +25,13 @@ const PIXEL_PNG: &[u8] = &[
 pub(crate) enum Kind {
     Plain,
     Static,
-    Layout,
     Mesh,
     Redirect,
     NoStatic,
 }
 
 pub(crate) fn kind(id: &str) -> Kind {
-    if is_layout(id) {
-        Kind::Layout
-    } else if id.starts_with("plain-redirect/") {
+    if id.starts_with("plain-redirect/") {
         Kind::Redirect
     } else if id.starts_with("plain-nostatic/") {
         Kind::NoStatic
@@ -47,14 +44,8 @@ pub(crate) fn kind(id: &str) -> Kind {
     }
 }
 
-pub(crate) fn is_layout(id: &str) -> bool {
-    id.starts_with("plain-main/layout-") || id == "plain-main/body-too-large-layout"
-}
-
 fn is_mesh(id: &str) -> bool {
     id.starts_with("plain-main/mesh-")
-        || id == "plain-main/capabilities"
-        || id == "plain-main/capabilities-post"
 }
 
 fn is_static_surface(id: &str) -> bool {
@@ -90,12 +81,6 @@ fn write(path: &Path, bytes: &[u8]) -> Result<(), String> {
 pub(crate) fn static_settings(static_dir: &Path) -> Settings {
     let mut settings = common::settings();
     settings.static_dir = Some(static_dir.to_path_buf());
-    settings
-}
-
-pub(crate) fn layout_settings(state_dir: &Path) -> Settings {
-    let mut settings = common::settings();
-    settings.state_dir = state_dir.to_path_buf();
     settings
 }
 
@@ -163,9 +148,7 @@ fn mesh_body(id: &str, local_port: Option<u16>) -> Result<MeshBody, String> {
         "plain-main/mesh-root-array" => MeshBody::Bytes(br#"[{"id":"x"}]"#.to_vec()),
         "plain-main/mesh-flat-array" => MeshBody::Bytes(super::common::roster::flat()?),
         "plain-main/mesh-nodes-number" => MeshBody::Bytes(br#"{"nodes":1}"#.to_vec()),
-        "plain-main/mesh-empty-object"
-        | "plain-main/capabilities"
-        | "plain-main/capabilities-post" => MeshBody::Bytes(b"{}".to_vec()),
+        "plain-main/mesh-empty-object" => MeshBody::Bytes(b"{}".to_vec()),
         _ => MeshBody::Missing,
     };
     Ok(body)

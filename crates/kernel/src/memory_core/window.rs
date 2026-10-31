@@ -1,3 +1,4 @@
+use crate::memory::BrowseWindow;
 use chrono::DateTime;
 use chrono::Datelike as _;
 use chrono::Duration;
@@ -8,7 +9,6 @@ use chrono::NaiveTime;
 use chrono::Offset as _;
 use chrono::TimeZone;
 use chrono::Utc;
-use wire::gateway::memory::BrowseWindow;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TimeRange {
@@ -101,6 +101,7 @@ fn seconds_until_existing<Tz: TimeZone>(zone: &Tz, local: NaiveDateTime, gap: i6
 mod tests {
     use super::TimeRange;
     use super::resolve_window;
+    use crate::memory::BrowseWindow;
     use chrono::DateTime;
     use chrono::Duration;
     use chrono::Utc;
@@ -108,7 +109,6 @@ mod tests {
     use chrono_tz::America::New_York;
     use chrono_tz::America::Santiago;
     use chrono_tz::Asia::Kolkata;
-    use wire::gateway::memory::BrowseWindow;
 
     fn utc(text: &str) -> DateTime<Utc> {
         text.parse().expect("an RFC 3339 instant")

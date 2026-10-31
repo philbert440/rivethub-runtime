@@ -1,5 +1,6 @@
 use crate::catalog::ToolInput as _;
 use crate::{Error, error::required, json, memory::limit, render_tags, text};
+use kernel::memory::TagTaxonomyMerge;
 use kernel::memory::{
     MemoryStore, TagAdd, TagCountsQuery, TagDecision, TagEntity, TagId, TagListQuery, TagLookup,
     TagTaxonomyDecision, TagTaxonomyQuery, TagTaxonomyUpsert,
@@ -7,7 +8,7 @@ use kernel::memory::{
 use rmcp::model::CallToolResult;
 use serde::Deserialize;
 use uuid::Uuid;
-use wire::gateway::memory::{TagEntityType, TagEntryPair, TagState, TagTaxonomyMerge};
+use wire::gateway::memory::{TagEntityType, TagEntryPair, TagState};
 
 #[derive(schemars::JsonSchema, serde::Serialize, Debug, Default, Deserialize, strum::Display)]
 #[serde(rename_all = "snake_case")]
@@ -103,11 +104,11 @@ pub async fn call(
         Action::List => Ok(text(render_tags::list(
             &store
                 .list_tags(TagListQuery {
-                    entity_type: args.entity_type,
+                    entity_type: args.entity_type.map(entity_type),
                     entity_id: args.entity_id,
                     key: args.key,
                     value: args.value,
-                    states: args.state.into_iter().collect(),
+                    states: args.state.into_iter().map(tag_state).collect(),
                     limit: count,
                 })
                 .await?,
@@ -126,7 +127,7 @@ pub async fn call(
             let sessions = store
                 .lookup_tags(TagLookup {
                     session_keys: session_keys.clone(),
-                    states: args.state.into_iter().collect(),
+                    states: args.state.into_iter().map(tag_state).collect(),
                 })
                 .await?;
             Ok(text(render_tags::lookup(&session_keys, &sessions)))
@@ -135,7 +136,7 @@ pub async fn call(
             &store
                 .list_tag_taxonomy(TagTaxonomyQuery {
                     key: args.key,
-                    state: args.state,
+                    state: args.state.map(tag_state),
                     limit: count,
                 })
                 .await?,
@@ -149,7 +150,7 @@ pub async fn call(
             json(
                 &store
                     .decide_tag_taxonomy(TagTaxonomyDecision {
-                        entries,
+                        entries: entries.into_iter().map(entry_pair).collect(),
                         decision: decision(args.state)?,
                         decided_by: args.decided_by,
                     })
@@ -199,7 +200,7 @@ async fn add(store: &dyn MemoryStore, args: Args) -> Result<CallToolResult, Erro
     json(
         &store
             .add_tag(TagAdd {
-                entity_type: required(args.entity_type, "entity_type")?,
+                entity_type: entity_type(required(args.entity_type, "entity_type")?),
                 entity,
                 agent: args.agent,
                 tag,
@@ -260,4 +261,26 @@ fn refusal(write: bool, action: &Action) -> Option<String> {
         ));
     }
     None
+}
+
+const fn entity_type(entity: TagEntityType) -> kernel::memory::TagEntityType {
+    match entity {
+        TagEntityType::Conversation => kernel::memory::TagEntityType::Conversation,
+        TagEntityType::Summary => kernel::memory::TagEntityType::Summary,
+    }
+}
+
+const fn tag_state(state: TagState) -> kernel::memory::TagState {
+    match state {
+        TagState::Suggested => kernel::memory::TagState::Suggested,
+        TagState::Accepted => kernel::memory::TagState::Accepted,
+        TagState::Rejected => kernel::memory::TagState::Rejected,
+    }
+}
+
+fn entry_pair(entry: TagEntryPair) -> kernel::memory::TagEntryPair {
+    kernel::memory::TagEntryPair {
+        key: entry.key,
+        value: entry.value,
+    }
 }

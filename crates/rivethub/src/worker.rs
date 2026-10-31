@@ -12,6 +12,7 @@ use kernel::topics::TopicStore;
 use kernel::transcript::SessionLister;
 use kernel::wiki::builder::WikiBuilderStore;
 use kernel::wiki::consolidate::WikiConsolidateStore;
+use kernel::wiki::recompile::WikiRecompileStore;
 use thiserror::Error;
 use tokio_util::sync::CancellationToken;
 use workers::{
@@ -21,6 +22,7 @@ use workers::{
 
 use crate::Exit;
 use crate::service::{StartupError, load, postgres, postgres_url, report};
+use memory_postgres::Pooling;
 
 #[derive(Debug, Error)]
 pub enum RootError {
@@ -132,13 +134,22 @@ async fn run(
     let owned = env.clone();
     let config = tokio::task::spawn_blocking(move || load(&owned)).await??;
     crate::identity::announce_resolved("worker", &config, env).map_err(StartupError::from)?;
-    let memory = Arc::new(postgres(&config, env, &shutdown, activities).await?);
+    let memory = Arc::new(postgres(&config, env, &shutdown, activities, Pooling::OnDemand).await?);
     let result = async {
-        let queue = memory.queue().await.map_err(StartupError::from)?;
+        let settings = workers::MemoryJobSettings::from_environment(env)?;
+        let queue = memory
+            .queue()
+            .await
+            .map_err(StartupError::from)?
+            .flagging_after(settings.flag_after)
+            .claiming_at_most(settings.claim_ceiling.or_else(|| {
+                (!settings.backfill_enabled).then_some(kernel::wiki::builder::BACKFILL_PRIORITY - 1)
+            }));
         let targets: Arc<dyn EmbeddingStore> = memory.clone();
         let summaries: Arc<dyn SummaryStore> = memory.clone();
         let wiki: Arc<dyn WikiBuilderStore> = memory.clone();
         let consolidate: Arc<dyn WikiConsolidateStore> = memory.clone();
+        let recompile: Arc<dyn WikiRecompileStore> = memory.clone();
         let topics: Arc<dyn TopicStore> = memory.clone();
         let filing: Arc<dyn FilingStore> = memory.clone();
         let pages: Arc<dyn TopicPageStore> = memory.clone();
@@ -152,12 +163,15 @@ async fn run(
                 summaries,
                 wiki,
                 consolidate: Some(consolidate),
+                recompile: Some(recompile),
                 topics,
                 filing,
                 pages,
                 decisions,
                 tidy,
                 lineage: session_lineage(env),
+                load: model_load(env)?,
+                scopes: Some(owner_scopes(&memory, &config, env).await?),
             },
             &config,
             env,
@@ -170,7 +184,7 @@ async fn run(
             .with_memory_jobs(memory.clone())
             .with_unembedded(memory.clone())
             .with_session_deletion(memory.clone())
-            .with_job_settings(workers::MemoryJobSettings::from_environment(env)?)
+            .with_job_settings(settings)
             .with_schedules(wiki_extraction(env));
         runner.runner = runner.runner.tuned(env)?;
         if let Some(concurrency) = workers::worker_concurrency(env)? {
@@ -188,6 +202,28 @@ async fn run(
     Ok(())
 }
 
+fn model_load(
+    env: &Environment,
+) -> Result<Option<Arc<dyn kernel::model::ModelLoadProbe>>, RootError> {
+    Ok(crate::model_load::VllmMetrics::from_environment(env)
+        .map_err(|error| RootError::Invalid(format!("model load probe: {error}")))?
+        .map(|probe| Arc::new(probe) as Arc<dyn kernel::model::ModelLoadProbe>))
+}
+
+async fn owner_scopes(
+    memory: &memory_postgres::PostgresMemory,
+    config: &Config,
+    env: &Environment,
+) -> Result<workers::OwnerScopes, RootError> {
+    Ok(workers::OwnerScopes {
+        store: Arc::new(memory_postgres::PostgresTenancy::new(memory.pool().clone())),
+        primary: crate::composition::identities::load(config, env)
+            .await
+            .map_err(StartupError::from)?
+            .primary(),
+    })
+}
+
 #[expect(
     missing_debug_implementations,
     reason = "worker dependencies are kernel ports without Debug"
@@ -198,12 +234,15 @@ pub struct WorkerPorts<Q> {
     pub summaries: Arc<dyn SummaryStore>,
     pub wiki: Arc<dyn WikiBuilderStore>,
     pub consolidate: Option<Arc<dyn WikiConsolidateStore>>,
+    pub recompile: Option<Arc<dyn WikiRecompileStore>>,
     pub topics: Arc<dyn TopicStore>,
     pub filing: Arc<dyn FilingStore>,
     pub pages: Arc<dyn TopicPageStore>,
     pub decisions: Arc<dyn DecisionStore>,
     pub tidy: Arc<dyn TidyStore>,
     pub lineage: Arc<dyn SessionLister>,
+    pub load: Option<Arc<dyn kernel::model::ModelLoadProbe>>,
+    pub scopes: Option<workers::OwnerScopes>,
 }
 
 pub(crate) fn session_lineage(env: &Environment) -> Arc<dyn SessionLister> {
@@ -247,6 +286,7 @@ pub fn with_models<Q: JobQueue + 'static>(
         provider,
         embed: EmbedSettings::from_config(config)?,
         summary: SummarySettings::standard(model.clone())?,
+        scopes: ports.scopes,
     };
     let runner = Runner::new(
         ports.queue,
@@ -256,7 +296,9 @@ pub fn with_models<Q: JobQueue + 'static>(
     .with_wiki_builder(workers::wiki_builder::WikiBuilderDeps {
         store: ports.wiki,
         consolidate: ports.consolidate,
+        recompile: ports.recompile,
         model,
+        load: ports.load,
     })
     .with_topic_pages(Arc::clone(&ports.topics), ports.pages, ports.decisions)
     .with_tidy(ports.tidy)
@@ -297,7 +339,9 @@ async fn drive<Q: JobQueue + 'static>(
     shutdown: CancellationToken,
 ) -> Result<(), RootError> {
     let token = shutdown.child_token();
-    let task = tokio::spawn(async move { runner.run(token).await });
+    let task = tokio::spawn(kernel::tenancy::Scope::carry(async move {
+        runner.run(token).await
+    }));
     let _abort = crate::shutdown::AbortOnDrop::arm(&task);
     tokio::pin!(task);
     let joined = tokio::select! {

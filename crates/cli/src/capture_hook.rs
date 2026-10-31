@@ -1,7 +1,8 @@
 use std::time::Duration;
 
 use capture::hook::ClaudeHook;
-use capture::hook::grok::GrokHook;
+use capture::hook::store::StoreHarness;
+use capture::hook::store::StoreHook;
 use capture::spool::CaptureSpool;
 use capture::writer::CaptureWriter;
 use capture::writer::HttpCaptureTransport;
@@ -31,6 +32,9 @@ pub enum CaptureCommand {
 pub enum HookHarness {
     ClaudeCode,
     GrokBuild,
+    Opencode,
+    Codex,
+    Dsh,
 }
 
 pub(crate) async fn run(command: CaptureCommand, env: &Environment) -> Result<Report, Error> {
@@ -38,9 +42,21 @@ pub(crate) async fn run(command: CaptureCommand, env: &Environment) -> Result<Re
         CaptureCommand::Hook { harness } => {
             let mut stdin = String::new();
             tokio::io::stdin().read_to_string(&mut stdin).await?;
+            if env.get(config::MODEL_RUN_VARIABLE).is_some() {
+                return Ok(report(String::new()));
+            }
             Ok(match harness {
                 HookHarness::ClaudeCode => hook(env, &stdin, Utc::now()).await,
-                HookHarness::GrokBuild => grok_hook(env, &stdin, Utc::now()).await,
+                HookHarness::GrokBuild => {
+                    store_hook(env, &stdin, Utc::now(), StoreHarness::GrokBuild).await
+                }
+                HookHarness::Opencode => {
+                    store_hook(env, &stdin, Utc::now(), StoreHarness::Opencode).await
+                }
+                HookHarness::Codex => {
+                    store_hook(env, &stdin, Utc::now(), StoreHarness::Codex).await
+                }
+                HookHarness::Dsh => store_hook(env, &stdin, Utc::now(), StoreHarness::Dsh).await,
             })
         }
     }
@@ -59,12 +75,17 @@ pub async fn hook(env: &Environment, stdin: &str, now: DateTime<Utc>) -> Report 
     report(stderr)
 }
 
-pub async fn grok_hook(env: &Environment, stdin: &str, now: DateTime<Utc>) -> Report {
+pub async fn store_hook(
+    env: &Environment,
+    stdin: &str,
+    now: DateTime<Utc>,
+    harness: StoreHarness,
+) -> Report {
     let stderr = match writer(env).await {
         Ok((writer, paths)) => {
-            match GrokHook::new(writer, &capture::listing::store_roots(env), &paths) {
+            match StoreHook::new(harness, writer, &capture::listing::store_roots(env), &paths) {
                 Some(hook) => hook.run(stdin, now).await.stderr,
-                None => "capture hook has no grok home: HOME and GROK_HOME are unset".to_owned(),
+                None => format!("capture hook has no {harness:?} store: HOME is unset"),
             }
         }
         Err(error) => format!("capture hook is not configured: {error}"),

@@ -4,19 +4,22 @@ use chrono::DateTime;
 use chrono::Utc;
 use serde::Serialize;
 use uuid::Uuid;
-use wire::session_id::SessionId;
+use values::SessionId;
 
 use super::builder::DeferredWiki;
 use super::builder::ExtractWiki;
 use super::builder::HeldEntity;
 use super::builder::WikiBuilderStore;
 use super::builder::WikiRouting;
-use super::builder::WikiStoreError;
 use super::builder::WikiSummary;
 use super::entity::Catalog;
 use super::entity::Filed;
+use super::merge::MergedPage;
+use super::merge::PageMerger;
+use super::origin::NoteOrigin;
 use super::page::WikiPatch;
 use super::page::WikiSlug;
+use super::page::bound::MergeBase;
 use super::page::demote_h2_headings;
 use crate::filing::Filable;
 use crate::filing::FilingStore;
@@ -38,6 +41,8 @@ use crate::transcript::TranscriptReaderError;
 use crate::transcript::linked_parent;
 use crate::transcript::session_parent;
 
+mod current;
+
 const DEFERRALS_PER_SWEEP: u32 = 50;
 const LINEAGE_DEPTH: usize = 8;
 
@@ -50,6 +55,19 @@ pub struct TopicTarget {
     pub root: TopicId,
     pub page_slug: WikiSlug,
     pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub section: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub current: Option<CurrentText>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CurrentText {
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub summary: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub article: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub section: Option<String>,
 }
@@ -87,6 +105,7 @@ pub struct TopicPorts<'a> {
 pub struct WikiRouter<'a> {
     pub wiki: &'a dyn WikiBuilderStore,
     pub topics: TopicPorts<'a>,
+    pub merger: Option<&'a dyn PageMerger>,
     pub now: DateTime<Utc>,
 }
 
@@ -98,6 +117,7 @@ struct Routed {
     earlier: Vec<(Uuid, WikiSlug)>,
     held: Vec<HeldEntity>,
     notes: Vec<WikiPatch>,
+    merged: Vec<MergedPage>,
 }
 
 impl WikiRouter<'_> {
@@ -105,8 +125,14 @@ impl WikiRouter<'_> {
         &self,
         summary: &WikiSummary,
     ) -> Result<Option<TopicTarget>, TopicPageError> {
-        match self.topics.waits_on(summary).await? {
-            Some(waits) => self.topics.filed_target(&waits, self.now).await,
+        let target = match self.topics.waits_on(summary).await? {
+            Some(waits) => self.topics.filed_target(&waits, self.now).await?,
+            None => None,
+        };
+        match target {
+            Some(target) => NoteOrigin::run(summary.id, Box::pin(self.with_current(target)))
+                .await
+                .map(Some),
             None => Ok(None),
         }
     }
@@ -119,6 +145,33 @@ impl WikiRouter<'_> {
         &self,
         job: &ExtractWiki,
         summary: &WikiSummary,
+        target: Option<&TopicTarget>,
+        patches: Vec<WikiPatch>,
+    ) -> Result<Vec<String>, TopicPageError> {
+        self.apply_with(job, summary, Vec::new(), target, patches)
+            .await
+    }
+
+    pub async fn apply_with(
+        &self,
+        job: &ExtractWiki,
+        summary: &WikiSummary,
+        also: Vec<WikiSummary>,
+        target: Option<&TopicTarget>,
+        patches: Vec<WikiPatch>,
+    ) -> Result<Vec<String>, TopicPageError> {
+        NoteOrigin::run(
+            summary.id,
+            Box::pin(self.apply_notes(job, summary, also, target, patches)),
+        )
+        .await
+    }
+
+    async fn apply_notes(
+        &self,
+        job: &ExtractWiki,
+        summary: &WikiSummary,
+        also: Vec<WikiSummary>,
         target: Option<&TopicTarget>,
         patches: Vec<WikiPatch>,
     ) -> Result<Vec<String>, TopicPageError> {
@@ -150,43 +203,50 @@ impl WikiRouter<'_> {
                 routed.notes.push(patch);
             }
         }
-        self.finish(job, summary, target, routed).await
+        self.finish(job, summary, also, target, routed).await
     }
 
     pub async fn apply_deferred(&self) -> Result<Vec<String>, TopicPageError> {
         let mut touched = Vec::new();
         for held in self.wiki.unsettled_notes(DEFERRALS_PER_SWEEP).await? {
-            if let Some(old) = held.applied
-                && let Some(topic) = self.topics.topics.find(&TopicKey::Id(old)).await?
-                && let Some(route) = self.topics.target(&topic, self.now).await?
-            {
-                for patch in &held.patches {
-                    self.withdraw_note(&route, patch).await?;
-                }
-                self.wiki
-                    .uncite_wiki(held.summary_id, &route.page_slug)
-                    .await?;
-                touched.push(route.page_slug.as_ref().to_owned());
-            }
-            let route = self.topics.filed_target(&held.waits, self.now).await?;
-            if let Some(route) = &route {
-                for patch in &held.patches {
-                    self.write_note(route, patch).await?;
-                }
-                self.wiki
-                    .cite_wiki(held.summary_id, &route.page_slug, self.now)
-                    .await?;
-                touched.push(route.page_slug.as_ref().to_owned());
-            }
-            self.wiki
-                .defer_wiki(DeferredWiki {
-                    applied: route.map(|route| route.topic),
-                    ..held
-                })
-                .await?;
+            let summary = held.summary_id;
+            touched.extend(NoteOrigin::run(summary, Box::pin(self.settle(held))).await?);
         }
         touched.sort();
         touched.dedup();
+        Ok(touched)
+    }
+
+    async fn settle(&self, held: DeferredWiki) -> Result<Vec<String>, TopicPageError> {
+        let mut touched = Vec::new();
+        if let Some(old) = held.applied
+            && let Some(topic) = self.topics.topics.find(&TopicKey::Id(old)).await?
+            && let Some(route) = self.topics.target(&topic, self.now).await?
+        {
+            for patch in &held.patches {
+                self.withdraw_note(&route, patch).await?;
+            }
+            self.wiki
+                .uncite_wiki(held.summary_id, &route.page_slug)
+                .await?;
+            touched.push(route.page_slug.as_ref().to_owned());
+        }
+        let route = self.topics.filed_target(&held.waits, self.now).await?;
+        if let Some(route) = &route {
+            for patch in &held.patches {
+                self.write_note(route, patch).await?;
+            }
+            self.wiki
+                .cite_wiki(held.summary_id, &route.page_slug, self.now)
+                .await?;
+            touched.push(route.page_slug.as_ref().to_owned());
+        }
+        self.wiki
+            .defer_wiki(DeferredWiki {
+                applied: route.map(|route| route.topic),
+                ..held
+            })
+            .await?;
         Ok(touched)
     }
 
@@ -197,6 +257,15 @@ impl WikiRouter<'_> {
         routed: &mut Routed,
     ) -> Result<(), TopicPageError> {
         if topic.section.is_none() {
+            if let Some(current) = &topic.current {
+                routed.merged.push(MergedPage {
+                    slug: topic.page_slug.clone(),
+                    base: MergeBase {
+                        summary: current.summary.clone(),
+                        article: current.article.clone().unwrap_or_default(),
+                    },
+                });
+            }
             routed.pages.push(topic.page_patch(patch));
             return Ok(());
         }
@@ -227,9 +296,14 @@ impl WikiRouter<'_> {
             routed
                 .earlier
                 .extend(earlier.into_iter().map(|id| (id, page.page_slug.clone())));
-            routed
-                .pages
-                .extend(patches.into_iter().map(|patch| page.page_patch(patch)));
+            let patches = patches
+                .into_iter()
+                .map(|patch| page.page_patch(patch))
+                .collect();
+            let patches = self
+                .merge_entity(&page, patches, &mut routed.merged)
+                .await?;
+            routed.pages.extend(patches);
         }
         Ok(known)
     }
@@ -238,6 +312,7 @@ impl WikiRouter<'_> {
         &self,
         job: &ExtractWiki,
         summary: &WikiSummary,
+        also: Vec<WikiSummary>,
         target: Option<&TopicTarget>,
         mut routed: Routed,
     ) -> Result<Vec<String>, TopicPageError> {
@@ -262,6 +337,8 @@ impl WikiRouter<'_> {
         let routing = WikiRouting {
             topic_page: target.map(|topic| topic.page_slug.clone()),
             cited: routed.cited,
+            merged: routed.merged,
+            also,
         };
         let mut touched = self
             .wiki
@@ -288,8 +365,14 @@ impl WikiRouter<'_> {
             return Ok(());
         };
         let text = section_text(patch);
-        self.edit_page(route, |page| {
-            page.add_to_section(route.topic, heading, &text);
+        let base = route
+            .current
+            .as_ref()
+            .and_then(|current| current.section.clone());
+        let topic = route.topic;
+        self.edit_page(route, move |page| match &base {
+            Some(base) => page.merge_section(topic, heading, &text, base),
+            None => page.add_to_section(topic, heading, &text),
         })
         .await
     }
@@ -320,18 +403,12 @@ impl WikiRouter<'_> {
     async fn edit_page(
         &self,
         route: &TopicTarget,
-        change: impl FnOnce(&mut TopicPage),
+        change: impl Fn(&mut TopicPage) + Send + Sync,
     ) -> Result<(), TopicPageError> {
-        let pages = self.topics.pages;
-        let before = pages
-            .topic_page(&route.page_slug)
-            .await?
-            .ok_or_else(|| WikiStoreError::TopicMissing(route.page_slug.as_ref().to_owned()))?;
-        let mut after = before.clone();
-        change(&mut after);
-        if after != before {
-            pages.save_topic_page(route.root, &after, self.now).await?;
-        }
+        self.topics
+            .pages
+            .change_page(route.root, &route.page_slug, &change, self.now)
+            .await?;
         Ok(())
     }
 }
@@ -433,6 +510,7 @@ impl TopicPorts<'_> {
             page_slug,
             name: owner.name.as_str().to_owned(),
             section: (owner.id != topic.id).then(|| topic.name.as_str().to_owned()),
+            current: None,
         }))
     }
 }

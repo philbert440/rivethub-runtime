@@ -4,19 +4,17 @@ use std::time::Duration;
 
 use memory_sqlite::import::ImportTable;
 
-use super::{TestResult, free_port, provider, start, stop, write_config};
+use super::{TestResult, provider, start, stop, write_config};
 
-fn configure(home: &Path, dump: Option<&Path>) -> TestResult {
+fn configure(home: &Path, dump: Option<&Path>) -> TestResult<testkit::ports::ClaimedPort> {
     let mut memory = "memory:\n  postgres:\n    embedded: {}\n".to_owned();
     if let Some(dump) = dump {
         writeln!(memory, "  import_pg_dump: {}", dump.display())?;
     }
-    write!(
-        memory,
-        "gateway:\n  host: 127.0.0.1\n  port: {}\n",
-        free_port()?
-    )?;
-    write_config(home, &provider(home, &memory))
+    let port = testkit::ports::claim()?;
+    write!(memory, "gateway:\n  host: 127.0.0.1\n  port: {port}\n")?;
+    write_config(home, &provider(home, &memory))?;
+    Ok(port)
 }
 
 async fn failure(home: &Path) -> TestResult<String> {
@@ -43,7 +41,7 @@ async fn failure(home: &Path) -> TestResult<String> {
 #[tokio::test]
 async fn absent_import_configuration_and_file_refuse_before_serving() -> TestResult {
     let home = tempfile::tempdir()?;
-    configure(home.path(), None)?;
+    let _claim = configure(home.path(), None)?;
     let logs = failure(home.path()).await?;
     assert!(logs.contains("set memory.import_pg_dump"), "{logs}");
     assert!(
@@ -52,7 +50,7 @@ async fn absent_import_configuration_and_file_refuse_before_serving() -> TestRes
     );
     assert!(logs.contains("--table=public.ros_messages"), "{logs}");
     let missing = home.path().join("absent.pg.txt");
-    configure(home.path(), Some(&missing))?;
+    let _claim = configure(home.path(), Some(&missing))?;
     let logs = failure(home.path()).await?;
     assert!(
         logs.contains(&format!("dump {} is absent", missing.display())),
@@ -76,7 +74,7 @@ async fn recorded_dump_imports_before_serving_and_receipt_allows_restart_without
         testkit::recording("memory-sqlite/import/pre-0020.pg.txt"),
         &dump,
     )?;
-    configure(home.path(), Some(&dump))?;
+    let _claim = configure(home.path(), Some(&dump))?;
     let started = start(
         home.path(),
         &["local", "--no-lan"],
@@ -99,7 +97,7 @@ async fn recorded_dump_imports_before_serving_and_receipt_allows_restart_without
     assert_eq!(receipt.rows.get(&ImportTable::Messages), Some(&1));
     drop(store);
     std::fs::remove_file(dump)?;
-    configure(home.path(), None)?;
+    let _claim = configure(home.path(), None)?;
     let restarted = start(
         home.path(),
         &["local", "--no-lan"],
@@ -118,7 +116,7 @@ async fn failed_import_can_retry_through_the_same_local_command() -> TestResult 
     let home = tempfile::tempdir()?;
     let dump = home.path().join("memory.pg.txt");
     std::fs::write(&dump, "COPY public.ros_messages (id) FROM stdin;\n")?;
-    configure(home.path(), Some(&dump))?;
+    let _claim = configure(home.path(), Some(&dump))?;
     let logs = failure(home.path()).await?;
     assert!(logs.contains("missing required column"), "{logs}");
     let path = home.path().join(".rivethub/memory.sqlite");
@@ -144,12 +142,12 @@ async fn failed_import_can_retry_through_the_same_local_command() -> TestResult 
 #[tokio::test]
 async fn nonempty_target_without_receipt_refuses_before_serving() -> TestResult {
     let home = tempfile::tempdir()?;
-    configure(home.path(), None)?;
+    let _claim = configure(home.path(), None)?;
     failure(home.path()).await?;
     let path = home.path().join(".rivethub/memory.sqlite");
     let conn = rusqlite::Connection::open(&path)?;
     conn.execute("INSERT INTO ros_meta VALUES ('unrelated', 'existing')", [])?;
-    configure(
+    let _claim = configure(
         home.path(),
         Some(&testkit::recording("memory-sqlite/import/pre-0020.pg.txt")),
     )?;

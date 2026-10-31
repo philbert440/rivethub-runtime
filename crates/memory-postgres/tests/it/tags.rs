@@ -1,3 +1,5 @@
+use kernel::memory::CaptureBatchRequest;
+use kernel::memory::CaptureMessage;
 use kernel::memory::Limit;
 use kernel::memory::MemoryStore as _;
 use kernel::memory::MemoryStoreError;
@@ -5,22 +7,20 @@ use kernel::memory::TagAdd;
 use kernel::memory::TagCountsQuery;
 use kernel::memory::TagDecision;
 use kernel::memory::TagEntity;
+use kernel::memory::TagEntityType;
+use kernel::memory::TagEntryPair;
 use kernel::memory::TagId;
 use kernel::memory::TagListQuery;
 use kernel::memory::TagLookup;
+use kernel::memory::TagState;
 use kernel::memory::TagTaxonomyDecision;
+use kernel::memory::TagTaxonomyMerge;
 use kernel::memory::TagTaxonomyQuery;
 use kernel::memory::TagTaxonomyUpsert;
 use memory_postgres::PostgresMemory;
 use sqlx::PgPool;
 use sqlx::Row as _;
 use std::collections::BTreeMap;
-use wire::capture::CaptureBatchRequest;
-use wire::capture::CaptureMessage;
-use wire::gateway::memory::TagEntityType;
-use wire::gateway::memory::TagEntryPair;
-use wire::gateway::memory::TagState;
-use wire::gateway::memory::TagTaxonomyMerge;
 use wire::message::Role;
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
@@ -56,7 +56,10 @@ async fn seed_conversation(
         }],
     };
     memory
-        .capture_batch(&batch, &memory_postgres::CaptureOptions::default())
+        .capture_batch(
+            &batch,
+            &memory_postgres::CaptureOptions::owned_by(&testkit::owner()?),
+        )
         .await?;
     let id: sqlx::types::Uuid =
         sqlx::query_scalar("SELECT id FROM rh_conversations WHERE session_key = $1")
@@ -147,7 +150,7 @@ async fn add_tag_accepts_ids_and_session_keys(pool: PgPool) -> TestResult {
     assert_eq!(conflict.state, TagState::Accepted, "an add revives the row");
 
     sqlx::query(
-        "INSERT INTO rh_conversations (session_key, agent) VALUES ('claude-code:tags', 'other')",
+        "INSERT INTO rh_conversations (session_key, agent, owner_user_id) VALUES ('claude-code:tags', 'other', 'owner')",
     )
     .execute(&pool)
     .await?;
@@ -284,7 +287,7 @@ async fn list_pending_counts_and_lookup_read_the_tags(pool: PgPool) -> TestResul
         .iter()
         .map(|tag| {
             let action = match tag.action {
-                Some(wire::gateway::memory::PendingTagAction::Remove) => "remove",
+                Some(kernel::memory::PendingTagAction::Remove) => "remove",
                 _ => "add",
             };
             (tag.tag.value.as_str(), action)

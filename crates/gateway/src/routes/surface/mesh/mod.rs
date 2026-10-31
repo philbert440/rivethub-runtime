@@ -10,14 +10,8 @@ use axum::extract::State;
 use parking_lot::Mutex;
 use tokio::task::JoinSet;
 use wire::gateway::HealthzResponse;
-use wire::gateway::devices::HarnessCapability;
-use wire::gateway::devices::HarnessDriveCapability;
-use wire::gateway::devices::HarnessInspectCapability;
 use wire::gateway::devices::MeshOverview;
 use wire::gateway::devices::MeshOverviewNode;
-use wire::gateway::devices::NodeCapabilities;
-use wire::gateway::devices::Subsystems;
-use wire::harness::HarnessId;
 use wire::mesh::MeshFile;
 use wire::mesh::MeshParseCode;
 
@@ -28,18 +22,6 @@ use crate::mesh::Registry;
 use crate::mesh::RegistryError;
 
 mod project;
-
-const HARNESSES: &[HarnessId] = &[
-    HarnessId::ClaudeCode,
-    HarnessId::GrokBuild,
-    HarnessId::Hermes,
-    HarnessId::KimiCode,
-    HarnessId::Omp,
-    HarnessId::Cursor,
-    HarnessId::Cowork,
-    HarnessId::Opencode,
-    HarnessId::Codex,
-];
 
 #[derive(Debug, Default)]
 pub(crate) struct Cache {
@@ -94,20 +76,6 @@ pub(super) async fn overview(
         .mesh_cache()
         .store(Instant::now(), ttl, built.clone());
     Ok(Json(built))
-}
-
-pub(super) async fn capabilities(
-    State(gateway): State<Arc<Gateway>>,
-) -> Result<Json<NodeCapabilities>, ApiError> {
-    let mesh = mesh_present(gateway.settings()).await?;
-    Ok(Json(NodeCapabilities {
-        subsystems: Subsystems {
-            gateway: true,
-            devices: gateway.settings().devices_enabled,
-            mesh,
-        },
-        harnesses: harnesses(),
-    }))
 }
 
 async fn load_overview(settings: &Settings) -> Result<MeshOverview, ApiError> {
@@ -303,30 +271,6 @@ async fn probe(client: &reqwest::Client, url: &str) -> Option<HealthzResponse> {
             tracing::debug!("mesh healthz: {error}");
             None
         }
-    }
-}
-
-async fn mesh_present(settings: &Settings) -> Result<bool, ApiError> {
-    let paths = candidates(settings);
-    let joined = tokio::task::spawn_blocking(move || paths.iter().any(|path| path.is_file())).await;
-    super::super::join_task(joined)
-}
-
-fn harnesses() -> Vec<HarnessCapability> {
-    HARNESSES.iter().copied().map(harness_capability).collect()
-}
-
-fn harness_capability(id: HarnessId) -> HarnessCapability {
-    HarnessCapability {
-        harness_id: id,
-        inspect: HarnessInspectCapability {
-            list: true,
-            read: true,
-        },
-        drive: HarnessDriveCapability {
-            drive: id != HarnessId::Cowork,
-            resume: false,
-        },
     }
 }
 

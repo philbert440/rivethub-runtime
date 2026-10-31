@@ -119,11 +119,13 @@ where
             .collect::<Vec<Vec<_>>>(),
         vec![ids.clone()],
     )?;
+    let owner = crate::owner()?;
     let ports = TidyPorts {
         tidy: store,
         topics: store,
         filing: store,
         pages: Some(store),
+        owner: &owner,
     };
     let [merge, rejected, create] = ids.as_slice() else {
         return Err("three proposals were kept".into());
@@ -229,6 +231,7 @@ where
         aliases: Vec::new(),
         parent: None,
         directory: None,
+        owner: Some(crate::owner()?),
     };
     store.create(Topic::create(created, new, at(2))?).await?;
     store
@@ -237,15 +240,18 @@ where
             topic: created,
             by: PlacementSource::Categorizer,
             at: at(2),
+            owner: Some(crate::owner()?),
         })
         .await?;
     store.merge(client.id, app.id, at(2)).await?;
     store.delete(spike.id).await?;
+    let owner = crate::owner()?;
     let ports = TidyPorts {
         tidy: store,
         topics: store,
         filing: store,
         pages: Some(store),
+        owner: &owner,
     };
     let outcome = kernel::tidy::decide_batch(&ports, stored.id, Decision::Approve, at(3)).await?;
     same(
@@ -320,6 +326,7 @@ where
                 topic: topic.id,
                 by,
                 at: at(1),
+                owner: Some(crate::owner()?),
             })
             .await?;
     }
@@ -363,6 +370,7 @@ where
                 aliases: Vec::new(),
                 parent: Some(people.id),
                 directory: None,
+                owner: Some(crate::owner()?),
             },
             at(0),
         )?)

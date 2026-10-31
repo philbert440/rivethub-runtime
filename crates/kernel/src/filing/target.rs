@@ -2,8 +2,8 @@ use std::str::FromStr;
 
 use strum::IntoEnumIterator;
 use uuid::Uuid;
-use wire::harness::HarnessId;
-use wire::session_id::SessionId;
+use values::HarnessId;
+use values::SessionId;
 
 use crate::memory::ConversationHead;
 
@@ -153,7 +153,38 @@ pub fn conversation_keys(session: &SessionId) -> Vec<String> {
     keys
 }
 
+#[must_use]
+pub fn session_key(channel: Option<&str>, key: &str) -> String {
+    if bare_claude(channel, key) {
+        SessionId::new(HarnessId::ClaudeCode, key)
+            .as_str()
+            .to_owned()
+    } else {
+        key.to_owned()
+    }
+}
+
+#[must_use]
+pub fn stored_keys(session: &str) -> Vec<String> {
+    #[cfg_attr(
+        dylint_lib = "rr_lints",
+        expect(
+            fallback,
+            reason = "PATTERNS FALLBACK: a key that is not a session id is looked up as it is stored"
+        )
+    )]
+    let Ok(id) = SessionId::from_str(session) else {
+        return vec![session.to_owned()];
+    };
+    conversation_keys(&id)
+}
+
 fn bare_claude_session(head: &ConversationHead) -> bool {
-    HarnessId::from_str(&head.channel).is_ok_and(|harness| harness == HarnessId::ClaudeCode)
-        && Uuid::parse_str(&head.session_key).is_ok()
+    bare_claude(Some(&head.channel), &head.session_key)
+}
+
+fn bare_claude(channel: Option<&str>, key: &str) -> bool {
+    channel.is_some_and(|channel| {
+        HarnessId::from_str(channel).is_ok_and(|harness| harness == HarnessId::ClaudeCode)
+    }) && Uuid::parse_str(key).is_ok()
 }

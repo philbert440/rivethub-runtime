@@ -1,5 +1,3 @@
-use std::cmp::Reverse;
-use std::collections::BTreeMap;
 use std::str::FromStr;
 
 use async_trait::async_trait;
@@ -10,16 +8,12 @@ use kernel::filing::ConversationPlacement;
 use kernel::filing::Correction;
 use kernel::filing::CorrectionExample;
 use kernel::filing::Filed;
-use kernel::filing::FiledConversation;
-use kernel::filing::FiledSession;
 use kernel::filing::FilingStore;
 use kernel::filing::Mention;
 use kernel::filing::Subject;
 use kernel::filing::Target;
 use kernel::filing::TopicLine;
-use kernel::filing::conversation_keys;
 use kernel::memory::ConversationHead;
-use kernel::topics::Placement;
 use kernel::topics::PlacementSource;
 use kernel::topics::TopicError;
 use kernel::topics::TopicId;
@@ -27,8 +21,6 @@ use kernel::topics::TopicName;
 use sqlx::PgConnection;
 use uuid::Uuid;
 
-use super::rows;
-use super::rows::PlacementRow;
 use super::rows::failed;
 use super::rows::not_found;
 use super::rows::stored;
@@ -47,13 +39,6 @@ struct HeadRow {
     agent: String,
     channel: String,
     title: Option<String>,
-}
-
-struct SeenRow {
-    session_key: String,
-    title: Option<String>,
-    last_active: Option<DateTime<Utc>>,
-    node: Option<String>,
 }
 
 #[async_trait]
@@ -152,8 +137,8 @@ impl FilingStore for PostgresMemory {
         let kept = placement.clone().admit(existing);
         if kept == placement {
             sqlx::query!(
-                "INSERT INTO rh_conversation_placements (conversation_id, topic_id, placed_by, placed_at)
-                 VALUES ($1, $2, $3, $4)
+                "INSERT INTO rh_conversation_placements (conversation_id, topic_id, placed_by, placed_at, owner_user_id)
+                 VALUES ($1, $2, $3, $4, (SELECT owner_user_id FROM rh_conversations WHERE id = $1))
                  ON CONFLICT (conversation_id) DO UPDATE SET topic_id = EXCLUDED.topic_id,
                                                              placed_by = EXCLUDED.placed_by,
                                                              placed_at = EXCLUDED.placed_at",
@@ -190,64 +175,7 @@ impl FilingStore for PostgresMemory {
     }
 
     async fn filed(&self, topic: TopicId) -> Result<Filed, TopicError> {
-        let placed = sqlx::query_as!(
-            PlacementRow,
-            "SELECT session_id, topic_id, placed_by, placed_at
-               FROM rh_session_placements WHERE topic_id = $1",
-            topic.uuid()
-        )
-        .fetch_all(&self.pool)
-        .await
-        .map_err(failed("filed sessions"))?
-        .into_iter()
-        .map(rows::placement)
-        .collect::<Result<Vec<Placement>, _>>()?;
-        let keys: Vec<String> = placed
-            .iter()
-            .flat_map(|placement| conversation_keys(&placement.session))
-            .collect();
-        let seen: BTreeMap<String, SeenRow> = sqlx::query_as!(
-            SeenRow,
-            r#"SELECT DISTINCT ON (c.session_key) c.session_key, c.title,
-                      max(c.updated_at) OVER (PARTITION BY c.session_key) AS last_active,
-                      (SELECT n.node FROM rh_conversations n
-                        WHERE n.session_key = c.session_key AND n.node IS NOT NULL
-                        ORDER BY n.updated_at DESC LIMIT 1) AS node
-                 FROM rh_conversations c
-                WHERE c.session_key = ANY($1::text[])
-                ORDER BY c.session_key, c.title IS NULL, c.updated_at DESC"#,
-            &keys
-        )
-        .fetch_all(&self.pool)
-        .await
-        .map_err(failed("filed session titles"))?
-        .into_iter()
-        .map(|row| (row.session_key.clone(), row))
-        .collect();
-        let mut sessions: Vec<FiledSession> = placed
-            .into_iter()
-            .map(|placement| {
-                let found: Vec<&SeenRow> = conversation_keys(&placement.session)
-                    .iter()
-                    .filter_map(|key| seen.get(key))
-                    .collect();
-                FiledSession {
-                    title: found.iter().find_map(|row| row.title.clone()),
-                    last_active: found.iter().filter_map(|row| row.last_active).max(),
-                    node: found.iter().find_map(|row| row.node.clone()),
-                    placement,
-                    lineage: None,
-                }
-            })
-            .collect();
-        sessions.extend(super::inherited::sessions(&self.pool, Some(topic)).await?);
-        sessions.sort_by_key(|filed| Reverse(filed.last_active));
-        let mut conversations = filed_conversations(&self.pool, topic).await?;
-        conversations.sort_by_key(|filed| Reverse(filed.last_active));
-        Ok(Filed {
-            sessions,
-            conversations,
-        })
+        super::bulk::filed(&self.pool, topic).await
     }
 
     async fn all_filed(&self) -> Result<AllFiled, TopicError> {
@@ -351,39 +279,6 @@ impl FilingStore for PostgresMemory {
         })
         .collect())
     }
-}
-
-async fn filed_conversations(
-    pool: &sqlx::PgPool,
-    topic: TopicId,
-) -> Result<Vec<FiledConversation>, TopicError> {
-    sqlx::query!(
-        "SELECT p.conversation_id, p.topic_id, p.placed_by, p.placed_at,
-                c.title, c.channel, c.updated_at, c.node
-           FROM rh_conversation_placements p
-           JOIN rh_conversations c ON c.id = p.conversation_id
-          WHERE p.topic_id = $1",
-        topic.uuid()
-    )
-    .fetch_all(pool)
-    .await
-    .map_err(failed("filed conversations"))?
-    .into_iter()
-    .map(|row| {
-        Ok(FiledConversation {
-            placement: conversation_placement(&ConversationPlacementRow {
-                conversation_id: row.conversation_id,
-                topic_id: row.topic_id,
-                placed_by: row.placed_by,
-                placed_at: row.placed_at,
-            })?,
-            title: row.title,
-            channel: row.channel,
-            last_active: Some(row.updated_at),
-            node: row.node,
-        })
-    })
-    .collect()
 }
 
 pub(super) async fn fold_into(

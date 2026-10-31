@@ -9,14 +9,14 @@ use agent_client_protocol::Agent;
 use agent_client_protocol::ConnectionTo;
 use agent_client_protocol::schema::v1 as acp;
 use kernel::harness::Command;
+use kernel::harness::HarnessModelsSource;
+use kernel::harness::HarnessOffering;
 use kernel::harness::SessionEvent;
 use parking_lot::Mutex;
 use serde::Deserialize;
 use serde::Serialize;
 use tokio::sync::mpsc;
 use wire::harness::HarnessId;
-use wire::harness::HarnessModelsSource;
-use wire::harness::HarnessOffering;
 
 use crate::connection::AgentConnection;
 use crate::connection::SessionCommand;
@@ -320,8 +320,9 @@ mod tests {
     use crate::sheets::{SheetInput, offering};
     use agent_client_protocol::schema::v1 as acp;
     use config::ModelsMode;
+    use kernel::harness::HarnessModelsSource;
     use std::sync::Arc;
-    use wire::harness::{HarnessId, HarnessModelsSource};
+    use wire::harness::HarnessId;
 
     #[test]
     fn configured_models_keep_advertised_labels_and_defaults() {

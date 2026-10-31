@@ -1,11 +1,11 @@
 use std::sync::Arc;
 use std::time::Duration;
 
+use kernel::memory::MemoryEntry;
+use kernel::memory::{MemoryDegraded, MemoryHitSource};
 use kernel::memory::{MemoryStoreError, SearchOutcome, SearchQuery};
 use kernel::model::{ModelProvider, ModelRequest};
 use tokio_util::sync::CancellationToken;
-use wire::gateway::memory::{MemoryDegraded, MemoryHitSource};
-use wire::memory::MemoryEntry;
 use wire::message::{Message, MessageContent, Role};
 
 use crate::error::Error;
@@ -147,18 +147,23 @@ impl crate::PostgresMemory {
             }
             None => None,
         };
-        let expanded = if query.expand == Some(false) {
-            Vec::new()
-        } else {
-            self.expand_summaries(&outcome.hits, &query).await?
+        let expand = async {
+            if query.expand == Some(false) {
+                Ok(Vec::new())
+            } else {
+                self.expand_summaries(&outcome.hits, &query)
+                    .await
+                    .map_err(MemoryStoreError::from)
+            }
         };
-        let summaries = self.summary_details(&outcome.hits, &query).await?;
+        let (expanded, summaries) =
+            tokio::try_join!(expand, self.summary_details(&outcome.hits, &query))?;
         let mut response = SearchOutcome {
             summaries,
             results: outcome
                 .hits
                 .into_iter()
-                .map(|hit| wire::memory::MemorySearchResult {
+                .map(|hit| kernel::memory::MemorySearchResult {
                     chunk: hit.chunk,
                     id: hit.id,
                     source: hit.source,
@@ -186,7 +191,7 @@ impl crate::PostgresMemory {
 
     async fn expand_summaries(
         &self,
-        hits: &[wire::gateway::memory::MemorySearchHit],
+        hits: &[crate::search::MemorySearchHit],
         query: &SearchQuery,
     ) -> Result<Vec<MemoryEntry>, Error> {
         let ids = crate::search::hit_uuids(hits, MemoryHitSource::Summary)?;
@@ -197,12 +202,13 @@ impl crate::PostgresMemory {
             "SELECT m.id::text AS id, c.session_key, m.agent, m.channel, m.role AS role_text,
                     m.content, m.tool_name, m.tool_args::text AS tool_args, m.tool_result,
                     m.metadata::text AS metadata, m.created_at
-             FROM rh_messages m JOIN rh_conversations c ON c.id = m.conversation_id
-             WHERE EXISTS (SELECT 1 FROM rh_summary_sources ss
-                           WHERE ss.message_id = m.id AND ss.summary_id = ANY(",
+             FROM (SELECT DISTINCT ss.message_id FROM rh_summary_sources ss WHERE ss.summary_id = ANY(",
         );
         statement.push_bind(ids);
-        statement.push("))");
+        statement.push(
+            ")) sources JOIN rh_messages m ON m.id = sources.message_id \
+             JOIN rh_conversations c ON c.id = m.conversation_id WHERE true",
+        );
         if let Some(since) = query.since {
             statement.push(" AND m.created_at >= ").push_bind(since);
         }

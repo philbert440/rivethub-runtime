@@ -94,7 +94,7 @@ fn find<'a>(file: &'a ScenarioFile, name: &str) -> TestResult<&'a Scenario> {
 }
 
 async fn replay_queue(scenario: &Scenario, ids: &mut Ids) -> TestResult {
-    let fresh = common::fresh_store(None)?;
+    let fresh = common::fresh_store()?;
     let store = &fresh.store;
     let mut last: Option<ClaimedSqliteJob> = None;
     let mut finished: Option<String> = None;

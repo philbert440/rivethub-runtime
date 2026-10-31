@@ -2,7 +2,6 @@ use async_trait::async_trait;
 use chrono::DateTime;
 use chrono::Utc;
 use thiserror::Error;
-use wire::gateway::wiki::WikiPageResponse;
 
 use super::DECISIONS_HEADING;
 use super::DecisionStore;
@@ -26,6 +25,7 @@ use crate::wiki::builder::WikiStoreError;
 use crate::wiki::builder::WikiWriteError;
 use crate::wiki::page::FoldMark;
 use crate::wiki::page::WikiSlug;
+use crate::wiki::page::bound::rebase;
 use crate::wiki::page::normalize_slug;
 
 const SLUG_ATTEMPTS: u32 = 1000;
@@ -72,7 +72,7 @@ impl TopicPage {
             .iter_mut()
             .find(|section| section.topic == Some(topic))
         {
-            append(&mut section.body, body);
+            prepend(&mut section.body, body);
             return;
         }
         let mut section = PageSection {
@@ -80,15 +80,31 @@ impl TopicPage {
             heading: heading.to_owned(),
             body: String::new(),
         };
-        append(&mut section.body, body);
+        prepend(&mut section.body, body);
         self.sections.push(section);
+    }
+
+    pub(crate) fn merge_section(&mut self, topic: TopicId, heading: &str, body: &str, base: &str) {
+        if let Some(section) = self
+            .sections
+            .iter_mut()
+            .find(|section| section.topic == Some(topic))
+        {
+            section.body = rebase(base, body, &section.body);
+            return;
+        }
+        self.sections.push(PageSection {
+            topic: Some(topic),
+            heading: heading.to_owned(),
+            body: body.trim().to_owned(),
+        });
     }
 
     pub(crate) fn add_note(&mut self, heading: &str, body: &str) {
         if let Some(section) = self.sections.iter_mut().find(|section| {
             section.topic.is_none() && section.heading.eq_ignore_ascii_case(heading)
         }) {
-            append(&mut section.body, body);
+            prepend(&mut section.body, body);
             return;
         }
         let mut section = PageSection {
@@ -96,10 +112,12 @@ impl TopicPage {
             heading: heading.to_owned(),
             body: String::new(),
         };
-        append(&mut section.body, body);
+        prepend(&mut section.body, body);
         self.sections.push(section);
     }
 }
+
+pub type PageChange<'change> = dyn for<'page> Fn(&'page mut TopicPage) + Send + Sync + 'change;
 
 #[async_trait]
 pub trait TopicPageStore: Send + Sync {
@@ -120,6 +138,14 @@ pub trait TopicPageStore: Send + Sync {
         edit: &PageEdit,
         now: DateTime<Utc>,
     ) -> Result<bool, WikiStoreError>;
+
+    async fn change_page(
+        &self,
+        root: TopicId,
+        slug: &WikiSlug,
+        change: &PageChange<'_>,
+        now: DateTime<Utc>,
+    ) -> Result<(), WikiStoreError>;
 
     async fn redirect_page(
         &self,
@@ -157,7 +183,7 @@ pub async fn bound_page(
     topics: &dyn TopicStore,
     memory: &dyn MemoryStore,
     topic: &Topic,
-) -> Result<Option<WikiPageResponse>, TopicPageError> {
+) -> Result<Option<crate::wiki::WikiPageResponse>, TopicPageError> {
     let Some(owner) = page_owner(topics, topic).await? else {
         return Ok(None);
     };
@@ -209,7 +235,7 @@ pub async fn sync_topic_page(
 enum Landing {
     Article,
     Section(TopicId),
-    Elsewhere(Topic),
+    Elsewhere(Box<Topic>),
     Plain,
 }
 
@@ -346,7 +372,7 @@ impl PageSync<'_> {
                 Some(_) => match self.landing(root, &subtopics, section).await? {
                     Landing::Article => into_article.push(section.body.clone()),
                     Landing::Section(id) => into_sections.push((id, section.body.clone())),
-                    Landing::Elsewhere(target) => moved.push((target, section.body.clone())),
+                    Landing::Elsewhere(target) => moved.push((*target, section.body.clone())),
                     Landing::Plain => plain.push(PageSection {
                         topic: None,
                         ..section.clone()
@@ -432,7 +458,7 @@ impl PageSync<'_> {
             Some(topic) if subtopics.iter().any(|sub| sub.id == topic.id) => {
                 Landing::Section(topic.id)
             }
-            Some(topic) => Landing::Elsewhere(topic),
+            Some(topic) => Landing::Elsewhere(Box::new(topic)),
         })
     }
 
@@ -499,6 +525,18 @@ fn arranged(
             section
         })
         .collect()
+}
+
+fn prepend(target: &mut String, text: &str) {
+    let text = text.trim();
+    if text.is_empty() || target.contains(text) {
+        return;
+    }
+    *target = if target.trim().is_empty() {
+        text.to_owned()
+    } else {
+        format!("{text}\n\n{}", target.trim_start())
+    };
 }
 
 fn append(target: &mut String, text: &str) {

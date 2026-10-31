@@ -170,10 +170,7 @@ async fn run(
     let _guard = shutdown.clone().drop_guard();
     let embed = crate::service::sqlite_query_embed(config, env, &shutdown, &activities)?;
     let model = crate::service::sqlite_vector_model(config, env);
-    let owner = crate::composition::Composition::node_owner(config, env)
-        .await
-        .map_err(StartupError::from)?;
-    let store = open_store(database, embed, model, owner.as_str()).await?;
+    let store = open_store(database, embed, model).await?;
     import::pending(&store, config, &shutdown).await?;
     let switches = config.service_switches();
     let node = bind_node(&store, &switches, config, env, &shutdown, &activities).await?;
@@ -436,11 +433,8 @@ async fn open_store(
     path: PathBuf,
     embed: Option<QueryEmbed>,
     model: Option<String>,
-    owner: &str,
 ) -> Result<Arc<SqliteStore>, LocalError> {
-    let store = tokio::task::spawn_blocking(move || SqliteStore::open(path))
-        .await??
-        .with_owner(owner);
+    let store = tokio::task::spawn_blocking(move || SqliteStore::open(path)).await??;
     let store = match embed {
         Some(embed) => {
             let store = store.with_query_embed(embed);
@@ -471,12 +465,15 @@ async fn build_runners(
             summaries: Arc::clone(store) as Arc<dyn SummaryStore>,
             wiki: Arc::clone(store) as Arc<dyn WikiBuilderStore>,
             consolidate: Some(Arc::clone(store) as Arc<dyn WikiConsolidateStore>),
+            recompile: None,
             topics: Arc::clone(store) as Arc<dyn TopicStore>,
             filing: Arc::clone(store) as Arc<dyn FilingStore>,
             pages: Arc::clone(store) as Arc<dyn TopicPageStore>,
             decisions: Arc::clone(store) as Arc<dyn DecisionStore>,
             tidy: Arc::clone(store) as Arc<dyn TidyStore>,
             lineage: worker::session_lineage(env),
+            load: None,
+            scopes: None,
         };
         let mut runner =
             worker::build_runner(role, ports, config, env, shutdown, activities).await?;
@@ -524,12 +521,12 @@ fn spawn_workers(
     for (role, runner) in runners {
         let failed = failed.clone();
         let token = shutdown.clone();
-        tracker.spawn(async move {
+        tracker.spawn(kernel::tenancy::Scope::carry(async move {
             tracing::info!("worker running {role}");
             if let Err(error) = runner.run(token).await {
                 deliver(&failed, LocalError::Worker(RootError::Worker(error)));
             }
-        });
+        }));
     }
 }
 

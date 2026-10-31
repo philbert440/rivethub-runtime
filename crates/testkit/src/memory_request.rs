@@ -2,6 +2,7 @@ use chrono::DateTime;
 use chrono::Utc;
 use kernel::memory::BrowseFilter;
 use kernel::memory::Limit;
+use kernel::memory::MemoryEntry;
 use kernel::memory::SearchQuery;
 use kernel::memory::TagAdd;
 use kernel::memory::TagCountsQuery;
@@ -11,15 +12,15 @@ use kernel::memory::TagListQuery;
 use kernel::memory::TagLookup;
 use kernel::memory::TagSuggestionWrite;
 use kernel::memory::TagTaxonomyDecision;
+use kernel::memory::TagTaxonomyMerge;
 use kernel::memory::TagTaxonomyQuery;
 use kernel::memory::TagTaxonomyUpsert;
+use kernel::owner::Owner;
 use uuid::Uuid;
-use wire::gateway::memory::TagTaxonomyMerge;
-use wire::memory::MemoryEntry;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum MemoryRequest {
-    Append(Vec<MemoryEntry>),
+    Append(Owner, Vec<MemoryEntry>),
     Search(SearchQuery),
     Browse(BrowseFilter),
     Stats,

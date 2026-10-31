@@ -58,6 +58,13 @@ impl SummaryStore for SqliteStore {
         }
         Ok(written)
     }
+
+    async fn retitle(&self, id: Uuid, title: &str) -> Result<bool, SummaryStoreError> {
+        let title = title.to_owned();
+        self.with_conn(move |conn| crate::title::name_conversation(conn, &id.to_string(), &title))
+            .await
+            .map_err(store_err)
+    }
 }
 
 impl SummaryWatch for SqliteStore {

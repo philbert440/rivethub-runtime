@@ -4,18 +4,18 @@ use common::TestResult;
 use common::execute;
 use common::fresh_store;
 use common::instant;
+use kernel::memory::MemoryMessageTally;
 use kernel::memory::MemoryStore;
+use kernel::memory::MemorySummaryNode;
 use kernel::memory::NewSummary;
 use kernel::memory::SummaryDag;
 use kernel::memory::SummaryKind;
 use kernel::memory::SummaryOwner;
 use kernel::memory::SummarySource;
 use kernel::memory::SummaryStore;
+use kernel::memory::VectorState;
 use memory_sqlite::SqliteStore;
 use uuid::Uuid;
-use wire::gateway::memory::MemoryMessageTally;
-use wire::gateway::memory::MemorySummaryNode;
-use wire::gateway::memory::VectorState;
 
 const CURRENT: &str = "00000000-0000-4000-8000-000000000001";
 const STALE: &str = "00000000-0000-4000-8000-000000000002";
@@ -104,7 +104,7 @@ fn leaf<'a>(
 }
 
 async fn seeded() -> TestResult<common::Fresh> {
-    let fresh = fresh_store(None)?;
+    let fresh = fresh_store()?;
     execute(&fresh.store, SEED).await?;
     let first = ("2026-10-10T12:00:00.000Z", "2026-10-10T12:01:00.000Z");
     let second = ("2026-10-10T12:02:00.000Z", "2026-10-10T12:02:00.000Z");

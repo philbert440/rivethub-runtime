@@ -1,0 +1,57 @@
+use std::sync::Arc;
+
+use kernel::owner::Owner;
+use kernel::tenancy::Scope;
+use kernel::tenancy::TenancyStore;
+use uuid::Uuid;
+
+use crate::error::WorkerError;
+
+#[expect(
+    missing_debug_implementations,
+    reason = "the tenancy store is a trait object"
+)]
+#[derive(Clone)]
+pub struct OwnerScopes {
+    pub store: Arc<dyn TenancyStore>,
+    pub primary: Owner,
+}
+
+impl OwnerScopes {
+    pub(crate) async fn of_conversation(&self, conversation: Uuid) -> Result<Scope, WorkerError> {
+        match self.store.conversation_owner(conversation).await? {
+            Some(owner) => Ok(Scope::Viewer(self.store.viewer_of(&owner).await?)),
+            None => Ok(Scope::Closed),
+        }
+    }
+
+    pub(crate) async fn primary(&self) -> Result<Scope, WorkerError> {
+        Ok(Scope::Viewer(self.store.viewer_of(&self.primary).await?))
+    }
+}
+
+pub(crate) async fn conversation_scope(
+    scopes: Option<&OwnerScopes>,
+    conversation: Uuid,
+) -> Result<Option<Scope>, WorkerError> {
+    match scopes {
+        Some(scopes) => scopes.of_conversation(conversation).await.map(Some),
+        None => Ok(None),
+    }
+}
+
+pub(crate) async fn primary_scope(
+    scopes: Option<&OwnerScopes>,
+) -> Result<Option<Scope>, WorkerError> {
+    match scopes {
+        Some(scopes) => scopes.primary().await.map(Some),
+        None => Ok(None),
+    }
+}
+
+pub(crate) async fn within<F: Future>(scope: Option<Scope>, work: F) -> F::Output {
+    match scope {
+        Some(scope) => scope.run(work).await,
+        None => work.await,
+    }
+}

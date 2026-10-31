@@ -4,6 +4,7 @@ mod prompt;
 mod rollup;
 mod settings;
 mod sweep;
+mod title;
 
 use kernel::memory::ConversationWindow;
 use kernel::memory::HEARTBEAT_SESSION_PREFIX;
@@ -13,7 +14,6 @@ use kernel::queue::JobQueue;
 use tokio_util::sync::CancellationToken;
 use wire::JsonObject;
 
-pub use settings::DEAD_REST;
 pub use settings::SummaryParts;
 pub use settings::SummarySettings;
 pub use settings::SummaryTrigger;
@@ -28,6 +28,10 @@ pub(crate) use llm::llm_error;
 pub use prompt::BRANCH_SYSTEM_PROMPT;
 pub use prompt::LEAF_SYSTEM_PROMPT;
 pub use prompt::ROOT_SYSTEM_PROMPT;
+pub use title::Named;
+pub use title::TITLE_LEAVES;
+pub use title::TITLE_SYSTEM_PROMPT;
+pub use title::TitleCall;
 
 use crate::error::WorkerError;
 

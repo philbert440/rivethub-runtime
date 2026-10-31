@@ -15,6 +15,7 @@ pub use domain::REAP_AFTER_SECS;
 pub use domain::Target;
 pub use domain::Task;
 pub use domain::TaskStatus;
+pub use domain::UNCLAIMED_PAST_DEADLINE;
 pub use domain::Usage;
 pub use domain::Verdict;
 pub use domain::first_turn;

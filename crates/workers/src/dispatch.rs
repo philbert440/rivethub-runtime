@@ -32,6 +32,7 @@ pub(crate) struct JobEnv {
     pub(crate) topic_pages: Option<crate::topic_page::TopicPages>,
     pub(crate) tidy: Option<Arc<dyn kernel::tidy::TidyStore>>,
     pub(crate) deletions: Option<Arc<dyn kernel::memory::SessionDeletion>>,
+    pub(crate) scopes: Option<crate::OwnerScopes>,
 }
 
 pub(crate) async fn dispatch<Q: JobQueue>(
@@ -98,9 +99,12 @@ pub(crate) async fn dispatch<Q: JobQueue>(
         JobName::Fixed(FixedJob::ConsolidateWiki) => {
             dispatch_consolidate(queue, env, job, cancel).await
         }
+        JobName::Fixed(FixedJob::RecompileWiki) => {
+            dispatch_recompile(queue, env, job, cancel).await
+        }
         JobName::Fixed(FixedJob::SyncTopicPage) => dispatch_topic_page(env, job, cancel).await,
         JobName::Fixed(FixedJob::PurgeDeletedSessions) => dispatch_purge(env, cancel).await,
-        JobName::Fixed(FixedJob::RecompileWiki | FixedJob::RunTask)
+        JobName::Fixed(FixedJob::RunTask)
         | JobName::Heartbeat { .. }
         | JobName::RunTaskOn { .. } => Err(WorkerError::Unhandled {
             name: job.name.to_string(),
@@ -127,7 +131,10 @@ async fn dispatch_file(
         now: Utc::now(),
         cancel,
     };
-    handle_file(&filing, conversation).await.map(|_| ())
+    let scope = crate::scopes::conversation_scope(env.scopes.as_ref(), conversation).await?;
+    crate::scopes::within(scope, handle_file(&filing, conversation))
+        .await
+        .map(|_| ())
 }
 
 async fn dispatch_purge(env: &JobEnv, cancel: &CancellationToken) -> Result<(), WorkerError> {
@@ -156,7 +163,10 @@ async fn dispatch_tidy(env: &JobEnv, cancel: &CancellationToken) -> Result<(), W
         now: Utc::now(),
         cancel,
     };
-    crate::tidy::handle_tidy(&run).await.map(|_| ())
+    let scope = crate::scopes::primary_scope(env.scopes.as_ref()).await?;
+    crate::scopes::within(scope, crate::tidy::handle_tidy(&run))
+        .await
+        .map(|_| ())
 }
 
 async fn dispatch_topic_page(
@@ -170,7 +180,12 @@ async fn dispatch_topic_page(
         .ok_or(WorkerError::MissingDependencies {
             role: ProcessRole::Summarizer,
         })?;
-    crate::topic_page::handle_sync_topic_page(deps, &job.payload, cancel).await
+    let scope = crate::scopes::primary_scope(env.scopes.as_ref()).await?;
+    crate::scopes::within(
+        scope,
+        crate::topic_page::handle_sync_topic_page(deps, &job.payload, cancel),
+    )
+    .await
 }
 
 async fn dispatch_wiki<Q: JobQueue>(
@@ -208,8 +223,47 @@ async fn dispatch_wiki<Q: JobQueue>(
             .await
             .map(|_| ())
     } else {
-        handle_wiki_backfill(&wiki_env).await.map(|_| ())
+        let load = match &wiki.load {
+            Some(probe) => model_load(probe.as_ref()).await,
+            None => None,
+        };
+        let budget = if env.settings.backfill_enabled {
+            crate::wiki_builder::backfill_budget(
+                load,
+                env.settings.backfill_max,
+                env.settings.model_slots,
+            )
+        } else {
+            kernel::wiki::builder::BackfillBudget::flat(0)
+        };
+        handle_wiki_backfill(&wiki_env, budget).await.map(|_| ())
     }
+}
+
+async fn dispatch_recompile<Q: JobQueue>(
+    queue: &Q,
+    env: &JobEnv,
+    job: &ClaimedJob,
+    cancel: &CancellationToken,
+) -> Result<(), WorkerError> {
+    let wiki = env.wiki.as_ref().ok_or(WorkerError::MissingDependencies {
+        role: ProcessRole::WikiBuilder,
+    })?;
+    let store = wiki
+        .recompile
+        .as_ref()
+        .ok_or_else(|| WorkerError::Unhandled {
+            name: job.name.to_string(),
+        })?;
+    let recompile = crate::wiki_builder::RecompileEnv {
+        store: store.as_ref(),
+        provider: env.provider.as_ref(),
+        queue,
+        model: &wiki.model,
+        now: Utc::now(),
+        cancel,
+    };
+    crate::wiki_builder::handle_recompile_wiki(&recompile, &job.payload).await
 }
 
 async fn dispatch_consolidate<Q: JobQueue>(
@@ -290,5 +344,17 @@ async fn dispatch_sweep<Q: JobQueue>(
         )
         .await
         .map(|_| ()),
+    }
+}
+
+async fn model_load(probe: &dyn kernel::model::ModelLoadProbe) -> Option<kernel::model::ModelLoad> {
+    match probe.load().await {
+        Ok(load) => Some(load),
+        Err(error) => {
+            tracing::warn!(
+                "the model load is unreadable, so the wiki backfill stays at one job: {error}"
+            );
+            None
+        }
     }
 }

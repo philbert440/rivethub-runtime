@@ -3,6 +3,7 @@ pub(crate) const CLAIM: &str = "WITH available AS MATERIALIZED (
     JOIN graphile_worker._private_tasks t ON t.id = j.task_id
     WHERE t.identifier = ANY($1)
       AND ($2::bigint IS NULL OR j.id = $2)
+      AND ($4::smallint IS NULL OR j.priority <= $4)
       AND j.is_available = true
       AND j.run_at <= now()
       AND (j.job_queue_id IS NULL OR EXISTS (
@@ -18,6 +19,7 @@ pub(crate) const CLAIM: &str = "WITH available AS MATERIALIZED (
     JOIN graphile_worker._private_tasks t ON t.id = j.task_id
     WHERE t.identifier = ANY($1)
       AND ($2::bigint IS NULL OR j.id = $2)
+      AND ($4::smallint IS NULL OR j.priority <= $4)
       AND j.locked_at < now() - interval '4 hours'
       AND j.attempts < j.max_attempts
       AND j.run_at <= now()
@@ -50,7 +52,11 @@ RETURNING j.id, t.identifier, j.payload, j.attempts::bigint";
 pub(crate) const COMPLETE: &str = "WITH removed AS (
     DELETE FROM graphile_worker._private_jobs
     WHERE id = $1 AND starts_with(locked_by, $2)
-    RETURNING job_queue_id, locked_by, task_id
+    RETURNING id, key, job_queue_id, locked_by, task_id
+), cleared AS (
+    DELETE FROM rh_job_failures c USING removed r WHERE c.job_key = coalesce(r.key, 'job:' || r.id)
+), resolved AS (
+    DELETE FROM rh_flagged_jobs f USING removed r WHERE f.job_key = r.key
 ), unlocked AS (
     UPDATE graphile_worker._private_job_queues q
     SET locked_at = NULL, locked_by = NULL

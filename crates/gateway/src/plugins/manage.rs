@@ -119,7 +119,7 @@ async fn forward_summaries(
                 host.publish(&PluginEvent::SummaryWritten {
                     summary_id: summary.id.to_string(),
                     session_id,
-                    kind: summary.kind,
+                    kind: crate::memory_body::summary_kind_body(summary.kind),
                     level: summary.depth.unsigned_abs(),
                 });
             }

@@ -19,6 +19,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 sha2 = { workspace = true }
 sqlx = { workspace = true, features = ["macros"] }
+strum = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["rt", "sync", "time", "process", "fs", "io-util"] }
 tokio-util = { workspace = true }
@@ -31,6 +32,7 @@ tempfile = { workspace = true }
 migrate = { workspace = true }
 serde_json = { workspace = true }
 sqlx = { workspace = true, features = ["macros"] }
+strum = { workspace = true }
 testkit = { workspace = true }
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time", "test-util"] }
 tracing-subscriber = { workspace = true }

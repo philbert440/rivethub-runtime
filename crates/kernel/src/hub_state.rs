@@ -1,7 +1,5 @@
 use async_trait::async_trait;
 use thiserror::Error;
-use wire::gateway::hub_state::HubState;
-use wire::gateway::hub_state::HubStateResponse;
 
 use crate::BoxError;
 
@@ -11,20 +9,26 @@ pub enum HubStateStoreError {
     Unavailable(#[source] BoxError),
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub enum HubStateWrite {
-    Saved(HubStateResponse),
-    Conflict(HubStateResponse),
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Versioned<S> {
+    pub version: u64,
+    pub state: S,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum HubStateWrite<S> {
+    Saved(Versioned<S>),
+    Conflict(Versioned<S>),
 }
 
 #[async_trait]
-pub trait HubStateStore: Send + Sync {
-    async fn load(&self, user: &str) -> Result<HubStateResponse, HubStateStoreError>;
+pub trait HubStateStore<S>: Send + Sync {
+    async fn load(&self, user: &str) -> Result<Versioned<S>, HubStateStoreError>;
 
     async fn replace(
         &self,
         user: &str,
         base_version: u64,
-        state: HubState,
-    ) -> Result<HubStateWrite, HubStateStoreError>;
+        state: S,
+    ) -> Result<HubStateWrite<S>, HubStateStoreError>;
 }

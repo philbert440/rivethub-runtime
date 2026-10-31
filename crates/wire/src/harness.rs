@@ -17,37 +17,7 @@ mod prompt;
 
 pub use driver::{SessionDriver, TerminalApproval};
 pub use prompt::{PromptKind, PromptOption, PromptQuestion, PromptResolution, PromptScreen};
-
-#[derive(
-    Debug,
-    Clone,
-    Copy,
-    PartialEq,
-    Eq,
-    PartialOrd,
-    Ord,
-    Hash,
-    Serialize,
-    Deserialize,
-    schemars::JsonSchema,
-    Display,
-    EnumString,
-    EnumIter,
-)]
-#[serde(rename_all = "kebab-case")]
-#[strum(serialize_all = "kebab-case")]
-pub enum HarnessId {
-    ClaudeCode,
-    GrokBuild,
-    KimiCode,
-    Hermes,
-    Codex,
-    Opencode,
-    Omp,
-    Dsh,
-    Cursor,
-    Cowork,
-}
+pub use values::HarnessId;
 
 #[derive(
     Debug,

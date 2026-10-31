@@ -139,6 +139,7 @@ async fn place(store: &SqliteStore, sessions: &[&SessionId]) -> TestResult {
                 topic: topic.id,
                 by: PlacementSource::You,
                 at: at(3),
+                owner: testkit::owner().ok(),
             })
             .await?;
     }
@@ -339,5 +340,12 @@ async fn the_sweep_lifts_the_tombstone_when_the_session_was_used_again() -> Test
 async fn a_deleted_session_used_again_comes_back() -> TestResult {
     let (_directory, store) = store()?;
     session_delete::a_deleted_session_used_again_comes_back(&store, &store).await?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_kept_session_is_remembered_from_its_latest_keep() -> TestResult {
+    let (_directory, store) = store()?;
+    session_delete::a_kept_session_is_remembered_from_its_latest_keep(&store).await?;
     Ok(())
 }

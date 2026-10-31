@@ -3,19 +3,19 @@ use std::collections::BTreeSet;
 
 use kernel::memory::MemoryStoreError;
 use kernel::wiki::WikiFilter;
+use kernel::wiki::WikiGapsResponse;
 use kernel::wiki::WikiLookup;
+use kernel::wiki::WikiPageResponse;
+use kernel::wiki::WikiRedLink;
+use kernel::wiki::WikiSource;
+use kernel::wiki::WikiTopic;
+use kernel::wiki::WikiTopicList;
 use kernel::wiki::page::WikiSlug;
+use kernel::wiki::page::WikiSourceKind;
 use rusqlite::Connection;
 use rusqlite::OptionalExtension as _;
 use rusqlite::params_from_iter;
 use rusqlite::types::Value;
-use wire::gateway::wiki::WikiGapsResponse;
-use wire::gateway::wiki::WikiPageResponse;
-use wire::gateway::wiki::WikiRedLink;
-use wire::gateway::wiki::WikiSource;
-use wire::gateway::wiki::WikiSourceKind;
-use wire::gateway::wiki::WikiTopic;
-use wire::gateway::wiki::WikiTopicList;
 
 use crate::SqliteStore;
 use crate::error::SqliteError;

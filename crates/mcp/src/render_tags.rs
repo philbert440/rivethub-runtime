@@ -2,7 +2,7 @@ use crate::Error;
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
 
-use wire::gateway::memory::{
+use kernel::memory::{
     PendingTagWire, TagCount, TagEntityType, TagState, TagTaxonomyEntry, TagWire,
 };
 

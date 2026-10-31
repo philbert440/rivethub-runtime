@@ -15,6 +15,7 @@ use gateway::server::ServeError;
 use gateway::tls::TlsPaths;
 use kernel::memory::MemoryStore;
 use kernel::shutdown::Activities;
+use memory_postgres::Pooling;
 use memory_postgres::PostgresMemory;
 use thiserror::Error;
 use tokio::net::TcpListener;
@@ -80,12 +81,17 @@ pub(crate) async fn postgres(
     env: &Environment,
     shutdown: &CancellationToken,
     activities: &Activities,
+    pooling: Pooling,
 ) -> Result<PostgresMemory, StartupError> {
     let url = postgres_url(config, env)?;
     let embed = query_embed(config, env, shutdown, activities)?;
-    let memory = PostgresMemory::connect_deferred(&url)
+    let owner = crate::composition::identities::load(config, env)
         .await?
-        .with_wiki_directory(config.wiki_directory(env));
+        .primary();
+    let memory = PostgresMemory::connect_deferred(&url, pooling)
+        .await?
+        .with_wiki_directory(config.wiki_directory(env))
+        .with_wiki_owner(owner);
     Ok(match embed {
         Some(embed) => memory.with_query_embed(embed),
         None => memory,
@@ -199,36 +205,30 @@ pub async fn connect(
     env: &Environment,
 ) -> Result<Arc<dyn MemoryStore>, StartupError> {
     let shutdown = CancellationToken::new();
-    Ok(Arc::new(
-        postgres(config, env, &shutdown, &Activities::new()).await?,
-    ))
+    let activities = Activities::new();
+    let memory = postgres(config, env, &shutdown, &activities, Pooling::OnDemand).await?;
+    Ok(Arc::new(memory))
 }
 
-pub fn compose(
+pub async fn compose(
     config: &Config,
     env: &Environment,
     store: Arc<dyn MemoryStore>,
 ) -> Result<Arc<Gateway>, StartupError> {
     let node = crate::identity::announce_resolved("gateway", config, env)?;
     let settings = Settings::from_config_in(config, env, node.hostname, node.name)?;
-    let gateway = Gateway::new(store, settings).with_uploads(uploads(env)?);
-    let gateway = with_voice_and_audio(gateway, config, env)?;
+    let identity = crate::composition::identities::load(config, env).await?;
+    let gateway = Gateway::new(store, settings)
+        .with_uploads(uploads(env)?)
+        .with_tenancy(identity.tenancy);
+    let gateway = with_voice(gateway, env)?;
     Ok(Arc::new(gateway))
 }
 
-pub(crate) fn with_voice_and_audio(
-    mut gateway: Gateway,
-    config: &Config,
+pub(crate) fn with_voice(
+    gateway: Gateway,
     env: &Environment,
 ) -> Result<Gateway, crate::composition::ComposeError> {
-    let audio = env.audio_switch();
-    if let Some(ignored) = &audio.ignored {
-        tracing::warn!("{ignored}");
-    }
-    if config.terminal_enabled() || audio.enabled {
-        let directory = config::Paths::new(env)?.state_dir().join("audio");
-        gateway = gateway.with_audio(gateway::AudioConfig::new(directory));
-    }
     let voice = env.voice_endpoints();
     Ok(gateway.with_voice(gateway::VoiceSettings::new(
         voice.stt_url,
@@ -325,8 +325,17 @@ async fn run(
         .map_err(StartupError::StateTask)??;
     let memory = tokio::select! {
         () = shutdown.cancelled() => return Ok(()),
-        memory = postgres(&config, env, &shutdown, &activities) => Arc::new(memory?),
+        memory = postgres(&config, env, &shutdown, &activities, Pooling::Serving) => Arc::new(memory?),
     };
+    let scope = crate::composition::identities::load(&config, env)
+        .await?
+        .owner_scope();
+    let reading = Arc::clone(&memory);
+    tokio::spawn(scope.run(async move {
+        if let Err(error) = reading.stats().await {
+            tracing::debug!(%error, "memory stats were not read ahead");
+        }
+    }));
     let result = run_gateway(&config, env, &memory, &shutdown, &activities).await;
     shutdown.cancel();
     let closed = memory.close().await;

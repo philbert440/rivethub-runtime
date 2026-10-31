@@ -104,6 +104,7 @@ fn write_registry(directory: &std::path::Path) -> TestResult {
         owner_user_id: "owner".into(),
         unmapped_is_owner: false,
         local_stores: None,
+        spaces: None,
         users: BTreeMap::from([(
             "device-user".into(),
             wire::gateway::users::UserRecord {
@@ -112,6 +113,7 @@ fn write_registry(directory: &std::path::Path) -> TestResult {
                 pg_url: None,
                 env_file: None,
                 persona: None,
+                admin: None,
             },
         )]),
     };
@@ -129,10 +131,8 @@ async fn composed_binary_serves_tls_memory_and_websocket(pool: sqlx::PgPool) -> 
     let material = certificates(&state)?;
     let provider = process::provider::Provider::start().await?;
     let model_address = provider.address;
-    let reservation = std::net::TcpListener::bind("127.0.0.1:0")?;
-    let port = reservation.local_addr()?.port();
-    let channel_reservation = std::net::TcpListener::bind("127.0.0.1:0")?;
-    let channel_port = channel_reservation.local_addr()?.port();
+    let port = testkit::ports::claim()?;
+    let channel_port = testkit::ports::claim()?;
     let config = format!(
         "runtime:\n  workspace: {}\n  default_agent: main\nagents:\n  main:\n    provider: p\n    model: test\nproviders:\n  p:\n    type: openai-compatible\n    base_url: http://{model_address}\n    model: test\nmemory:\n  backend: postgres\n  postgres:\n    connection_string: {url}\ngateway:\n  host: 127.0.0.1\n  port: {port}\n  tls_cert: {}/node.pem\n  tls_key: {}/node.key\n  tls_ca: {}/ca.pem\n  users_file: {}/users.json\n  tls_crl: {}/revoked.pem\nmesh:\n  enabled: true\n  node_name: test-node\n  tls: true\n  advertise_host: 127.0.0.1\n  agent_channel_port: {channel_port}\n",
         home.path().display(),
@@ -143,8 +143,6 @@ async fn composed_binary_serves_tls_memory_and_websocket(pool: sqlx::PgPool) -> 
         state.display()
     );
     std::fs::write(state.join("config.yaml"), config)?;
-    drop(reservation);
-    drop(channel_reservation);
     let running = Running::start(home.path()).await?;
     let address = running.address;
     let identity = reqwest::Identity::from_pem(
@@ -197,7 +195,7 @@ async fn composed_binary_serves_tls_memory_and_websocket(pool: sqlx::PgPool) -> 
         .await?;
     assert_eq!(legacy_stats.messages, 0);
     drop(legacy);
-    process::provider::turns(&client, address, channel_port).await?;
+    process::provider::channel_turn(&client, channel_port.number()).await?;
     let agent_list: wire::mesh_channel::AgentList = client
         .get(format!("https://127.0.0.1:{channel_port}/agents"))
         .send()

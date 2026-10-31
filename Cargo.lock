@@ -471,6 +471,7 @@ dependencies = [
  "tracing",
  "uuid",
  "wire",
+ "zstd",
 ]
 
 [[package]]
@@ -2107,7 +2108,7 @@ dependencies = [
  "tokio",
  "tokio-util",
  "uuid",
- "wire",
+ "values",
 ]
 
 [[package]]
@@ -2264,6 +2265,7 @@ dependencies = [
  "serde_json",
  "sha2 0.10.9",
  "sqlx",
+ "strum 0.27.2",
  "tempfile",
  "testkit",
  "thiserror 2.0.21",
@@ -4605,6 +4607,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ba73ea9cf16a25df0c8caa16c51acb937d5712a8429db78a3ee29d5dcacd3a65"
 
 [[package]]
+name = "values"
+version = "0.7.0"
+dependencies = [
+ "chrono",
+ "schemars 1.2.3",
+ "serde",
+ "serde_json",
+ "serde_with",
+ "strum 0.27.2",
+ "thiserror 2.0.21",
+]
+
+[[package]]
 name = "vcpkg"
 version = "0.2.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5016,6 +5031,7 @@ dependencies = [
  "testkit",
  "thiserror 2.0.21",
  "url",
+ "values",
 ]
 
 [[package]]
@@ -5212,3 +5228,31 @@ name = "zmij"
 version = "1.0.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "29666d0abbfad1e3dc4dcf6144730dd3a3ab225bbbdac83319345b1b44ccfc1b"
+
+[[package]]
+name = "zstd"
+version = "0.14.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "db3ae9bf90af6e40197bef767eeefc46ad6397420fe873830bd85e5fbbfb3c70"
+dependencies = [
+ "zstd-safe",
+]
+
+[[package]]
+name = "zstd-safe"
+version = "8.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ded520f16b29e1a9b771c722221b2b0a0398c2316d9bb3c42b458a5414d7434b"
+dependencies = [
+ "zstd-sys",
+]
+
+[[package]]
+name = "zstd-sys"
+version = "2.1.2+zstd.1.5.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "481ada9c543b2323cbb7bbdbb5249177fbf0188ed959ed2c15e4b22421c84ed3"
+dependencies = [
+ "cc",
+ "pkg-config",
+]

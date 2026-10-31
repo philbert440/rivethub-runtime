@@ -41,6 +41,7 @@ pub struct HookPayload {
     pub tool_response: Option<Box<RawValue>>,
     pub tool_result: Option<String>,
     pub tool_use_id: Option<String>,
+    pub last_assistant_message: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -56,6 +57,7 @@ struct HookPayloadWire {
     tool_response: Option<Box<RawValue>>,
     tool_result: Option<String>,
     tool_use_id: Option<String>,
+    last_assistant_message: Option<String>,
 }
 
 impl From<HookPayloadWire> for HookPayload {
@@ -73,6 +75,7 @@ impl From<HookPayloadWire> for HookPayload {
             tool_response: wire.tool_response,
             tool_result: wire.tool_result,
             tool_use_id: wire.tool_use_id,
+            last_assistant_message: wire.last_assistant_message,
         }
     }
 }

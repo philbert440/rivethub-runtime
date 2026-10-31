@@ -6,10 +6,10 @@ use async_trait::async_trait;
 use thiserror::Error;
 use tokio::sync::mpsc::Receiver;
 use tokio::sync::watch;
-use wire::gateway::ProviderRecovery;
-use wire::message::Message;
-use wire::stream::LlmUsage;
-use wire::stream::ThinkingLevel;
+use values::LlmUsage;
+use values::Message;
+use values::ThinkingLevel;
+use values::ToolCall;
 
 #[derive(Debug, Error)]
 pub enum ModelProviderError {
@@ -67,12 +67,32 @@ pub enum ModelChunk {
 
 pub type ModelStreamItem = Result<ModelChunk, ModelProviderError>;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LlmResponseKind {
+    Text,
+    ToolCalls,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FinishReason {
+    Stop,
+    Length,
+    ToolCalls,
+    ContentFilter,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LlmResponse {
+    pub r#type: LlmResponseKind,
+    pub content: Option<String>,
+    pub tool_calls: Option<Vec<ToolCall>>,
+    pub usage: Option<LlmUsage>,
+    pub finish_reason: Option<FinishReason>,
+}
+
 #[async_trait]
 pub trait ModelProvider: Send + Sync {
-    async fn chat(
-        &self,
-        request: ModelRequest,
-    ) -> Result<wire::stream::LlmResponse, ModelProviderError>;
+    async fn chat(&self, request: ModelRequest) -> Result<LlmResponse, ModelProviderError>;
 
     async fn stream(
         &self,
@@ -82,6 +102,13 @@ pub trait ModelProvider: Send + Sync {
     async fn embed(&self, texts: Vec<String>) -> Result<Vec<Embedding>, ModelProviderError>;
 
     async fn list_models(&self) -> Result<Vec<String>, ModelProviderError>;
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, strum::Display)]
+#[strum(serialize_all = "kebab-case")]
+pub enum ProviderRecovery {
+    Retrying,
+    Permanent,
 }
 
 #[derive(Debug, Clone)]
@@ -151,4 +178,15 @@ impl ModelProviderError {
             Some(ModelCallFailure::Credentials { .. }) | None => false,
         }
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ModelLoad {
+    pub running: u32,
+    pub waiting: u32,
+}
+
+#[async_trait]
+pub trait ModelLoadProbe: Send + Sync {
+    async fn load(&self) -> Result<ModelLoad, BoxError>;
 }

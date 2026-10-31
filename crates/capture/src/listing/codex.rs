@@ -202,14 +202,17 @@ fn user_message(line: &str) -> Option<String> {
             .collect(),
     };
     let trimmed = text.trim();
-    let injected = [
+    (!trimmed.is_empty() && !injected(trimmed)).then(|| clip(trimmed, TITLE_CHARS))
+}
+
+pub(crate) fn injected(text: &str) -> bool {
+    [
         "<environment_context>",
         "<skills_instructions>",
         "<multi_agent_",
     ]
     .iter()
-    .any(|prefix| trimmed.starts_with(prefix));
-    (!trimmed.is_empty() && !injected).then(|| clip(trimmed, TITLE_CHARS))
+    .any(|prefix| text.starts_with(prefix))
 }
 
 fn unprompted(path: &Path) -> bool {
