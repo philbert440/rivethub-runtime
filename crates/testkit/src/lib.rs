@@ -24,6 +24,7 @@ pub mod tasks;
 pub mod tidy;
 pub mod topic_pages;
 pub mod topics;
+pub mod wiki_bounded;
 pub mod wiki_golden;
 pub mod wiki_lineage;
 pub mod wiki_mentions;

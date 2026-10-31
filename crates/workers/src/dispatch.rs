@@ -98,9 +98,12 @@ pub(crate) async fn dispatch<Q: JobQueue>(
         JobName::Fixed(FixedJob::ConsolidateWiki) => {
             dispatch_consolidate(queue, env, job, cancel).await
         }
+        JobName::Fixed(FixedJob::RecompileWiki) => {
+            dispatch_recompile(queue, env, job, cancel).await
+        }
         JobName::Fixed(FixedJob::SyncTopicPage) => dispatch_topic_page(env, job, cancel).await,
         JobName::Fixed(FixedJob::PurgeDeletedSessions) => dispatch_purge(env, cancel).await,
-        JobName::Fixed(FixedJob::RecompileWiki | FixedJob::RunTask)
+        JobName::Fixed(FixedJob::RunTask)
         | JobName::Heartbeat { .. }
         | JobName::RunTaskOn { .. } => Err(WorkerError::Unhandled {
             name: job.name.to_string(),
@@ -210,6 +213,32 @@ async fn dispatch_wiki<Q: JobQueue>(
     } else {
         handle_wiki_backfill(&wiki_env).await.map(|_| ())
     }
+}
+
+async fn dispatch_recompile<Q: JobQueue>(
+    queue: &Q,
+    env: &JobEnv,
+    job: &ClaimedJob,
+    cancel: &CancellationToken,
+) -> Result<(), WorkerError> {
+    let wiki = env.wiki.as_ref().ok_or(WorkerError::MissingDependencies {
+        role: ProcessRole::WikiBuilder,
+    })?;
+    let store = wiki
+        .recompile
+        .as_ref()
+        .ok_or_else(|| WorkerError::Unhandled {
+            name: job.name.to_string(),
+        })?;
+    let recompile = crate::wiki_builder::RecompileEnv {
+        store: store.as_ref(),
+        provider: env.provider.as_ref(),
+        queue,
+        model: &wiki.model,
+        now: Utc::now(),
+        cancel,
+    };
+    crate::wiki_builder::handle_recompile_wiki(&recompile, &job.payload).await
 }
 
 async fn dispatch_consolidate<Q: JobQueue>(

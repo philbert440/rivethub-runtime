@@ -12,6 +12,7 @@ use kernel::topics::TopicStore;
 use kernel::transcript::SessionLister;
 use kernel::wiki::builder::WikiBuilderStore;
 use kernel::wiki::consolidate::WikiConsolidateStore;
+use kernel::wiki::recompile::WikiRecompileStore;
 use thiserror::Error;
 use tokio_util::sync::CancellationToken;
 use workers::{
@@ -144,6 +145,7 @@ async fn run(
         let summaries: Arc<dyn SummaryStore> = memory.clone();
         let wiki: Arc<dyn WikiBuilderStore> = memory.clone();
         let consolidate: Arc<dyn WikiConsolidateStore> = memory.clone();
+        let recompile: Arc<dyn WikiRecompileStore> = memory.clone();
         let topics: Arc<dyn TopicStore> = memory.clone();
         let filing: Arc<dyn FilingStore> = memory.clone();
         let pages: Arc<dyn TopicPageStore> = memory.clone();
@@ -157,6 +159,7 @@ async fn run(
                 summaries,
                 wiki,
                 consolidate: Some(consolidate),
+                recompile: Some(recompile),
                 topics,
                 filing,
                 pages,
@@ -203,6 +206,7 @@ pub struct WorkerPorts<Q> {
     pub summaries: Arc<dyn SummaryStore>,
     pub wiki: Arc<dyn WikiBuilderStore>,
     pub consolidate: Option<Arc<dyn WikiConsolidateStore>>,
+    pub recompile: Option<Arc<dyn WikiRecompileStore>>,
     pub topics: Arc<dyn TopicStore>,
     pub filing: Arc<dyn FilingStore>,
     pub pages: Arc<dyn TopicPageStore>,
@@ -261,6 +265,7 @@ pub fn with_models<Q: JobQueue + 'static>(
     .with_wiki_builder(workers::wiki_builder::WikiBuilderDeps {
         store: ports.wiki,
         consolidate: ports.consolidate,
+        recompile: ports.recompile,
         model,
     })
     .with_topic_pages(Arc::clone(&ports.topics), ports.pages, ports.decisions)

@@ -292,6 +292,7 @@ impl WorkerRole {
                 JobName::Fixed(FixedJob::ExtractWiki),
                 JobName::Fixed(FixedJob::EnqueueWikiBackfill),
                 JobName::Fixed(FixedJob::ConsolidateWiki),
+                JobName::Fixed(FixedJob::RecompileWiki),
                 JobName::Fixed(FixedJob::EnqueueStaleWiki),
             ],
         }

@@ -141,8 +141,11 @@ fn apply_all(
     }
     patches.sort_by(|left, right| left.slug.as_ref().cmp(right.slug.as_ref()));
     let mut touched = Vec::new();
-    for patch in patches {
+    for mut patch in patches {
         let page = routing.topic_page.as_ref();
+        if let Some(merged) = routing.merged(patch.slug.as_ref()) {
+            crate::wiki_topics::rebase_merged(&tx, &mut patch, &merged.base)?;
+        }
         if let Some(slug) = crate::wiki_topics::apply(&tx, &summary, &patch, page, now)? {
             touched.push(slug);
         }

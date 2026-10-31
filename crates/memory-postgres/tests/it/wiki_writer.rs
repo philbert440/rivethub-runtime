@@ -57,7 +57,7 @@ fn patch(slug: &str) -> PagePatch {
 async fn apply(root: &Path, patch: PagePatch) -> Result<AppliedPage, WikiWriteError> {
     let (result, released) = {
         let mut repository = WikiRepository::new(root.to_path_buf()).lock().await?;
-        let result = repository.apply(patch, SUMMARY_ID).await;
+        let result = repository.apply(patch, SUMMARY_ID, None).await;
         (result, repository.release().await)
     };
     released?;

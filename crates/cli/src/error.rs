@@ -183,6 +183,10 @@ pub enum Error {
     OutRequired,
     #[error("--since requires an ISO timestamp")]
     SinceRequired,
+    #[error("--min-bytes requires a byte count: {0}")]
+    RecompileBytes(String),
+    #[error("--slug requires a wiki page slug: {0}")]
+    RecompileSlug(String),
     #[error("invalid --since timestamp: {0}")]
     SinceInvalid(String),
     #[error("refusing to write gzip to a TTY (redirect stdout or pass --out <file>)")]

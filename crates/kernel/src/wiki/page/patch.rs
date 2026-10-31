@@ -47,8 +47,8 @@ pub struct PagePatch {
     pub allow_shrink: bool,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, strum::Display)]
-enum Revision {
+#[derive(Debug, Clone, Copy, PartialEq, Eq, strum::Display, strum::EnumString)]
+pub(super) enum Revision {
     #[strum(serialize = "Superseded current state")]
     CurrentState,
     #[strum(serialize = "Summary overflow (v7 cap)")]

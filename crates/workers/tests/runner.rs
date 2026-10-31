@@ -76,6 +76,7 @@ fn roles_match_the_kernel_task_lists() {
             "extract-wiki".to_owned(),
             "enqueue-wiki-backfill".to_owned(),
             "consolidate-wiki".to_owned(),
+            "recompile-wiki".to_owned(),
             "enqueue-stale-wiki".to_owned(),
         ]
     );
@@ -168,15 +169,12 @@ async fn an_unhandled_claim_is_failed() {
     let rig = rig(ProcessRole::Embedder, 1, fnv_provider());
     let id = rig
         .queue
-        .push_any(fixed(FixedJob::RecompileWiki), JsonObject::default(), 1)
+        .push_any(fixed(FixedJob::RunTask), JsonObject::default(), 1)
         .await;
     let (cancel, run) = spawn(&rig);
     rig.queue.wait_phase(id, Phase::Dead).await;
     let job = rig.queue.view(id).await;
-    assert_eq!(
-        job.error.as_deref(),
-        Some("no handler for job recompile-wiki")
-    );
+    assert_eq!(job.error.as_deref(), Some("no handler for job run-task"));
     assert_ne!(job.phase, Phase::Done);
     finish(cancel, run).await;
 }
@@ -539,6 +537,7 @@ async fn all_claims_every_role_that_has_a_handler() {
         runner.with_wiki_builder(workers::wiki_builder::WikiBuilderDeps {
             store: Arc::new(wiki::WikiStore::default()),
             consolidate: None,
+            recompile: None,
             model: "wiki-model".to_owned(),
         }),
     );

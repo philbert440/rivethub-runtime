@@ -270,6 +270,13 @@ impl MemoryStore for crate::PostgresMemory {
         self.read_wiki_gaps(limit).await.map_err(Into::into)
     }
 
+    async fn wiki_archive(
+        &self,
+        slug: &kernel::wiki::page::WikiSlug,
+    ) -> Result<Option<String>, MemoryStoreError> {
+        self.read_wiki_archive(slug).await.map_err(Into::into)
+    }
+
     async fn capture(
         &self,
         mut batch: CaptureBatchRequest,
