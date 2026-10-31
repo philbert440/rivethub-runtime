@@ -1000,7 +1000,9 @@ is enqueued: within 24 hours, -20 (idle, threshold or explicit) or -10 (stale); 
 sweeps read the conversations that hold unsummarized messages in one query (id, unsummarized count and latest message
 time, newest first, with no message bodies) and enqueue in that order. Both stores claim by priority, then `run_at`,
 then insertion order; memory-sqlite keeps non-zero priorities in `rh_job_priorities` (SQLite schema v27), so the
-recorded `ros_jobs` table is unchanged.
+recorded `ros_jobs` table is unchanged. One conversation is compacted by one job at a time: on Postgres each
+`compact-conversation` job joins the graphile named queue of its key (`compact-<conversationId>`), so one enqueued while
+another runs waits for it; SQLite keeps one row per key.
 (79) Session driver (Phil, 2026-10-30): a session's Chat (ACP) and Terminal (the harness's TUI) take turns holding it,
 and `HarnessEvent` gains `driver`, `{ "type": "driver", "sessionId", "driver"?, "busy", "queued", "approval"? }`, sent on
 the session's stream each time one of them changes and, held per session, after each `transcript` a session socket

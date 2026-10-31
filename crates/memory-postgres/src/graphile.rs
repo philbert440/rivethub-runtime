@@ -104,7 +104,7 @@ impl GraphileQueue {
     pub(crate) async fn enqueue(&self, job: &Job) -> Result<JobId, Error> {
         let payload = sqlx::types::Json(&job.payload);
         let queued: QueuedJob = sqlx::query_as(
-            "select (graphile_worker.add_job($1, $2::json, null, $3, $4, $5, $6, null::text[], $7)).id",
+            "select (graphile_worker.add_job($1, $2::json, $8, $3, $4, $5, $6, null::text[], $7)).id",
         )
         .bind(job.name.to_string())
         .bind(payload)
@@ -116,6 +116,7 @@ impl GraphileQueue {
         .bind(&job.key)
         .bind(i32::from(job.priority))
         .bind(key_mode(job.key_mode))
+        .bind(single_flight(job))
         .fetch_one(&self.pool)
         .await
         .map_err(|source| Error::operation("enqueue", source))?;
@@ -392,6 +393,14 @@ fn key_mode(mode: JobKeyMode) -> &'static str {
     match mode {
         JobKeyMode::KeepRunAt => "preserve_run_at",
         JobKeyMode::Replace => "replace",
+    }
+}
+
+fn single_flight(job: &Job) -> Option<&str> {
+    if job.name == JobName::Fixed(FixedJob::SummarizeConversation) {
+        job.key.as_deref()
+    } else {
+        None
     }
 }
 
