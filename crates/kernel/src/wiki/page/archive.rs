@@ -9,6 +9,7 @@ use super::{WikiHistoryEntry, WikiPage};
 pub const ARCHIVE_DIRECTORY: &str = "archive";
 const COVERED_PERCENT: usize = 60;
 const MONTH: &str = "%Y-%m";
+pub const SEGMENT_BUDGET: usize = 64 * 1024;
 
 #[must_use]
 pub fn archive_month(at: DateTime<Utc>) -> String {
@@ -27,9 +28,66 @@ pub fn archive_directory(slug: &str) -> String {
     format!("{ARCHIVE_DIRECTORY}/{slug}")
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct ArchivePart {
+    pub month: String,
+    pub part: u32,
+}
+
+impl ArchivePart {
+    #[must_use]
+    pub fn parse(name: &str) -> Option<Self> {
+        let stem = name.strip_suffix(".md")?;
+        let (month, part) = match stem.split_once('.') {
+            Some((month, part)) => {
+                let number = part.bytes().try_fold(0u32, |number, byte| {
+                    let digit = byte.checked_sub(b'0').filter(|digit| *digit < 10)?;
+                    number.checked_mul(10)?.checked_add(u32::from(digit))
+                })?;
+                (number > 0 && number.to_string() == part).then_some((month, number))?
+            }
+            None => (stem, 0),
+        };
+        Some(Self {
+            month: parse_archive_month(month)?,
+            part,
+        })
+    }
+
+    #[must_use]
+    pub fn name(&self) -> String {
+        if self.part == 0 {
+            format!("{}.md", self.month)
+        } else {
+            format!("{}.{}.md", self.month, self.part)
+        }
+    }
+}
+
 #[must_use]
-pub fn archive_path(slug: &str, month: &str) -> String {
-    format!("{ARCHIVE_DIRECTORY}/{slug}/{month}.md")
+pub fn archive_path(slug: &str, part: &ArchivePart) -> String {
+    format!("{ARCHIVE_DIRECTORY}/{slug}/{}", part.name())
+}
+
+#[must_use]
+pub fn next_part(month: &str, parts: &[(ArchivePart, usize)], adding: usize) -> ArchivePart {
+    let newest = parts
+        .iter()
+        .filter(|(part, _)| part.month == month)
+        .max_by_key(|(part, _)| part.part);
+    match newest {
+        Some((part, size)) if part.part > 0 && size.saturating_add(adding) <= SEGMENT_BUDGET => {
+            part.clone()
+        }
+        Some((part, _)) => ArchivePart {
+            month: month.to_owned(),
+            part: part.part.saturating_add(1),
+        },
+        None => ArchivePart {
+            month: month.to_owned(),
+            part: 1,
+        },
+    }
 }
 
 #[must_use]

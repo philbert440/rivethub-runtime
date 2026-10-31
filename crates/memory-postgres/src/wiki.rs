@@ -10,7 +10,7 @@ use kernel::wiki::WikiTopic;
 use kernel::wiki::WikiTopicList;
 use kernel::wiki::page::WikiSlug;
 use kernel::wiki::page::archive::{
-    ARCHIVE_DIRECTORY, archive_directory, archive_path, legacy_archive_path, parse_archive_month,
+    ARCHIVE_DIRECTORY, archive_directory, legacy_archive_path, parse_archive_month,
 };
 use sqlx::Postgres;
 use sqlx::QueryBuilder;
@@ -18,6 +18,7 @@ use uuid::Uuid;
 
 use crate::Error;
 use crate::PostgresMemory;
+use crate::wiki_writer::archive::archive_parts;
 
 #[derive(Debug, sqlx::FromRow)]
 struct TopicRow {
@@ -267,24 +268,28 @@ impl PostgresMemory {
             .await
             .map_err(Error::WikiIo)?;
         let archives = root.join(ARCHIVE_DIRECTORY);
-        let paths = if let Some(month) = month {
-            let Some(month) = parse_archive_month(month) else {
-                return Ok(None);
-            };
-            vec![archive_path(&home.local, &month)]
-        } else {
-            let mut paths = vec![legacy_archive_path(&home.local)];
-            paths.extend(
-                months(&root.join(archive_directory(&home.local)))
-                    .await?
-                    .iter()
-                    .map(|month| archive_path(&home.local, month)),
-            );
-            paths
+        let month = match month {
+            Some(month) => match parse_archive_month(month) {
+                Some(month) => Some(month),
+                None => return Ok(None),
+            },
+            None => None,
         };
+        let mut paths = Vec::new();
+        if month.is_none() {
+            paths.push(root.join(legacy_archive_path(&home.local)));
+        }
+        paths.extend(
+            archive_parts(&root.join(archive_directory(&home.local)))
+                .await
+                .map_err(Error::WikiIo)?
+                .into_iter()
+                .filter(|(part, _)| month.as_ref().is_none_or(|month| part.month == *month))
+                .map(|(_, path)| path),
+        );
         let mut found: Option<String> = None;
         for path in paths {
-            let path = match tokio::fs::canonicalize(root.join(path)).await {
+            let path = match tokio::fs::canonicalize(path).await {
                 Ok(path) => path,
                 Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
                 Err(error) => return Err(Error::WikiIo(error)),
@@ -299,25 +304,6 @@ impl PostgresMemory {
         }
         Ok(found)
     }
-}
-
-async fn months(directory: &std::path::Path) -> Result<Vec<String>, Error> {
-    let mut entries = match tokio::fs::read_dir(directory).await {
-        Ok(entries) => entries,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
-        Err(error) => return Err(Error::WikiIo(error)),
-    };
-    let mut months = Vec::new();
-    while let Some(entry) = entries.next_entry().await.map_err(Error::WikiIo)? {
-        let name = entry.file_name();
-        let month = name
-            .to_str()
-            .and_then(|name| name.strip_suffix(".md"))
-            .and_then(parse_archive_month);
-        months.extend(month);
-    }
-    months.sort_unstable();
-    Ok(months)
 }
 
 async fn read_markdown(directory: &std::path::Path, slug: &str) -> Result<String, Error> {

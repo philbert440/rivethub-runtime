@@ -106,11 +106,11 @@ async fn a_rewrite_archives_what_it_dropped_behind_one_history_line() -> TestRes
     assert_eq!(line.title, ARCHIVED_TITLE);
     assert!(line.body.contains("/wiki/acmekit/archive/2026-10#a-"));
     assert!(line.body.contains(inline.get(..10).ok_or("sha")?));
-    let archive = tokio::fs::read_to_string(root.join("archive/acmekit/2026-10.md")).await?;
+    let archive = tokio::fs::read_to_string(root.join("archive/acmekit/2026-10.1.md")).await?;
     assert!(archive.contains("Listens on 8080."));
     assert!(archive.starts_with("# Archive: AcmeKit"));
     let files = git(&root, &["show", "--name-only", "--format=", "HEAD"]).await?;
-    assert_eq!(files, "archive/acmekit/2026-10.md\ntopics/acmekit.md\n");
+    assert_eq!(files, "archive/acmekit/2026-10.1.md\ntopics/acmekit.md\n");
     let stored = tokio::fs::read_to_string(root.join("topics/acmekit.md")).await?;
     assert_eq!(parse_wiki_page(&stored)?, page);
     Ok(())
@@ -127,12 +127,51 @@ fn facts(count: usize) -> String {
 }
 
 #[tokio::test]
+async fn archive_writes_go_to_small_parts_and_leave_the_month_file_alone() -> TestResult {
+    let directory = tempfile::tempdir()?;
+    let root = directory.path().join("wiki");
+    apply(&root, patch("acmekit", "AcmeKit ships on Fridays.")?).await?;
+    let month = "# Archive: AcmeKit, 2026-10\n\n<a id=\"a-1\"></a>\n\n## old\n\nThe staging cluster listens on port 8080.\n";
+    tokio::fs::create_dir_all(root.join("archive/acmekit")).await?;
+    tokio::fs::write(root.join("archive/acmekit/2026-10.md"), month).await?;
+    git(&root, &["add", "--", "archive"]).await?;
+    git(
+        &root,
+        &["commit", "-q", "-m", "an archive from before parts"],
+    )
+    .await?;
+    for (round, extra) in [(0usize, true), (1, false), (2, false)] {
+        let mut article = facts(400)
+            .replace("Fact ", &format!("Round {round} fact "))
+            .replace(" f", &format!(" r{round}f"));
+        if extra {
+            article.push_str("\n\nThe staging cluster listens on port 8080.");
+        }
+        let mut update = patch("acmekit", &article)?;
+        update.action = WikiAction::Update;
+        apply(&root, update).await?;
+    }
+    assert_eq!(
+        tokio::fs::read_to_string(root.join("archive/acmekit/2026-10.md")).await?,
+        month
+    );
+    let first = tokio::fs::read_to_string(root.join("archive/acmekit/2026-10.1.md")).await?;
+    let second = tokio::fs::read_to_string(root.join("archive/acmekit/2026-10.2.md")).await?;
+    assert!(!first.starts_with("# Archive") && !second.starts_with("# Archive"));
+    assert!(!first.contains("8080") && !second.contains("8080"));
+    assert!(second.contains("r1f399w0"));
+    let touched = git(&root, &["show", "--name-only", "--format=", "HEAD"]).await?;
+    assert_eq!(touched, "archive/acmekit/2026-10.3.md\ntopics/acmekit.md\n");
+    Ok(())
+}
+
+#[tokio::test]
 async fn an_oversized_article_is_held_to_its_budget() -> TestResult {
     let directory = tempfile::tempdir()?;
     let root = directory.path().join("wiki");
     let applied = apply(&root, patch("acmekit", &facts(200))?).await?;
     assert!(applied.page.article.len() <= ARTICLE_BUDGET);
-    let archive = tokio::fs::read_to_string(root.join("archive/acmekit/2026-10.md")).await?;
+    let archive = tokio::fs::read_to_string(root.join("archive/acmekit/2026-10.1.md")).await?;
     assert!(archive.contains("Fact 199:"));
     Ok(())
 }
@@ -197,7 +236,7 @@ async fn recompile_restores_pushed_out_history_and_archives_copies(pool: PgPool)
         vec![ARCHIVED_TITLE, "Moved the build box", "First release"]
     );
     assert_eq!(stored.current_state, "AcmeKit ships on Fridays. Merged.");
-    let archive = tokio::fs::read_to_string(root.join("archive/acmekit/2026-10.md")).await?;
+    let archive = tokio::fs::read_to_string(root.join("archive/acmekit/2026-10.1.md")).await?;
     assert!(archive.contains("copy 3"));
     assert!(archive.contains("### Note 16"));
     assert!(archive.contains("### Note 79"));
@@ -242,7 +281,7 @@ async fn fifty_rephrasings_archive_only_the_paragraph_that_left() -> TestResult 
         }
         apply(&root, update).await?;
     }
-    let archive = tokio::fs::read_to_string(root.join("archive/acmekit/2026-10.md")).await?;
+    let archive = tokio::fs::read_to_string(root.join("archive/acmekit/2026-10.1.md")).await?;
     assert_eq!(archive.matches("8080").count(), 1, "{archive}");
     assert!(!archive.contains("AcmeKit releases") && !archive.contains("integration suites"));
     let commits = git(&root, &["log", "--format=%h", "--", "archive"]).await?;
