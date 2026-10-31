@@ -59,6 +59,5 @@ mod term_agents;
 mod term_owner_device;
 mod tls_resolve;
 mod upgrade;
-mod v1;
 mod voice;
 mod wiki;

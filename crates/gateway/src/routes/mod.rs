@@ -19,7 +19,6 @@ pub mod tasks;
 pub mod terminal;
 mod tidy;
 pub(crate) mod topics;
-pub mod v1;
 pub(crate) mod voice;
 pub mod wiki;
 
@@ -143,16 +142,8 @@ fn degraded_reason(error: &MemoryStoreError) -> String {
     format!("database unreachable: {detail}")
 }
 
-pub(crate) async fn not_found(
-    State(gateway): State<Arc<Gateway>>,
-    request: axum::extract::Request,
-) -> axum::response::Response {
-    use tower::ServiceExt as _;
-
-    match v1::router().with_state(gateway).oneshot(request).await {
-        Ok(response) => response,
-        Err(never) => match never {},
-    }
+pub(crate) async fn not_found() -> ApiError {
+    ApiError::NotFound("not found")
 }
 
 pub(crate) async fn method_not_allowed() -> ApiError {

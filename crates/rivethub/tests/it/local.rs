@@ -618,7 +618,7 @@ async fn complete(
     } else {
         DELEGATE_TEXT
     };
-    let payload = event_stream(content).map_err(|error| {
+    let payload = crate::process::provider::event_stream(content, None).map_err(|error| {
         (
             axum::http::StatusCode::INTERNAL_SERVER_ERROR,
             error.to_string(),
@@ -627,27 +627,6 @@ async fn complete(
     Ok((
         [(axum::http::header::CONTENT_TYPE, "text/event-stream")],
         payload,
-    ))
-}
-
-fn event_stream(content: &str) -> TestResult<String> {
-    let chunk = wire::gateway::v1::CompletionChunk {
-        id: "c".to_owned(),
-        created: 0,
-        model: "m".to_owned(),
-        choices: vec![wire::gateway::v1::ChunkChoice {
-            index: 0,
-            delta: wire::gateway::v1::CompletionDelta {
-                content: Some(content.to_owned()),
-                ..wire::gateway::v1::CompletionDelta::default()
-            },
-            finish_reason: None,
-        }],
-        usage: None,
-    };
-    Ok(format!(
-        "data: {}\n\ndata: [DONE]\n\n",
-        serde_json::to_string(&chunk)?
     ))
 }
 
