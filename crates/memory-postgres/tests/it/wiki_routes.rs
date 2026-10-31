@@ -247,3 +247,15 @@ async fn another(pool: &PgPool, job: &ExtractWiki) -> TestResult<ExtractWiki> {
         conversation_id: job.conversation_id,
     })
 }
+
+#[sqlx::test(migrator = "migrate::POSTGRES")]
+async fn updates_keep_the_lead_and_replace_only_the_currently_sentence(pool: PgPool) -> TestResult {
+    let seeded = Seeded::new(pool.clone()).await?;
+    let second = another(&pool, &seeded.job).await?;
+    let third = another(&pool, &seeded.job).await?;
+    testkit::wiki_bounded::updates_keep_the_lead_and_replace_only_the_currently_sentence(
+        seeded.stores(),
+        [&seeded.job, &second, &third],
+    )
+    .await
+}

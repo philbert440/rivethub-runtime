@@ -124,12 +124,18 @@ pub async fn concurrent_rewrites_of_one_page_keep_both(
     left?;
     right?;
     let page = stores.pages.page(&acmekit).await?;
-    for kept in [
+    let leads = [
         "AcmeKit ships on Fridays.",
         "AcmeKit builds on the build box.",
-    ] {
-        same(kept, page.summary.contains(kept), true)?;
-    }
+    ];
+    same(
+        "one stable lead",
+        leads
+            .iter()
+            .filter(|lead| page.summary.contains(*lead))
+            .count(),
+        1,
+    )?;
     for kept in [
         "Releases go out on Fridays.",
         "Builds run on the build box.",
@@ -180,10 +186,48 @@ pub async fn an_entity_mention_is_merged_into_its_page(
         true,
     )?;
     let page = stores.pages.page(&entity).await?;
+    same("the lead stays", page.summary.as_str(), built)?;
     same(
-        "merged summary replaces",
-        page.summary.as_str(),
-        format!("{built} Merged.").as_str(),
+        "the merged article lands",
+        page.article.contains("64 GB of memory"),
+        true,
+    )?;
+    Ok(())
+}
+
+pub async fn updates_keep_the_lead_and_replace_only_the_currently_sentence(
+    stores: RouteStores<'_>,
+    jobs: [&ExtractWiki; 3],
+) -> Outcome {
+    let acmekit = stores
+        .pages
+        .create(new_topic("AcmeKit", &[], None)?)
+        .await?;
+    stores.place(&acmekit).await?;
+    let [first, second, third] = jobs;
+    let lead = "AcmeKit is the team's deploy tool.";
+    let opening = format!("{lead} Currently, releases ship on Fridays.");
+    stores
+        .route(first, vec![patch("acmekit", "AcmeKit", &opening)?])
+        .await?;
+    let update = "Release 2.0 shipped today with new dashboards. Currently, releases ship daily.";
+    stores
+        .route(second, vec![patch("acmekit", "AcmeKit", update)?])
+        .await?;
+    let expected = format!("{lead} Currently, releases ship daily.");
+    same(
+        "lead kept, currently replaced",
+        stores.pages.page(&acmekit).await?.summary,
+        expected.clone(),
+    )?;
+    let news = "The billing team adopted AcmeKit.";
+    stores
+        .route(third, vec![patch("acmekit", "AcmeKit", news)?])
+        .await?;
+    same(
+        "news without a currently sentence leaves the lead alone",
+        stores.pages.page(&acmekit).await?.summary,
+        expected,
     )?;
     Ok(())
 }

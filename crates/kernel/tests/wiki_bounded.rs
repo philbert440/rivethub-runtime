@@ -294,3 +294,34 @@ fn restoring_twice_keeps_one_copy_of_a_shortened_entry() -> TestResult {
     assert_eq!(current.history.len(), 1);
     Ok(())
 }
+
+#[test]
+fn a_stable_lead_keeps_its_description_and_swaps_only_the_currently_sentence() {
+    use kernel::wiki::page::lead::{split_lead, stable_summary};
+    let existing = "RivetOS is a multi-agent runtime. Currently, the Rust port is in review.";
+    let split = split_lead(existing);
+    assert_eq!(split.lead, "RivetOS is a multi-agent runtime.");
+    assert_eq!(
+        split.currently.as_deref(),
+        Some("Currently, the Rust port is in review.")
+    );
+    assert_eq!(
+        stable_summary(
+            existing,
+            "Gateway routes landed today. Currently, v0.7.0 runs everywhere."
+        ),
+        "RivetOS is a multi-agent runtime. Currently, v0.7.0 runs everywhere."
+    );
+    assert_eq!(
+        stable_summary(existing, "Gateway routes landed today."),
+        existing
+    );
+    assert_eq!(
+        stable_summary("", "RivetOS is a runtime. Currently, it is in beta."),
+        "RivetOS is a runtime. Currently, it is in beta."
+    );
+    assert_eq!(
+        split_lead("Recurrently Currently is a word.").lead,
+        "Recurrently Currently is a word."
+    );
+}

@@ -17,6 +17,7 @@ const EARLIER_SUMMARY: &str = "00000000-0000-4000-8000-0000000000d2";
 const SUBAGENT_CONVERSATION: &str = "00000000-0000-4000-8000-0000000000c3";
 const SUBAGENT_SUMMARY: &str = "00000000-0000-4000-8000-0000000000d3";
 const SECOND_SUMMARY: &str = "00000000-0000-4000-8000-0000000000d4";
+const THIRD_SUMMARY: &str = "00000000-0000-4000-8000-0000000000d5";
 
 async fn seeded() -> TestResult<(TempDir, SqliteStore, ExtractWiki)> {
     let directory = tempfile::tempdir()?;
@@ -206,16 +207,20 @@ async fn a_sub_topic_summary_lands_in_its_section() -> TestResult {
 }
 
 async fn second(store: &SqliteStore) -> TestResult<ExtractWiki> {
+    summary(store, SECOND_SUMMARY, "2026-10-10T13:00:00.000Z").await
+}
+
+async fn summary(store: &SqliteStore, id: &str, at: &str) -> TestResult<ExtractWiki> {
     execute(
         store,
         &format!(
             "INSERT INTO ros_summaries (id, conversation_id, content, created_at)
-             VALUES ('{SECOND_SUMMARY}', '{CONVERSATION}', 'More AcmeKit notes.', '2026-10-10T13:00:00.000Z');"
+             VALUES ('{id}', '{CONVERSATION}', 'More AcmeKit notes.', '{at}');"
         ),
     )
     .await?;
     Ok(ExtractWiki {
-        summary_id: Uuid::parse_str(SECOND_SUMMARY)?,
+        summary_id: Uuid::parse_str(id)?,
         conversation_id: Some(Uuid::parse_str(CONVERSATION)?),
     })
 }
@@ -244,5 +249,18 @@ async fn an_entity_mention_is_merged_into_its_page() -> TestResult {
     let next = second(&store).await?;
     testkit::wiki_bounded::an_entity_mention_is_merged_into_its_page(stores(&store), &job, &next)
         .await?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn updates_keep_the_lead_and_replace_only_the_currently_sentence() -> TestResult {
+    let (_directory, store, job) = seeded().await?;
+    let next = second(&store).await?;
+    let last = summary(&store, THIRD_SUMMARY, "2026-10-10T14:00:00.000Z").await?;
+    testkit::wiki_bounded::updates_keep_the_lead_and_replace_only_the_currently_sentence(
+        stores(&store),
+        [&job, &next, &last],
+    )
+    .await?;
     Ok(())
 }

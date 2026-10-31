@@ -5,6 +5,7 @@ mod extraction;
 mod fold;
 mod frontmatter;
 mod identity;
+pub mod lead;
 mod limits;
 mod lines;
 mod parse;
