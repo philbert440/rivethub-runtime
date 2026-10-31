@@ -16,6 +16,7 @@ use super::entity::Catalog;
 use super::entity::Filed;
 use super::merge::MergedPage;
 use super::merge::PageMerger;
+use super::origin::NoteOrigin;
 use super::page::WikiPatch;
 use super::page::WikiSlug;
 use super::page::bound::MergeBase;
@@ -129,7 +130,9 @@ impl WikiRouter<'_> {
             None => None,
         };
         match target {
-            Some(target) => self.with_current(target).await.map(Some),
+            Some(target) => NoteOrigin::run(summary.id, Box::pin(self.with_current(target)))
+                .await
+                .map(Some),
             None => Ok(None),
         }
     }
@@ -139,6 +142,20 @@ impl WikiRouter<'_> {
     }
 
     pub async fn apply(
+        &self,
+        job: &ExtractWiki,
+        summary: &WikiSummary,
+        target: Option<&TopicTarget>,
+        patches: Vec<WikiPatch>,
+    ) -> Result<Vec<String>, TopicPageError> {
+        NoteOrigin::run(
+            summary.id,
+            Box::pin(self.apply_notes(job, summary, target, patches)),
+        )
+        .await
+    }
+
+    async fn apply_notes(
         &self,
         job: &ExtractWiki,
         summary: &WikiSummary,
@@ -179,37 +196,44 @@ impl WikiRouter<'_> {
     pub async fn apply_deferred(&self) -> Result<Vec<String>, TopicPageError> {
         let mut touched = Vec::new();
         for held in self.wiki.unsettled_notes(DEFERRALS_PER_SWEEP).await? {
-            if let Some(old) = held.applied
-                && let Some(topic) = self.topics.topics.find(&TopicKey::Id(old)).await?
-                && let Some(route) = self.topics.target(&topic, self.now).await?
-            {
-                for patch in &held.patches {
-                    self.withdraw_note(&route, patch).await?;
-                }
-                self.wiki
-                    .uncite_wiki(held.summary_id, &route.page_slug)
-                    .await?;
-                touched.push(route.page_slug.as_ref().to_owned());
-            }
-            let route = self.topics.filed_target(&held.waits, self.now).await?;
-            if let Some(route) = &route {
-                for patch in &held.patches {
-                    self.write_note(route, patch).await?;
-                }
-                self.wiki
-                    .cite_wiki(held.summary_id, &route.page_slug, self.now)
-                    .await?;
-                touched.push(route.page_slug.as_ref().to_owned());
-            }
-            self.wiki
-                .defer_wiki(DeferredWiki {
-                    applied: route.map(|route| route.topic),
-                    ..held
-                })
-                .await?;
+            let summary = held.summary_id;
+            touched.extend(NoteOrigin::run(summary, Box::pin(self.settle(held))).await?);
         }
         touched.sort();
         touched.dedup();
+        Ok(touched)
+    }
+
+    async fn settle(&self, held: DeferredWiki) -> Result<Vec<String>, TopicPageError> {
+        let mut touched = Vec::new();
+        if let Some(old) = held.applied
+            && let Some(topic) = self.topics.topics.find(&TopicKey::Id(old)).await?
+            && let Some(route) = self.topics.target(&topic, self.now).await?
+        {
+            for patch in &held.patches {
+                self.withdraw_note(&route, patch).await?;
+            }
+            self.wiki
+                .uncite_wiki(held.summary_id, &route.page_slug)
+                .await?;
+            touched.push(route.page_slug.as_ref().to_owned());
+        }
+        let route = self.topics.filed_target(&held.waits, self.now).await?;
+        if let Some(route) = &route {
+            for patch in &held.patches {
+                self.write_note(route, patch).await?;
+            }
+            self.wiki
+                .cite_wiki(held.summary_id, &route.page_slug, self.now)
+                .await?;
+            touched.push(route.page_slug.as_ref().to_owned());
+        }
+        self.wiki
+            .defer_wiki(DeferredWiki {
+                applied: route.map(|route| route.topic),
+                ..held
+            })
+            .await?;
         Ok(touched)
     }
 

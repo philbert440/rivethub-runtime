@@ -8,6 +8,8 @@ pub enum Error {
     WikiContainment,
     #[error("wiki file access failed: {0}")]
     WikiIo(#[source] std::io::Error),
+    #[error("wiki scope: {0}")]
+    WikiScope(#[source] kernel::wiki::builder::WikiStoreError),
     #[error("capture channel is required")]
     MissingChannel,
     #[error("time windows must be resolved by the caller with its time zone")]
@@ -121,6 +123,7 @@ impl From<Error> for MemoryStoreError {
             },
             Error::Integer(_)
             | Error::WikiIo(_)
+            | Error::WikiScope(_)
             | Error::ProjectIo(_)
             | Error::ProjectEncoding(_)
             | Error::ProjectTask(_) => Self::Unavailable(Box::new(value)),
@@ -160,6 +163,7 @@ impl From<Error> for JobQueueError {
             Error::MissingChannel
             | Error::WikiContainment
             | Error::WikiIo(_)
+            | Error::WikiScope(_)
             | Error::UnresolvedWindow
             | Error::InvalidId(_)
             | Error::Json(_)

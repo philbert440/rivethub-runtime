@@ -32,7 +32,9 @@ impl WikiConsolidateStore for PostgresMemory {
         let rows = sqlx::query_as::<_, StatsRow>(
             "SELECT t.slug, t.title, t.history_count, t.created_at, t.topic_id IS NOT NULL AS bound,
                     (SELECT count(*) FROM rh_wiki_citations c WHERE c.topic_slug = t.slug) AS citations
-               FROM rh_wiki_topics t ORDER BY t.slug",
+               FROM rh_wiki_topics t
+              WHERE t.scope IS NULL OR t.scope = (SELECT s.scope FROM rh_wiki_scopes s WHERE s.directory = '')
+              ORDER BY t.slug",
         )
         .fetch_all(&self.pool)
         .await

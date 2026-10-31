@@ -152,6 +152,14 @@ UPDATE merge_rh_wiki_provenance x SET topic_slug = m.new FROM merge_slug_map m W
 UPDATE merge_rh_wiki_redirects x SET to_slug = m.new FROM merge_slug_map m WHERE x.to_slug = m.old;
 ";
 
+const PAGE_SCOPE: &str = "
+UPDATE merge_rh_wiki_topics w SET scope = $1, local_slug = coalesce(w.local_slug, m.old)
+  FROM merge_slug_map m WHERE w.slug = m.new";
+
+const SCOPE_ROW: &str = "
+INSERT INTO rh_wiki_scopes (scope, owner_user_id, visibility, key_prefix, directory)
+VALUES ($1, $1, 'private', $1 || '-', 'users/' || $1) ON CONFLICT DO NOTHING";
+
 const REDIRECTS: &str = "
 UPDATE merge_rh_wiki_redirects x SET from_slug = $1 || '-' || x.from_slug
  WHERE left(x.from_slug, length($1) + 1) <> $1 || '-'";
@@ -294,6 +302,8 @@ pub(super) async fn run(
     report.prefixed_pages = bound(conn, PAGE_MAP, owner, "merge pages").await?;
     batch(conn, PAGES, "merge pages").await?;
     bound(conn, REDIRECTS, owner, "merge pages").await?;
+    bound(conn, SCOPE_ROW, owner, "merge pages").await?;
+    bound(conn, PAGE_SCOPE, owner, "merge pages").await?;
     Ok(())
 }
 

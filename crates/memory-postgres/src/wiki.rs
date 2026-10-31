@@ -111,7 +111,8 @@ impl PostgresMemory {
         let (citations, sources) =
             tokio::try_join!(self.read_citations(&row.slug), self.wiki_sources(&row.slug))?;
         let markdown = if let Some(directory) = &self.wiki_directory {
-            read_markdown(directory, slug).await?
+            let home = self.markdown_home(slug).await?;
+            read_markdown(&directory.join(&home.directory), &home.local).await?
         } else if row.article.is_empty() {
             format!("# {}\n\n{}\n", row.title, row.current_state)
         } else {
@@ -141,7 +142,29 @@ impl PostgresMemory {
         })))
     }
 
+    async fn markdown_home(&self, slug: &WikiSlug) -> Result<crate::wiki_scope::PageHome, Error> {
+        let mut connection = self
+            .pool
+            .acquire()
+            .await
+            .map_err(|source| Error::operation("wiki page", source))?;
+        crate::wiki_scope::page_home(&mut connection, slug.as_ref())
+            .await
+            .map_err(Error::WikiScope)
+    }
+
     async fn wiki_redirect(&self, slug: &WikiSlug) -> Result<WikiLookup, Error> {
+        let local = sqlx::query_scalar::<_, String>(
+            "SELECT slug FROM rh_wiki_topics WHERE local_slug = $1
+              ORDER BY (owner_user_id = nullif(current_setting('rh.principal', true), '')) DESC, slug LIMIT 1",
+        )
+        .bind(slug.as_ref())
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|source| Error::operation("wiki redirect", source))?;
+        if let Some(key) = local.filter(|key| key != slug.as_ref()) {
+            return Ok(WikiLookup::Redirect(key));
+        }
         let redirect = sqlx::query!(
             "SELECT r.to_slug FROM rh_wiki_redirects r
              JOIN rh_wiki_topics t ON t.slug = r.to_slug WHERE r.from_slug = $1",
@@ -232,10 +255,11 @@ impl PostgresMemory {
         let Some(directory) = self.wiki_directory.as_ref() else {
             return Ok(None);
         };
-        let root = tokio::fs::canonicalize(directory)
+        let home = self.markdown_home(slug).await?;
+        let root = tokio::fs::canonicalize(directory.join(&home.directory))
             .await
             .map_err(Error::WikiIo)?;
-        let path = root.join(kernel::wiki::page::bound::archive_path(slug.as_ref()));
+        let path = root.join(kernel::wiki::page::bound::archive_path(&home.local));
         let path = match tokio::fs::canonicalize(&path).await {
             Ok(path) => path,
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
@@ -251,7 +275,7 @@ impl PostgresMemory {
     }
 }
 
-async fn read_markdown(directory: &std::path::Path, slug: &WikiSlug) -> Result<String, Error> {
+async fn read_markdown(directory: &std::path::Path, slug: &str) -> Result<String, Error> {
     let root = tokio::fs::canonicalize(directory)
         .await
         .map_err(Error::WikiIo)?;
@@ -261,7 +285,7 @@ async fn read_markdown(directory: &std::path::Path, slug: &WikiSlug) -> Result<S
     if !topics.starts_with(&root) {
         return Err(Error::WikiContainment);
     }
-    let path = tokio::fs::canonicalize(topics.join(format!("{}.md", slug.as_ref())))
+    let path = tokio::fs::canonicalize(topics.join(format!("{slug}.md")))
         .await
         .map_err(Error::WikiIo)?;
     if !path.starts_with(&topics) {

@@ -117,6 +117,12 @@ async fn a_second_store_merges_in_private_under_its_owner(pool: PgPool) -> TestR
         .bind(PHILS_IN_COCO)
         .fetch_one(&source_pool)
         .await?;
+    sqlx::query(
+        "INSERT INTO rh_wiki_topics (slug, title, current_state, article, search_text, created_at, updated_at, owner_user_id)
+         VALUES ('sourdough', 'Sourdough', 'Fed twice a day.', '', 'sourdough', now(), now(), 'coco')",
+    )
+    .execute(&source_pool)
+    .await?;
     let request = MergeRequest {
         owner: Owner::new("coco".to_owned())?,
         moves: BTreeMap::from([(moved, Owner::new("phil".to_owned())?)]),
@@ -169,6 +175,21 @@ async fn a_second_store_merges_in_private_under_its_owner(pool: PgPool) -> TestR
     assert_eq!(
         types, seeded,
         "seeded type topics join the family's instead of doubling"
+    );
+
+    let pages = rows(
+        &pool,
+        "SELECT t.slug || ' ' || t.local_slug, s.directory || ' ' || t.owner_user_id
+           FROM rh_wiki_topics t JOIN rh_wiki_scopes s ON s.scope = t.scope",
+    )
+    .await?;
+    assert_eq!(
+        pages,
+        vec![(
+            "coco-sourdough sourdough".to_owned(),
+            "users/coco coco".to_owned()
+        )],
+        "a merged page becomes its owner's page under its original file name"
     );
 
     let again = family.merge_store(&source, &request, &cancel).await?;

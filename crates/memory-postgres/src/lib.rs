@@ -45,6 +45,7 @@ mod topics;
 mod wiki;
 mod wiki_builder;
 mod wiki_citations;
+mod wiki_scope;
 pub mod wiki_writer;
 
 #[cfg(test)]

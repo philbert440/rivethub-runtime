@@ -6,8 +6,10 @@ use kernel::wiki::consolidate::{WikiConsolidateStore, WikiFold};
 use kernel::wiki::page::WikiSlug;
 use kernel::wiki::page::{ArticleSection, FoldMark, WikiPage, WikiSectionRef};
 
+use super::overlays::Placed;
 use super::{lock_slug, query_error, settle, topics};
 use crate::PostgresMemory;
+use crate::wiki_scope::{PageHome, WikiScope, page_home, scope_named};
 use crate::wiki_writer::{LockedRepository, WikiRepository};
 
 #[derive(Debug, sqlx::FromRow)]
@@ -20,13 +22,25 @@ struct PageRow {
 #[async_trait]
 impl TopicPageStore for PostgresMemory {
     async fn topic_page(&self, slug: &WikiSlug) -> Result<Option<TopicPage>, WikiStoreError> {
-        let repository = self.repository().await?;
+        let placed = self.place_note_page(slug, None).await?;
+        if !placed.canonical {
+            return self.overlay_page(slug, &placed).await;
+        }
+        let (home, _) = self.home(slug).await?;
+        let repository = WikiRepository::new(self.wiki_home(&home.directory)?)
+            .lock()
+            .await?;
         let read = repository
-            .read(slug.as_ref())
+            .read(&home.local)
             .await
             .map_err(WikiStoreError::from);
         match settle(read, repository.release().await)? {
-            Some(page) => topic_page(page).map(Some),
+            Some(page) => topic_page(page).map(|page| {
+                Some(TopicPage {
+                    slug: slug.clone(),
+                    ..page
+                })
+            }),
             None => self.row_page(slug).await,
         }
     }
@@ -48,8 +62,15 @@ impl TopicPageStore for PostgresMemory {
         page: &TopicPage,
         now: DateTime<Utc>,
     ) -> Result<(), WikiStoreError> {
-        let mut repository = self.repository().await?;
-        let saved = self.save_locked(&mut repository, topic, page, now).await;
+        let placed = self.place_note_page(&page.slug, Some(topic.uuid())).await?;
+        let directory = placed
+            .scope
+            .as_ref()
+            .map_or(String::new(), |scope| scope.directory.clone());
+        let mut repository = WikiRepository::new(self.wiki_home(&directory)?)
+            .lock()
+            .await?;
+        let saved = self.save_locked(&mut repository, page, &placed, now).await;
         settle(saved, repository.release().await)
     }
 
@@ -69,8 +90,20 @@ impl TopicPageStore for PostgresMemory {
         if !bound {
             return Ok(false);
         }
-        let mut repository = self.repository().await?;
-        let edited = self.edit_locked(&mut repository, slug, edit, now).await;
+        let (home, scope) = self.home(slug).await?;
+        let mut repository = WikiRepository::new(self.wiki_home(&home.directory)?)
+            .lock()
+            .await?;
+        let placed = Placed {
+            scope,
+            key: slug.as_ref().to_owned(),
+            local: home.local,
+            canonical: true,
+            bind: None,
+        };
+        let edited = self
+            .edit_locked(&mut repository, slug, &placed, edit, now)
+            .await;
         settle(edited, repository.release().await).map(|()| true)
     }
 
@@ -81,9 +114,16 @@ impl TopicPageStore for PostgresMemory {
         change: &PageChange<'_>,
         now: DateTime<Utc>,
     ) -> Result<(), WikiStoreError> {
-        let mut repository = self.repository().await?;
+        let placed = self.place_note_page(slug, Some(root.uuid())).await?;
+        let directory = placed
+            .scope
+            .as_ref()
+            .map_or(String::new(), |scope| scope.directory.clone());
+        let mut repository = WikiRepository::new(self.wiki_home(&directory)?)
+            .lock()
+            .await?;
         let changed = self
-            .change_locked(&mut repository, root, slug, change, now)
+            .change_locked(&mut repository, slug, &placed, change, now)
             .await;
         settle(changed, repository.release().await)
     }
@@ -175,57 +215,84 @@ impl PostgresMemory {
     async fn change_locked(
         &self,
         repository: &mut LockedRepository,
-        root: TopicId,
         slug: &WikiSlug,
+        placed: &Placed,
         change: &PageChange<'_>,
         now: DateTime<Utc>,
     ) -> Result<(), WikiStoreError> {
-        let stored = repository
-            .read(slug.as_ref())
-            .await?
-            .ok_or_else(|| WikiStoreError::TopicMissing(slug.as_ref().to_owned()))?;
-        let before = topic_page(stored)?;
+        let before = match repository.read(&placed.local).await? {
+            Some(stored) => TopicPage {
+                slug: slug.clone(),
+                ..topic_page(stored)?
+            },
+            None if !placed.canonical => self
+                .overlay_page(slug, placed)
+                .await?
+                .ok_or_else(|| WikiStoreError::TopicMissing(slug.as_ref().to_owned()))?,
+            None => return Err(WikiStoreError::TopicMissing(slug.as_ref().to_owned())),
+        };
         let mut after = before.clone();
         change(&mut after);
         if after == before {
             return Ok(());
         }
-        self.save_locked(repository, root, &after, now).await
+        self.save_locked(repository, &after, placed, now).await
+    }
+
+    async fn home(&self, slug: &WikiSlug) -> Result<(PageHome, Option<WikiScope>), WikiStoreError> {
+        let mut connection = self.pool.acquire().await.map_err(query_error)?;
+        let home = page_home(&mut connection, slug.as_ref()).await?;
+        let scope = match &home.scope {
+            Some(name) => scope_named(&mut connection, name).await?,
+            None => None,
+        };
+        Ok((home, scope))
     }
 
     async fn edit_locked(
         &self,
         repository: &mut LockedRepository,
         slug: &WikiSlug,
+        placed: &Placed,
         edit: &PageEdit,
         now: DateTime<Utc>,
     ) -> Result<(), WikiStoreError> {
         let mut tx = self.pool.begin().await.map_err(query_error)?;
         lock_slug(&mut tx, slug.as_ref()).await?;
         let mut stored = repository
-            .read(slug.as_ref())
+            .read(&placed.local)
             .await?
             .ok_or_else(|| WikiStoreError::TopicMissing(slug.as_ref().to_owned()))?;
         edit.apply_to(&mut stored, now);
         let git_sha = repository
             .fold(&mut stored, &[], &PageEdit::commit_message(slug), now)
             .await?;
-        topics::store_topic(&mut tx, &stored, &git_sha, now).await?;
+        topics::store(
+            &mut tx,
+            &stored,
+            slug.as_ref(),
+            placed.scope.as_ref(),
+            &git_sha,
+            now,
+        )
+        .await?;
         tx.commit().await.map_err(query_error)
     }
 
     async fn save_locked(
         &self,
         repository: &mut LockedRepository,
-        topic: TopicId,
         page: &TopicPage,
+        placed: &Placed,
         now: DateTime<Utc>,
     ) -> Result<(), WikiStoreError> {
         let mut tx = self.pool.begin().await.map_err(query_error)?;
-        lock_slug(&mut tx, page.slug.as_ref()).await?;
-        let mut stored = match repository.read(page.slug.as_ref()).await? {
+        lock_slug(&mut tx, &placed.key).await?;
+        let local = WikiSlug::try_from(placed.local.clone())
+            .map_err(|error| WikiStoreError::InvalidPatch(error.to_string()))?;
+        let mut stored = match repository.read(&placed.local).await? {
             Some(stored) => stored,
-            None => WikiPage::empty(page.slug.clone(), page.title.clone()),
+            None => WikiPage::empty(local, page.title.clone()),
         };
         page.title.clone_into(&mut stored.meta.title);
         page.summary.clone_into(&mut stored.current_state);
@@ -248,29 +315,38 @@ impl PostgresMemory {
                 body: section.body.clone(),
             })
             .collect();
-        let message = format!(
-            "wiki({}): sync topic page\n\nPipeline: wiki-v7",
-            page.slug.as_ref()
-        );
+        let message = format!("wiki({}): sync topic page\n\nPipeline: wiki-v7", placed.key);
         let git_sha = repository.fold(&mut stored, &[], &message, now).await?;
-        topics::store_topic(&mut tx, &stored, &git_sha, now).await?;
-        sqlx::query("UPDATE rh_wiki_topics SET topic_id = NULL WHERE topic_id = $1 AND slug <> $2")
-            .bind(topic.uuid())
-            .bind(page.slug.as_ref())
+        topics::store(
+            &mut tx,
+            &stored,
+            &placed.key,
+            placed.scope.as_ref(),
+            &git_sha,
+            now,
+        )
+        .await?;
+        if let Some(topic) = placed.bind {
+            sqlx::query(
+                "UPDATE rh_wiki_topics SET topic_id = NULL WHERE topic_id = $1 AND slug <> $2",
+            )
+            .bind(topic)
+            .bind(&placed.key)
             .execute(&mut *tx)
             .await
             .map_err(query_error)?;
-        sqlx::query("UPDATE rh_wiki_topics SET topic_id = $1 WHERE slug = $2")
-            .bind(topic.uuid())
-            .bind(page.slug.as_ref())
-            .execute(&mut *tx)
-            .await
-            .map_err(query_error)?;
+            sqlx::query("UPDATE rh_wiki_topics SET topic_id = $1 WHERE slug = $2")
+                .bind(topic)
+                .bind(&placed.key)
+                .execute(&mut *tx)
+                .await
+                .map_err(query_error)?;
+        }
         tx.commit().await.map_err(query_error)
     }
 }
 
-fn topic_page(page: WikiPage) -> Result<TopicPage, WikiStoreError> {
+pub(super) fn topic_page(page: WikiPage) -> Result<TopicPage, WikiStoreError> {
     let refs = page.meta.sections;
     let sections = page
         .extra_sections
