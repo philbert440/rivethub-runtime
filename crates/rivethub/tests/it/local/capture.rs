@@ -105,11 +105,20 @@ struct PromptHook<'a> {
 }
 
 async fn run_hook(home: &std::path::Path, payload: &str) -> TestResult<std::process::Output> {
+    run_hook_with(home, payload, &[]).await
+}
+
+async fn run_hook_with(
+    home: &std::path::Path,
+    payload: &str,
+    vars: &[(&str, &str)],
+) -> TestResult<std::process::Output> {
     let mut child = tokio::process::Command::new(env!("CARGO_BIN_EXE_rh"))
         .args(["capture", "hook"])
         .env_clear()
         .env("HOME", home)
         .env("RIVETHUB_CAPTURE_REDACTION", "1")
+        .envs(vars.iter().copied())
         .current_dir(home)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -158,6 +167,22 @@ async fn the_capture_hook_command_posts_a_held_prompt_to_the_local_gateway() -> 
     assert_eq!(content, "deploy with [REDACTED:bearer]");
     let log = std::fs::read_to_string(home.path().join(".rivethub").join("claude-capture.log"))?;
     assert!(log.contains("Stop"), "{log}");
+    Ok(())
+}
+
+#[tokio::test]
+async fn the_capture_hook_leaves_a_model_providers_own_runs_alone() -> TestResult {
+    let home = tempfile::tempdir()?;
+    let payload = serde_json::to_string(&PromptHook {
+        session_id: HOOK_SESSION,
+        cwd: "/work/demo",
+        hook_event_name: "Stop",
+        prompt: "summarize this batch",
+    })?;
+    let output = run_hook_with(home.path(), &payload, &[(config::MODEL_RUN_VARIABLE, "1")]).await?;
+    assert!(output.status.success());
+    assert_eq!(String::from_utf8(output.stderr)?, "");
+    assert!(!home.path().join(".rivethub").exists());
     Ok(())
 }
 

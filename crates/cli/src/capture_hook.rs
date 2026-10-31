@@ -42,6 +42,9 @@ pub(crate) async fn run(command: CaptureCommand, env: &Environment) -> Result<Re
         CaptureCommand::Hook { harness } => {
             let mut stdin = String::new();
             tokio::io::stdin().read_to_string(&mut stdin).await?;
+            if env.get(config::MODEL_RUN_VARIABLE).is_some() {
+                return Ok(report(String::new()));
+            }
             Ok(match harness {
                 HookHarness::ClaudeCode => hook(env, &stdin, Utc::now()).await,
                 HookHarness::GrokBuild => {

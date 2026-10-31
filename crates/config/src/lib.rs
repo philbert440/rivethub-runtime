@@ -16,7 +16,7 @@ pub use enums::{
 };
 pub use environment::{
     CONFIG_PATH_VARIABLE, DEFAULT_UPLOAD_MAX_BYTES, DEFAULT_UPLOAD_TTL_MS, Environment,
-    LOG_LEVEL_VARIABLE, LogLevelSetting, NODE_ID_VARIABLE, NODE_NAME_VARIABLE,
+    LOG_LEVEL_VARIABLE, LogLevelSetting, MODEL_RUN_VARIABLE, NODE_ID_VARIABLE, NODE_NAME_VARIABLE,
     POSTGRES_URL_VARIABLE, TermMuxChoice, TermMuxSetting, TermSettings, UPLOAD_MAX_BYTES_VARIABLE,
     UPLOAD_TTL_MS_VARIABLE, UploadSettings, VoiceEndpoints, deprecated_alias_names,
 };

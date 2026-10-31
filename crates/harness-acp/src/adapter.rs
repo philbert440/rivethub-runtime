@@ -84,6 +84,7 @@ pub struct AcpHarnessAdapter {
     search_paths: Vec<PathBuf>,
     discoveries: Arc<crate::discovery::Discoveries>,
     discovery_dir: Option<PathBuf>,
+    unsaved: bool,
 }
 
 impl AcpHarnessAdapter {
@@ -95,6 +96,7 @@ impl AcpHarnessAdapter {
     ) -> Self {
         let mut adapter = Self::new(config).with_search_paths(search_paths);
         adapter.launch = LaunchTable::from_entries([(harness, crate::AcpLaunch::Native(command))]);
+        adapter.unsaved = true;
         adapter
     }
 
@@ -120,6 +122,7 @@ impl AcpHarnessAdapter {
             search_paths: Vec::new(),
             discoveries: Arc::default(),
             discovery_dir: None,
+            unsaved: false,
         }
     }
 
@@ -133,6 +136,7 @@ impl AcpHarnessAdapter {
             search_paths: Vec::new(),
             discoveries: Arc::default(),
             discovery_dir: None,
+            unsaved: false,
         }
     }
 
@@ -320,10 +324,13 @@ impl HarnessAdapter for AcpHarnessAdapter {
         Self::requested_session(&spec)?;
         let command = self.session_command(spec.harness, &spec.session)?;
         let working_dir = self.working_dir(&spec, &command)?;
-        let meta = match spec.startup_context.as_deref() {
+        let mut meta = match spec.startup_context.as_deref() {
             Some(text) => crate::launch::startup_meta(spec.harness, text).map_err(port)?,
             None => None,
         };
+        if self.unsaved {
+            meta = crate::launch::unsaved(spec.harness, meta).map_err(port)?;
+        }
         let agent = crate::connection::start_new(&command, &working_dir, meta)
             .await
             .map_err(port)?;
