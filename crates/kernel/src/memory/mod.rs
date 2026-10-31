@@ -399,6 +399,14 @@ pub trait MemoryStore: Send + Sync {
         limit: u32,
     ) -> Result<crate::wiki::WikiGapsResponse, MemoryStoreError>;
 
+    async fn wiki_archive(
+        &self,
+        slug: &crate::wiki::page::WikiSlug,
+    ) -> Result<Option<String>, MemoryStoreError> {
+        let _: &crate::wiki::page::WikiSlug = slug;
+        Ok(None)
+    }
+
     async fn capture(
         &self,
         batch: CaptureBatchRequest,

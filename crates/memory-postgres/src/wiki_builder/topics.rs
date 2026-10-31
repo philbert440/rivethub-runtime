@@ -1,7 +1,9 @@
 use chrono::{DateTime, Utc};
 use kernel::owner::Owner;
 use kernel::wiki::builder::{WikiStoreError, WikiSummary};
+use kernel::wiki::merge::MergedPage;
 use kernel::wiki::page::WikiPatch;
+use kernel::wiki::page::bound::MergeBase;
 use kernel::wiki::page::{CitationKind, PageCitation, PagePatch, PageSource, WikiPage};
 use kernel::wiki::page::{WikiSlug, WikiSourceKind};
 use sqlx::{Postgres, Transaction};
@@ -12,6 +14,7 @@ pub(super) struct Source<'a> {
     pub(super) summary: &'a WikiSummary,
     pub(super) date: DateTime<Utc>,
     pub(super) topic_page: Option<&'a WikiSlug>,
+    pub(super) merged: &'a [MergedPage],
 }
 
 pub(super) async fn apply(
@@ -25,18 +28,10 @@ pub(super) async fn apply(
         summary,
         date,
         topic_page,
+        ..
     } = *source;
     let gated = gate::gate(tx, &patch, topic_page).await?;
-    if gated.slug != patch.slug.as_ref() || gated.action != patch.action {
-        tracing::info!(
-            "extract-wiki: resolve {}/{} → {}/{} ({})",
-            patch.slug.as_ref(),
-            patch.action,
-            gated.slug,
-            gated.action,
-            gated.reason
-        );
-    }
+    resolved(&patch, &gated);
     lock_slug(tx, &gated.slug).await?;
     let slug = gated.slug;
     let note_entry = (slug != patch.slug.as_ref()).then(|| patch.note(date.date_naive()));
@@ -82,6 +77,7 @@ pub(super) async fn apply(
         }],
         allow_shrink: false,
     };
+    let merge = merge_base(source.merged, &slug, note_entry.is_some(), &mut page_patch);
     if let Some(entry) = note_entry {
         page_patch.title = None;
         page_patch.add_aliases = vec![patch.slug.as_ref().to_owned()];
@@ -95,10 +91,38 @@ pub(super) async fn apply(
         .history_entry
         .as_ref()
         .map(|entry| entry.body.clone());
-    let applied = repository.apply(page_patch, &summary_id).await?;
+    let applied = repository.apply(page_patch, &summary_id, merge).await?;
     store_topic(tx, &applied.page, &applied.git_sha, now).await?;
     provenance(tx, &slug, summary, note, now).await?;
     Ok((slug, applied.git_sha))
+}
+
+fn resolved(patch: &WikiPatch, gated: &gate::Gated) {
+    if gated.slug != patch.slug.as_ref() || gated.action != patch.action {
+        tracing::info!(
+            "extract-wiki: resolve {}/{} → {}/{} ({})",
+            patch.slug.as_ref(),
+            patch.action,
+            gated.slug,
+            gated.action,
+            gated.reason
+        );
+    }
+}
+
+fn merge_base<'a>(
+    merged: &'a [MergedPage],
+    slug: &str,
+    note: bool,
+    patch: &mut PagePatch,
+) -> Option<&'a MergeBase> {
+    let base = merged
+        .iter()
+        .find(|page| !note && page.slug.as_ref() == slug)
+        .map(|page| &page.base)?;
+    patch.current_state = patch.summary_delta.take();
+    patch.allow_shrink = true;
+    Some(base)
 }
 
 pub(super) async fn store_topic(

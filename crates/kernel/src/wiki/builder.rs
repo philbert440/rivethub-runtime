@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use uuid::Uuid;
 
+use super::merge::MergedPage;
 use super::page::WikiPageError;
 use super::page::WikiPatch;
 use super::page::WikiSlug;
@@ -57,6 +58,14 @@ pub struct WikiSummary {
 pub struct WikiRouting {
     pub topic_page: Option<WikiSlug>,
     pub cited: Vec<WikiSlug>,
+    pub merged: Vec<MergedPage>,
+}
+
+impl WikiRouting {
+    #[must_use]
+    pub fn merged(&self, slug: &str) -> Option<&MergedPage> {
+        self.merged.iter().find(|page| page.slug.as_ref() == slug)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

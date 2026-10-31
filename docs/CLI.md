@@ -42,7 +42,7 @@ the existing service startup codes. Every visible command:
 | `rh mesh join` | `[HOST] [--manual] [--port N] [--name NAME] [--advertise ADDR]` | Join a mesh |
 | `rh mesh status` | | Show the mesh registry |
 | `rh mesh forget` | `[TARGET] [--force]` | Remove a mesh node |
-| `rh memory` | `queue-status`, `retry-failed`, `requeue`, `backfill-tool-synth`, `export`, `import`, `backfill-titles`, `reembed`, `consolidate-wiki`, `cleanup` | Administer memory; `rh memory --help` lists each command's flags |
+| `rh memory` | `queue-status`, `retry-failed`, `requeue`, `backfill-tool-synth`, `export`, `import`, `backfill-titles`, `reembed`, `consolidate-wiki`, `recompile-wiki`, `cleanup` | Administer memory; `rh memory --help` lists each command's flags |
 | `rh capture hook` | `[--harness claude-code\|grok-build\|opencode\|codex\|dsh]` | Capture one harness hook payload read from stdin |
 | `rh logs` | `[agent] [-f, --follow \| --no-follow] [-n, --lines N] [--since TIME] [--level NAME] [-g, --grep TEXT] [--json] [--bare-metal]` | Read the service journal |
 

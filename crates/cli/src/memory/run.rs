@@ -86,6 +86,7 @@ pub(super) async fn run(
             json,
         } => consolidate_wiki(limit, dry_run, json, env).await,
         MemoryCommand::Cleanup(args) => super::cleanup::run(args, env, shutdown).await,
+        MemoryCommand::RecompileWiki(args) => super::recompile::run(args, env).await,
     }
 }
 

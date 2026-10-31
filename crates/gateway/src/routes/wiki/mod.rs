@@ -81,11 +81,19 @@ pub(crate) fn router() -> Router<Arc<Gateway>> {
             "/api/wiki/{slug}/raw",
             get(raw).fallback(super::method_not_allowed),
         )
+        .route(
+            "/api/wiki/{slug}/archive",
+            get(archive_raw).fallback(super::method_not_allowed),
+        )
         .route("/wiki", get(index).fallback(super::method_not_allowed))
         .route("/wiki/", get(index).fallback(super::method_not_allowed))
         .route(
             "/wiki/{slug}",
             get(article).fallback(super::method_not_allowed),
+        )
+        .route(
+            "/wiki/{slug}/archive",
+            get(archive_html).fallback(super::method_not_allowed),
         )
 }
 
@@ -119,6 +127,55 @@ async fn raw(
     Path(slug): Path<String>,
 ) -> Result<Response, WikiError> {
     respond(&gateway, requested_slug(slug)?, Format::Raw).await
+}
+
+async fn archive_raw(
+    State(gateway): State<Arc<Gateway>>,
+    Path(slug): Path<String>,
+) -> Result<Response, WikiError> {
+    let slug = requested_slug(slug)?;
+    Ok(
+        match gateway
+            .store()
+            .wiki_archive(&slug)
+            .await
+            .map_err(ApiError::from)?
+        {
+            Some(markdown) => (
+                [(header::CONTENT_TYPE, "text/markdown; charset=utf-8")],
+                markdown,
+            )
+                .into_response(),
+            None => (StatusCode::NOT_FOUND, Json(archive_missing())).into_response(),
+        },
+    )
+}
+
+async fn archive_html(
+    State(gateway): State<Arc<Gateway>>,
+    Path(slug): Path<String>,
+) -> Result<Response, WikiError> {
+    let slug = requested_slug(slug)?;
+    Ok(
+        match gateway
+            .store()
+            .wiki_archive(&slug)
+            .await
+            .map_err(ApiError::from)?
+        {
+            Some(markdown) => {
+                html::response(StatusCode::OK, html::archive(slug.as_ref(), &markdown)?)
+            }
+            None => html::response(StatusCode::NOT_FOUND, html::missing(&archive_missing())?),
+        },
+    )
+}
+
+fn archive_missing() -> WikiMissBody {
+    WikiMissBody {
+        error: "wiki archive not found".to_owned(),
+        suggestions: Vec::new(),
+    }
 }
 
 async fn page_query(

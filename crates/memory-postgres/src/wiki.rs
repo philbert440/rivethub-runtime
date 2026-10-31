@@ -227,6 +227,30 @@ impl PostgresMemory {
     }
 }
 
+impl PostgresMemory {
+    pub(crate) async fn read_wiki_archive(&self, slug: &WikiSlug) -> Result<Option<String>, Error> {
+        let Some(directory) = self.wiki_directory.as_ref() else {
+            return Ok(None);
+        };
+        let root = tokio::fs::canonicalize(directory)
+            .await
+            .map_err(Error::WikiIo)?;
+        let path = root.join(kernel::wiki::page::bound::archive_path(slug.as_ref()));
+        let path = match tokio::fs::canonicalize(&path).await {
+            Ok(path) => path,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(error) => return Err(Error::WikiIo(error)),
+        };
+        if !path.starts_with(root.join(kernel::wiki::page::bound::ARCHIVE_DIRECTORY)) {
+            return Err(Error::WikiContainment);
+        }
+        tokio::fs::read_to_string(path)
+            .await
+            .map(Some)
+            .map_err(Error::WikiIo)
+    }
+}
+
 async fn read_markdown(directory: &std::path::Path, slug: &WikiSlug) -> Result<String, Error> {
     let root = tokio::fs::canonicalize(directory)
         .await

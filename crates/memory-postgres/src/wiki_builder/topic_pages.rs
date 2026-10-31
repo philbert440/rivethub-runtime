@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use kernel::topics::{PageEdit, PageSection, TopicId, TopicPage, TopicPageStore};
+use kernel::topics::{PageChange, PageEdit, PageSection, TopicId, TopicPage, TopicPageStore};
 use kernel::wiki::builder::WikiStoreError;
 use kernel::wiki::consolidate::{WikiConsolidateStore, WikiFold};
 use kernel::wiki::page::WikiSlug;
@@ -72,6 +72,20 @@ impl TopicPageStore for PostgresMemory {
         let mut repository = self.repository().await?;
         let edited = self.edit_locked(&mut repository, slug, edit, now).await;
         settle(edited, repository.release().await).map(|()| true)
+    }
+
+    async fn change_page(
+        &self,
+        root: TopicId,
+        slug: &WikiSlug,
+        change: &PageChange<'_>,
+        now: DateTime<Utc>,
+    ) -> Result<(), WikiStoreError> {
+        let mut repository = self.repository().await?;
+        let changed = self
+            .change_locked(&mut repository, root, slug, change, now)
+            .await;
+        settle(changed, repository.release().await)
     }
 
     async fn redirect_page(
@@ -158,6 +172,27 @@ impl PostgresMemory {
         }))
     }
 
+    async fn change_locked(
+        &self,
+        repository: &mut LockedRepository,
+        root: TopicId,
+        slug: &WikiSlug,
+        change: &PageChange<'_>,
+        now: DateTime<Utc>,
+    ) -> Result<(), WikiStoreError> {
+        let stored = repository
+            .read(slug.as_ref())
+            .await?
+            .ok_or_else(|| WikiStoreError::TopicMissing(slug.as_ref().to_owned()))?;
+        let before = topic_page(stored)?;
+        let mut after = before.clone();
+        change(&mut after);
+        if after == before {
+            return Ok(());
+        }
+        self.save_locked(repository, root, &after, now).await
+    }
+
     async fn edit_locked(
         &self,
         repository: &mut LockedRepository,
@@ -173,7 +208,7 @@ impl PostgresMemory {
             .ok_or_else(|| WikiStoreError::TopicMissing(slug.as_ref().to_owned()))?;
         edit.apply_to(&mut stored, now);
         let git_sha = repository
-            .fold(&stored, &[], &PageEdit::commit_message(slug))
+            .fold(&mut stored, &[], &PageEdit::commit_message(slug), now)
             .await?;
         topics::store_topic(&mut tx, &stored, &git_sha, now).await?;
         tx.commit().await.map_err(query_error)
@@ -217,7 +252,7 @@ impl PostgresMemory {
             "wiki({}): sync topic page\n\nPipeline: wiki-v7",
             page.slug.as_ref()
         );
-        let git_sha = repository.fold(&stored, &[], &message).await?;
+        let git_sha = repository.fold(&mut stored, &[], &message, now).await?;
         topics::store_topic(&mut tx, &stored, &git_sha, now).await?;
         sqlx::query("UPDATE rh_wiki_topics SET topic_id = NULL WHERE topic_id = $1 AND slug <> $2")
             .bind(topic.uuid())

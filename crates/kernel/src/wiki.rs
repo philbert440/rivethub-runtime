@@ -1,7 +1,9 @@
 pub mod builder;
 pub mod consolidate;
 pub mod entity;
+pub mod merge;
 pub mod page;
+pub mod recompile;
 pub mod route;
 mod view;
 

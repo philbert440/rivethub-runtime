@@ -1,4 +1,5 @@
 mod article;
+pub mod bound;
 mod citations;
 mod extraction;
 mod fold;

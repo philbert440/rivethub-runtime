@@ -62,6 +62,7 @@ async fn seed_topic(
                     allow_shrink: false,
                 },
                 &summary_id,
+                None,
             )
             .await;
         (applied, repository.release().await)

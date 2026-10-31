@@ -67,6 +67,7 @@ async fn composed_summarizer_runs_cli_model_without_embedder(pool: sqlx::PgPool)
         summaries: store.clone(),
         wiki: store.clone(),
         consolidate: None,
+        recompile: None,
         topics: store.clone(),
         filing: store.clone(),
         pages: store.clone(),

@@ -30,6 +30,7 @@ pub use decision::DecisionStore;
 pub use decision::DecisionText;
 pub use decision::render_decisions;
 pub use decision::topic_decision;
+pub use page::PageChange;
 pub use page::PageSection;
 pub use page::TopicPage;
 pub use page::TopicPageError;

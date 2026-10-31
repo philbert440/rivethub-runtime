@@ -184,7 +184,7 @@ parent's section without the `#### Merged from <slug>` line that a merge or cons
 (`rh_session_placements`; a child session with no placement of its own uses its parent's, by the categorizer's lineage
 rule) and, when there is one, gives the model the topic as `topic: {pageSlug, name, section?}` beside the summary. A
 patch for that page slug lands on the topic's bound page (resolve reason `topic`, title kept as the topic name); for a
-sub-topic it is appended to the sub-topic's section of the root page instead. The alias, identity, entity, stem and
+sub-topic it lands in the sub-topic's section of the root page instead (merged, not appended, since (100)). The alias, identity, entity, stem and
 search resolve steps never land a patch on a page bound to another topic: they fall through, and a patch with no other
 match creates an unbound page. The bound page always gets a citation row for the summary, even when the model proposes
 nothing. Patches carry an optional `kind` (`person`, `host`, `tool`): a kind patch for a known topic (by title, slug
@@ -1156,6 +1156,43 @@ a bare uuid on the `claude-code` channel, is the session `claude-code:<uuid>` as
 answers that session id as a hit's `sessionId`, in Postgres and SQLite, so a client names the harness and opens the
 session; any other key is answered as stored. `GET /api/memory/summaries/{session}` finds the conversation stored under
 `claude-code:<uuid>` or the bare uuid, as filing's conversation keys do, the most recently active first.
+(100) Bounded wiki pages (Phil, 2026-10-31): a wiki page is updated, not appended to, and stays within a size budget:
+summary 2,400 characters (as before), article 16 KiB, each topic section 4 KiB and all sections 12 KiB plus what the
+article leaves unused of its 16 KiB, shared so no section is cut below 512 bytes (the oldest note sections that are not
+a sub-topic's are archived whole and dropped first), History 48 entries of one line each (200 characters), and the
+newest 64 entities. Merged rewrite: when `extract-wiki` routes a placed session, `topic` in the
+extraction input gains `current`, the bound page's `summary` and `article` cut to budget for a root topic, or
+`section`, the sub-topic's section cut to 4 KiB; the prompt asks for the topic's patch as a merged rewrite of that text,
+with what the summary says about parts of the topic folded in. That patch replaces the page's summary and article, or
+the sub-topic's section, instead of appending (23). A patch whose `type` names a known entity with a page is merged into
+that page by a second model call that sends only the entity page's summary and article cut to budget plus the patches'
+text and answers `{summary, article, history}`; a failed merge falls back to the patch as before. Notes that still
+arrive as separate patches, and deferred notes, go first in their section. Lost updates: a merged write carries the
+text its model read, and the writer compares it with the page under the writer lock and the slug's advisory lock; when
+another write landed in between it rebases, keeping the blocks the other write added, removing the blocks this rewrite
+dropped from what it read, and placing its new blocks after the block they followed. Archive: every Postgres page write
+(extractions, topic page syncs, edits, consolidation folds) archives what it removes: blocks a rewrite dropped from the
+article or a section, text over budget (trimmed from the end at paragraph boundaries; a write never fails for size),
+the legacy "Superseded article", "Superseded current state" and "Summary overflow (v7 cap)" History copies (no new ones
+are written), History entries pushed past 48, and the long body of an existing History entry when it is shortened.
+Archived text is appended to `archive/<slug>.md` in the wiki repository, outside `topics/`, as a block under
+`<a id="a-<UTC timestamp>"></a>` that names the commit where it was last inline, and is committed with the page. The
+page gets at most one History entry a day titled "Archived" that links `/wiki/<slug>/archive#<anchor>` and names that
+commit; History pushed out on its own adds no entry. Archive files are not pages: they have no `rh_wiki_topics` row and
+are not embedded, searched or listed. `GET /api/wiki/{slug}/archive` answers the archive as `text/markdown` and
+`/wiki/{slug}/archive` as HTML keeping the anchors, `404` when the page has none. Repair: `recompile-wiki`
+(`{slug, since}`, handled by the wiki builder; key `wiki-recompile-<slug>`, priority 5) restores the page's real History
+entries found in its git versions since `since` (one per date and title, newest first, at most 47 so the Archived entry fits; the
+rest go to the archive), then rebuilds the page from its newest sources: the summaries the page cites, newest first,
+each section from the summaries of sessions placed in that section's topic and the article from the rest (12 KiB and
+8 KiB of material per merge call, each summary dated; a section or article with no cited summaries but over budget
+merges its newest 8 or 12 KiB instead; at most 32 sections a page), with the first 2 or 4 KiB of the old text as the
+current text and the newest material winning; when the summary is empty or anything was merged, a summary-only merge
+call (`summaryOnly`) writes the page's lead from the rebuilt page. It writes through the same writer, so the replaced
+text is archived; a page that changed meanwhile is refused so the job retries. `rh memory recompile-wiki --since <iso> [--min-bytes <n>]
+[--slug <slug>]... [--dry-run] [--json]` queues one job per page at or over `--min-bytes` (default 61440) or per
+`--slug`. SQLite (`rh local`) applies the merged rewrite, the rebase and the budgets to its stored pages but keeps no
+archive: it has no repository and stores no History.
 
 ## 4. Gaps to close before building the affected slice
 

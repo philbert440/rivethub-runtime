@@ -115,7 +115,7 @@ impl PostgresMemory {
             fold.parent,
             folded.join(", ")
         );
-        let git_sha = repository.fold(&page, &folded, &message).await?;
+        let git_sha = repository.fold(&mut page, &folded, &message, now).await?;
         topics::store_topic(&mut tx, &page, &git_sha, now).await?;
         for child in &folded {
             retire(&mut tx, child, &fold.parent, now).await?;

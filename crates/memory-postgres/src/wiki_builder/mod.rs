@@ -1,6 +1,7 @@
 mod consolidate;
 mod gate;
 mod held;
+mod recompile;
 mod topic_pages;
 mod topics;
 
@@ -185,6 +186,7 @@ impl PostgresMemory {
             summary: &summary,
             date,
             topic_page: routing.topic_page.as_ref(),
+            merged: &routing.merged,
         };
         let mut touched = Vec::new();
         let mut last_sha = None;
