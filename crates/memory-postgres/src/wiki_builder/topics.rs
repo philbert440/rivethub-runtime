@@ -45,6 +45,8 @@ pub(super) async fn apply(
         .as_ref()
         .map_or_else(|| patch.title.clone(), |entry| entry.title.clone());
     let summary_id = summary.id.to_string();
+    let cited_by = attributed(&patch, topic_page, summary, source.also);
+    let (add_citations, add_sources) = citations(&cited_by, &citation_note);
     let mut page_patch = PagePatch {
         action: gated.action,
         slug: slug.clone(),
@@ -68,21 +70,10 @@ pub(super) async fn apply(
         article: patch.article.clone(),
         article_patches: Vec::new(),
         history_entry: patch.history_entry.clone(),
-        add_citations: vec![PageCitation {
-            summary_id: summary_id.clone(),
-            date: Some(date.date_naive()),
-            kind: Some(CitationKind::Leaf),
-            note: Some(citation_note),
-        }],
-        add_sources: vec![PageSource {
-            kind: WikiSourceKind::Summary,
-            ids: vec![summary_id.clone()],
-            conversation_id: summary.conversation_id.map(|id| id.to_string()),
-            extra: wire::Extra::default(),
-        }],
+        add_citations,
+        add_sources,
         allow_shrink: false,
     };
-    cite_also(&mut page_patch, source.also);
     let merge = merge_base(source.merged, &key, note_entry.is_some(), &mut page_patch);
     if let Some(entry) = note_entry {
         page_patch.title = None;
@@ -99,32 +90,63 @@ pub(super) async fn apply(
         .map(|entry| entry.body.clone());
     let applied = repository.apply(page_patch, &summary_id, merge).await?;
     store(tx, &applied.page, &key, Some(home), &applied.git_sha, now).await?;
-    for cited_by in std::iter::once(summary).chain(source.also) {
-        provenance(tx, &key, cited_by, note.clone(), now).await?;
+    for cited in cited_by {
+        provenance(tx, &key, cited, note.clone(), now).await?;
     }
     Ok((key, applied.git_sha))
 }
 
-fn cite_also(page_patch: &mut PagePatch, also: &[WikiSummary]) {
-    let note = page_patch
-        .add_citations
-        .first()
-        .and_then(|first| first.note.clone());
-    for other in also {
-        let id = other.id.to_string();
-        page_patch.add_citations.push(PageCitation {
-            summary_id: id.clone(),
-            date: other.created_at.map(|at| at.date_naive()),
-            kind: Some(CitationKind::Leaf),
-            note: note.clone(),
-        });
-        page_patch.add_sources.push(PageSource {
-            kind: WikiSourceKind::Summary,
-            ids: vec![id],
-            conversation_id: other.conversation_id.map(|id| id.to_string()),
-            extra: wire::Extra::default(),
-        });
+fn attributed<'a>(
+    patch: &WikiPatch,
+    topic_page: Option<&WikiSlug>,
+    lead: &'a WikiSummary,
+    also: &'a [WikiSummary],
+) -> Vec<&'a WikiSummary> {
+    let batch: Vec<&WikiSummary> = std::iter::once(lead).chain(also).collect();
+    if also.is_empty() || topic_page == Some(&patch.slug) {
+        return batch;
     }
+    let mut names = vec![patch.title.to_lowercase()];
+    for slug in std::iter::once(&patch.slug).chain(&patch.aliases) {
+        names.push(slug.as_ref().to_owned());
+        names.push(slug.as_ref().replace('-', " "));
+    }
+    names.retain(|name| name.chars().count() >= 3);
+    let mentioning: Vec<&WikiSummary> = batch
+        .into_iter()
+        .filter(|summary| {
+            let text = summary.content.to_lowercase();
+            names.iter().any(|name| text.contains(name.as_str()))
+        })
+        .collect();
+    if mentioning.is_empty() {
+        vec![lead]
+    } else {
+        mentioning
+    }
+}
+
+fn citations(cited_by: &[&WikiSummary], note: &str) -> (Vec<PageCitation>, Vec<PageSource>) {
+    cited_by
+        .iter()
+        .map(|summary| {
+            let id = summary.id.to_string();
+            (
+                PageCitation {
+                    summary_id: id.clone(),
+                    date: summary.created_at.map(|at| at.date_naive()),
+                    kind: Some(CitationKind::Leaf),
+                    note: Some(note.to_owned()),
+                },
+                PageSource {
+                    kind: WikiSourceKind::Summary,
+                    ids: vec![id],
+                    conversation_id: summary.conversation_id.map(|id| id.to_string()),
+                    extra: wire::Extra::default(),
+                },
+            )
+        })
+        .unzip()
 }
 
 fn resolved(patch: &WikiPatch, gated: &gate::Gated) {
@@ -251,4 +273,69 @@ async fn provenance(
     .await
     .map_err(query_error)?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use kernel::wiki::page::WikiAction;
+    use uuid::Uuid;
+
+    type TestResult = Result<(), Box<dyn std::error::Error>>;
+
+    fn summary(content: &str) -> WikiSummary {
+        WikiSummary {
+            id: Uuid::new_v4(),
+            conversation_id: None,
+            content: content.to_owned(),
+            session_key: None,
+            owner: None,
+            created_at: None,
+        }
+    }
+
+    fn patch(slug: &str, title: &str) -> Result<WikiPatch, Box<dyn std::error::Error>> {
+        Ok(WikiPatch {
+            action: WikiAction::Update,
+            slug: WikiSlug::try_from(slug.to_owned())?,
+            title: title.to_owned(),
+            aliases: Vec::new(),
+            tags: Vec::new(),
+            entities: Vec::new(),
+            summary: "Summary.".to_owned(),
+            article: None,
+            related: None,
+            history_entry: None,
+            entity_type: None,
+        })
+    }
+
+    #[test]
+    fn a_coalesced_batch_cites_an_entity_page_only_by_the_summaries_that_name_it() -> TestResult {
+        let lead = summary("Deploys moved to blue-green.");
+        let also = [
+            summary("The health gate now blocks failed deploys."),
+            summary("Builds now run on the Build Box overnight."),
+        ];
+        let topic = WikiSlug::try_from("acmekit-deploys".to_owned())?;
+        let ids = |cited: Vec<&WikiSummary>| cited.iter().map(|one| one.id).collect::<Vec<_>>();
+        let entity = patch("build-box", "Build box")?;
+        let also_ids: Vec<Uuid> = also.iter().map(|one| one.id).collect();
+        assert_eq!(
+            ids(attributed(&entity, Some(&topic), &lead, &also)),
+            also_ids.get(1..).ok_or("second")?.to_vec()
+        );
+        let page = patch("acmekit-deploys", "AcmeKit deploys")?;
+        assert_eq!(attributed(&page, Some(&topic), &lead, &also).len(), 3);
+        let unnamed = patch("gpu-node", "GPU node")?;
+        assert_eq!(
+            ids(attributed(&unnamed, Some(&topic), &lead, &also)),
+            vec![lead.id]
+        );
+        assert_eq!(
+            ids(attributed(&entity, Some(&topic), &lead, &[])),
+            vec![lead.id]
+        );
+        Ok(())
+    }
 }
