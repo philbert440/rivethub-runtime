@@ -97,15 +97,17 @@ tokio-tungstenite = "0.29"
 tokio-util = { version = "0.7", features = ["rt"] }
 toml = "1"
 tower = "0.5"
-tower-http = { version = "0.6", features = ["fs"] }
+tower-http = { version = "0.6", features = ["fs", "compression-gzip", "compression-br"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 url = "2"
 uuid = { version = "1", features = ["v4", "v7", "serde"] }
+values = { path = "crates/values", version = "0.7.0" }
 webpki = { package = "rustls-webpki", version = "0.103", default-features = false, features = ["aws-lc-rs", "std"] }
 wire = { path = "crates/wire", version = "0.7.0" }
 workers = { path = "crates/workers", version = "0.7.0" }
 x509-parser = { version = "0.18", features = ["verify-aws"] }
+zstd = { version = "0.14.3", default-features = false }
 
 [workspace.lints.rust]
 unexpected_cfgs = { level = "deny", check-cfg = ['cfg(dylint_lib, values(any()))'] }

@@ -38,12 +38,13 @@ impl UpkeepStore for PostgresMemory {
                  FROM (SELECT (c.channel = ANY($2)
                                OR EXISTS (SELECT 1 FROM unnest($1::text[]) AS prefix
                                            WHERE starts_with(c.session_key, prefix))) AS left_out,
-                              coalesce(cp.placed_by,
-                                       (SELECT p.placed_by FROM rh_session_placements p
-                                         WHERE p.session_id IN (c.session_key, $3 || c.session_key)
-                                         LIMIT 1)) AS placed_by
+                              coalesce(cp.placed_by, bare.placed_by, prefixed.placed_by) AS placed_by
                          FROM rh_conversations c
-                         LEFT JOIN rh_conversation_placements cp ON cp.conversation_id = c.id) f"#,
+                         LEFT JOIN rh_conversation_placements cp ON cp.conversation_id = c.id
+                         LEFT JOIN rh_session_placements bare ON bare.session_id = c.session_key
+                         LEFT JOIN rh_session_placements prefixed
+                                ON prefixed.session_id = $3 || c.session_key
+                       OFFSET 0) f"#,
             &left_out.key_prefixes,
             &left_out.channels,
             bare_session_prefix(),
@@ -121,11 +122,15 @@ impl UpkeepStore for PostgresMemory {
             .map_err(|error| TidyError::Unavailable(Box::new(error)))?;
         if queued {
             let failing: Vec<FailingRow> = sqlx::query_as(
-                "SELECT t.identifier AS task, count(*)::bigint AS failing
-                   FROM graphile_worker._private_jobs j
-                   JOIN graphile_worker._private_tasks t ON t.id = j.task_id
-                  WHERE j.last_error IS NOT NULL
-                  GROUP BY t.identifier",
+                "SELECT task, sum(failing)::bigint AS failing FROM (
+                     SELECT t.identifier AS task, count(*) AS failing
+                       FROM graphile_worker._private_jobs j
+                       JOIN graphile_worker._private_tasks t ON t.id = j.task_id
+                      WHERE j.last_error IS NOT NULL
+                      GROUP BY t.identifier
+                     UNION ALL
+                     SELECT task, count(*) FROM rh_flagged_jobs WHERE dismissed_at IS NULL GROUP BY task
+                 ) failing GROUP BY task",
             )
             .fetch_all(&self.pool)
             .await

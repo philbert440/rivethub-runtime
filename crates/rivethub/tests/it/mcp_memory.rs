@@ -85,7 +85,12 @@ async fn seed(pool: &PgPool) -> TestResult {
     ))
     .execute(pool)
     .await?;
-    migrate::POSTGRES.run(pool).await?;
+    let mut conn = pool.acquire().await?;
+    sqlx::query("SELECT set_config('rh.store_owner', $1, false)")
+        .bind(testkit::OWNER)
+        .execute(&mut *conn)
+        .await?;
+    migrate::POSTGRES.run(&mut *conn).await?;
     Ok(())
 }
 
@@ -217,7 +222,7 @@ async fn chunk_matches_keep_their_source_range_and_unicode_preview(pool: PgPool)
     .bind(id)
     .execute(&pool)
     .await?;
-    sqlx::query("INSERT INTO rh_message_chunks (message_id, idx, char_start, char_end, content, embedding) VALUES ($1::text::uuid, 0, 0, 6, 'prefix', ($4::real[])::halfvec), ($1::text::uuid, 1, 6, 1507, $2, ($3::real[])::halfvec)")
+    sqlx::query("INSERT INTO rh_message_chunks (message_id, idx, char_start, char_end, content, embedding, owner_user_id) VALUES ($1::text::uuid, 0, 0, 6, 'prefix', ($4::real[])::halfvec, 'owner'), ($1::text::uuid, 1, 6, 1507, $2, ($3::real[])::halfvec, 'owner')")
         .bind(id).bind(&payload).bind(&vector).bind(&opposite).execute(&pool).await?;
     let memory = Arc::new(memory_postgres::PostgresMemory::new(pool).with_query_embed(
         memory_postgres::QueryEmbed::new(

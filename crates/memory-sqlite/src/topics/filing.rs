@@ -128,8 +128,8 @@ impl FilingStore for SqliteStore {
             let kept = placement.clone().admit(existing);
             if kept == placement {
                 conn.execute(
-                    "INSERT INTO rh_conversation_placements (conversation_id, topic_id, placed_by, placed_at)
-                     VALUES (?1, ?2, ?3, ?4)
+                    "INSERT INTO rh_conversation_placements (conversation_id, topic_id, placed_by, placed_at, owner_user_id)
+                     VALUES (?1, ?2, ?3, ?4, (SELECT owner_user_id FROM ros_conversations WHERE id = ?1))
                      ON CONFLICT (conversation_id) DO UPDATE SET topic_id = excluded.topic_id,
                                                                  placed_by = excluded.placed_by,
                                                                  placed_at = excluded.placed_at",
@@ -452,6 +452,7 @@ fn filed_sessions(conn: &Connection, topic: TopicId) -> Result<Vec<FiledSession>
             node: found.iter().find_map(|row| row.node.clone()),
             placement,
             lineage: None,
+            visibility: None,
         });
     }
     sessions.extend(super::inherited::sessions(conn, Some(topic))?);

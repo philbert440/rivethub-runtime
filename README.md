@@ -6,7 +6,7 @@ for the TypeScript RivetOS runtime at sixteen observable boundaries and a fresh 
 - `docs/CONTRACT.md` — the sixteen boundaries. This is the whole definition of "drop-in".
 - `docs/ARCHITECTURE.md` — crates, ports, process shape, build order.
 - `docs/BUILDER-RULES.md` — the one page every change is held to.
-- `crates/` — the workspace (`wire`, `config`, `kernel`, `testkit`, adapters, services, `cli`, `rivethub`).
+- `crates/` — the workspace (`values`, `wire`, `config`, `kernel`, `testkit`, adapters, services, `cli`, `rivethub`).
 - `lints/` — the Dylint library (`cargo dylint`) carrying the design rules that need names, types or whole-program
   knowledge; outside the workspace, pinned to the nightly its `dylint_linting` version requires.
 - `xtask/` — the repository tooling (`cargo xtask`): `check` (the repository gate), `install-hooks`, the languages

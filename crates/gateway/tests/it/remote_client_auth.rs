@@ -18,10 +18,12 @@ use tower::ServiceExt;
 
 type Result<T = ()> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
-const PROTECTED: [&str; 5] = [
+const PROTECTED: [&str; 7] = [
     "/sessions",
     "/api/memory/search?q=x",
     "/files/list",
+    "/api/updates/manifest",
+    "/api/updates/RivetHub-1.2.3.apk",
     "/api/agents",
     "/mesh.json",
 ];

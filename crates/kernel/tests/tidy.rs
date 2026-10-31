@@ -21,7 +21,7 @@ use kernel::topics::TopicKind;
 use kernel::topics::TopicListing;
 use kernel::topics::TopicName;
 use kernel::wiki::page::WikiSlug;
-use wire::session_id::SessionId;
+use values::SessionId;
 
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
 
@@ -37,6 +37,7 @@ fn listing(
         aliases: Vec::new(),
         parent,
         directory: None,
+        owner: testkit::owner().ok(),
     };
     Ok(TopicListing {
         topic: Topic::create(TopicId::random(), new, DateTime::<Utc>::UNIX_EPOCH)?,
@@ -49,7 +50,7 @@ fn members(count: u8) -> Vec<Target> {
     (0..count)
         .map(|n| {
             Target::Session(SessionId::new(
-                wire::harness::HarnessId::ClaudeCode,
+                values::HarnessId::ClaudeCode,
                 &format!("00000000-0000-4000-8000-0000000000{n:02}"),
             ))
         })
@@ -189,7 +190,7 @@ fn suggestions_cluster_by_name_and_duplicates_fold_into_the_busier_topic() -> Te
     let parent = TopicId::random();
     let suggested = |n: u8, name: &str, under: Option<TopicId>| Suggested {
         session: SessionId::new(
-            wire::harness::HarnessId::ClaudeCode,
+            values::HarnessId::ClaudeCode,
             &format!("00000000-0000-4000-8000-0000000001{n:02}"),
         ),
         name: TopicName::new(name).unwrap(),

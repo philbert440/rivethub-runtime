@@ -23,6 +23,7 @@ use kernel::wiki::builder::ExtractWiki;
 use kernel::wiki::builder::HeldEntity;
 use kernel::wiki::builder::WikiBuilderStore;
 use kernel::wiki::builder::WikiWork;
+use kernel::wiki::merge::PageMerger;
 use kernel::wiki::page::WikiAction;
 use kernel::wiki::page::WikiPatch;
 use kernel::wiki::page::WikiSlug;
@@ -121,12 +122,21 @@ impl RouteStores<'_> {
                 topic: topic.id,
                 by: PlacementSource::You,
                 at: at(1),
+                owner: Some(crate::owner()?),
             })
             .await?;
         Ok(())
     }
 
     pub(crate) fn router(&self) -> WikiRouter<'_> {
+        self.router_merging(None)
+    }
+
+    pub(crate) fn router_with<'a>(&'a self, merger: &'a dyn PageMerger) -> WikiRouter<'a> {
+        self.router_merging(Some(merger))
+    }
+
+    fn router_merging<'a>(&'a self, merger: Option<&'a dyn PageMerger>) -> WikiRouter<'a> {
         WikiRouter {
             wiki: self.wiki,
             topics: TopicPorts {
@@ -135,6 +145,7 @@ impl RouteStores<'_> {
                 filing: self.filing,
                 lineage: self.lineage,
             },
+            merger,
             now: at(20),
         }
     }
@@ -477,6 +488,7 @@ pub async fn a_deleted_entity_is_not_recreated(
                 aliases: Vec::new(),
                 parent: Some(hosts.id),
                 directory: None,
+                owner: Some(crate::owner()?),
             },
             at(0),
         )?)

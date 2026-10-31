@@ -11,7 +11,7 @@ use axum::routing::MethodRouter;
 use kernel::memory::BrowseFilter;
 use kernel::memory::EmbedModelMismatch;
 use kernel::memory::Limit;
-use kernel::memory::SearchMode;
+use kernel::memory::MemoryEntry;
 use kernel::memory::SearchQuery;
 use kernel::memory::TagLiteral;
 use serde::Deserialize;
@@ -23,7 +23,6 @@ use wire::gateway::memory::EmbedHealth;
 use wire::gateway::memory::EmbedStatus;
 use wire::gateway::memory::MemoryAppendToolArgs;
 use wire::gateway::memory::MemoryBrowseMessage;
-use wire::gateway::memory::MemoryBrowseOrder;
 use wire::gateway::memory::MemoryBrowseResponse;
 use wire::gateway::memory::MemoryBrowseToolArgs;
 use wire::gateway::memory::MemoryGetFullToolArgs;
@@ -36,8 +35,8 @@ use wire::gateway::memory::MemorySearchResponse;
 use wire::gateway::memory::MemorySearchToolArgs;
 use wire::gateway::memory::MemoryStatsResponse;
 use wire::gateway::memory::MemoryToolResponse;
+use wire::gateway::memory::SearchMode;
 use wire::json::JsonObject;
-use wire::memory::MemoryEntry;
 use wire::message::ToolResult;
 
 use crate::Gateway;
@@ -52,6 +51,8 @@ use crate::extract::ScopeParam;
 use crate::extract::SinceParam;
 use crate::extract::TagFilter;
 use crate::extract::WindowParam;
+use crate::memory_body;
+use crate::tenancy::UserId;
 
 const SEARCH_LIMIT_DEFAULT: u32 = 20;
 const SEARCH_LIMIT_MAX: u32 = 50;
@@ -82,8 +83,24 @@ pub(crate) fn router() -> Router<Arc<Gateway>> {
             routing::get(super::tidy::upkeep).fallback(super::method_not_allowed),
         )
         .route(
+            "/flagged",
+            routing::get(super::flagged::list).fallback(super::method_not_allowed),
+        )
+        .route(
+            "/flagged/{id}/retry",
+            routing::post(super::flagged::retry).fallback(super::method_not_allowed),
+        )
+        .route(
+            "/flagged/{id}/dismiss",
+            routing::post(super::flagged::dismiss).fallback(super::method_not_allowed),
+        )
+        .route(
             "/summaries/{session}",
             routing::get(super::memory_archive::summaries).fallback(super::method_not_allowed),
+        )
+        .route(
+            "/summaries/{session}/{summary}",
+            routing::get(super::memory_archive::summary).fallback(super::method_not_allowed),
         )
         .route(
             "/conversations/{id}/summaries",
@@ -145,6 +162,7 @@ struct SearchParams {
     tool_name: Option<String>,
     tag: Option<TagFilter>,
     limit: Option<RawLimit>,
+    snippet: Option<bool>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -171,15 +189,17 @@ async fn search(
     let query = SearchQuery {
         since: params.since.map(SinceParam::get),
         before: params.before.map(BeforeParam::get),
-        window: params.window.map(WindowParam::get),
+        window: params
+            .window
+            .map(|window| memory_body::browse_window(window.get())),
         expand: params.expand,
         synthesize: params.synthesize,
         text: text.clone(),
-        mode: match params.mode {
+        mode: memory_body::search_mode(match params.mode {
             Some(mode) => mode,
             None => SearchMode::Hybrid,
-        },
-        scope,
+        }),
+        scope: memory_body::memory_scope(scope),
         agent: params.agent,
         role: params.role.map(RoleParam::get),
         exclude_roles: params
@@ -198,22 +218,36 @@ async fn search(
         .store()
         .search(query.resolve_window(chrono::Utc::now(), &chrono::Local))
         .await?;
+    let snippets = params.snippet == Some(true);
     Ok(Json(MemorySearchResponse {
-        query: text,
         scope,
-        degraded: results.degraded,
-        fallback: results.fallback,
-        expanded: results.expanded,
+        degraded: results.degraded.map(memory_body::memory_degraded_body),
+        fallback: results.fallback.map(memory_body::memory_fallback_body),
+        expanded: results
+            .expanded
+            .into_iter()
+            .map(memory_body::memory_entry_body)
+            .collect(),
         synthesis: results.synthesis,
-        results: results.results.into_iter().map(search_hit).collect(),
+        results: results
+            .results
+            .into_iter()
+            .map(|mut hit| {
+                if snippets {
+                    hit.content = super::memory_snippet::snippet(&hit.content, &text);
+                }
+                search_hit(hit)
+            })
+            .collect(),
+        query: text,
     }))
 }
 
-fn search_hit(result: wire::memory::MemorySearchResult) -> MemorySearchHit {
+fn search_hit(result: kernel::memory::MemorySearchResult) -> MemorySearchHit {
     MemorySearchHit {
-        chunk: result.chunk,
+        chunk: result.chunk.map(memory_body::memory_chunk_match_body),
         id: result.id,
-        source: result.source,
+        source: memory_body::memory_hit_source_body(result.source),
         content: result.content,
         created_at: result.created_at,
         score: result.relevance_score,
@@ -238,11 +272,13 @@ async fn browse(
         role: params.role.map(RoleParam::get),
         tool_name: params.tool_name,
         tag: params.tag.map(TagFilter::get),
-        window: params.window.map(WindowParam::get),
+        window: params
+            .window
+            .map(|window| memory_body::browse_window(window.get())),
         since: params.since.map(SinceParam::get),
         before: params.before.map(BeforeParam::get),
         include_tools: false,
-        order: MemoryBrowseOrder::Desc,
+        order: kernel::memory::MemoryBrowseOrder::Desc,
         limit: Limit::clamped(
             params.limit.map(RawLimit::get),
             BROWSE_LIMIT_DEFAULT,
@@ -273,7 +309,9 @@ fn browse_message(entry: MemoryEntry) -> MemoryBrowseMessage {
 }
 
 async fn stats(State(gateway): State<Arc<Gateway>>) -> Result<Json<MemoryStatsResponse>, ApiError> {
-    Ok(Json(gateway.store().stats().await?))
+    Ok(Json(memory_body::memory_stats_response_body(
+        gateway.store().stats().await?,
+    )))
 }
 
 async fn health(
@@ -346,7 +384,9 @@ async fn tool_stats(
     State(gateway): State<Arc<Gateway>>,
 ) -> Result<Json<MemoryToolResponse>, ApiError> {
     let stats = gateway.store().stats().await?;
-    Ok(tool_response(serialize_tool(&stats)?))
+    Ok(tool_response(serialize_tool(
+        &memory_body::memory_stats_response_body(stats),
+    )?))
 }
 
 async fn tool_get_full(
@@ -358,16 +398,20 @@ async fn tool_get_full(
 
 async fn tool_append(
     State(gateway): State<Arc<Gateway>>,
+    user: UserId,
     Body(args): Body<MemoryAppendToolArgs>,
 ) -> Result<Json<MemoryToolResponse>, ApiError> {
-    Ok(tool_response(append_tool(&gateway, args).await?))
+    Ok(tool_response(append_tool(&gateway, &user, args).await?))
 }
 
 async fn tool_ingest_session(
     State(gateway): State<Arc<Gateway>>,
+    user: UserId,
     Body(args): Body<MemoryIngestSessionToolArgs>,
 ) -> Result<Json<MemoryToolResponse>, ApiError> {
-    Ok(tool_response(ingest_session_tool(&gateway, args).await?))
+    Ok(tool_response(
+        ingest_session_tool(&gateway, &user, args).await?,
+    ))
 }
 
 fn tool_response(text: String) -> Json<MemoryToolResponse> {
@@ -395,12 +439,12 @@ async fn search_tool(gateway: &Gateway, args: MemorySearchToolArgs) -> Result<St
     let query = SearchQuery {
         since: args.since,
         before: args.before,
-        window: args.window,
+        window: args.window.map(memory_body::browse_window),
         expand: args.expand,
         synthesize: args.synthesize,
         text: args.query.clone(),
-        mode,
-        scope,
+        mode: memory_body::search_mode(mode),
+        scope: memory_body::memory_scope(scope),
         agent: args.agent,
         role: args.role,
         exclude_roles: Vec::new(),
@@ -415,9 +459,13 @@ async fn search_tool(gateway: &Gateway, args: MemorySearchToolArgs) -> Result<St
     let response = MemorySearchResponse {
         query: args.query,
         scope,
-        degraded: results.degraded,
-        fallback: results.fallback,
-        expanded: results.expanded,
+        degraded: results.degraded.map(memory_body::memory_degraded_body),
+        fallback: results.fallback.map(memory_body::memory_fallback_body),
+        expanded: results
+            .expanded
+            .into_iter()
+            .map(memory_body::memory_entry_body)
+            .collect(),
         synthesis: results.synthesis,
         results: results.results.into_iter().map(search_hit).collect(),
     };
@@ -443,11 +491,11 @@ async fn browse_tool(gateway: &Gateway, args: MemoryBrowseToolArgs) -> Result<St
         role: None,
         tool_name: None,
         tag,
-        window: args.window,
+        window: args.window.map(memory_body::browse_window),
         since: args.since,
         before: args.before,
         include_tools: args.include_tools.unwrap_or(false),
-        order: args.order.unwrap_or_default(),
+        order: memory_body::memory_browse_order(args.order.unwrap_or_default()),
         limit: Limit::clamped(args.limit, BROWSE_LIMIT_DEFAULT, 1..=BROWSE_LIMIT_MAX),
     };
     let entries = gateway
@@ -495,7 +543,11 @@ fn truncated(metadata: Option<&JsonObject>) -> bool {
         .is_some_and(|value| matches!(serde_json::from_value::<bool>(value.clone()), Ok(true)))
 }
 
-async fn append_tool(gateway: &Gateway, args: MemoryAppendToolArgs) -> Result<String, ApiError> {
+async fn append_tool(
+    gateway: &Gateway,
+    user: &UserId,
+    args: MemoryAppendToolArgs,
+) -> Result<String, ApiError> {
     let entry = MemoryEntry {
         id: args.event_id,
         session_id: args.session_id,
@@ -509,12 +561,13 @@ async fn append_tool(gateway: &Gateway, args: MemoryAppendToolArgs) -> Result<St
         metadata: None,
         created_at: None,
     };
-    gateway.store().append(vec![entry]).await?;
+    gateway.store().append(user.owner(), vec![entry]).await?;
     serialize_tool(&OkReply { ok: true })
 }
 
 async fn ingest_session_tool(
     gateway: &Gateway,
+    user: &UserId,
     args: MemoryIngestSessionToolArgs,
 ) -> Result<String, ApiError> {
     let entries = args
@@ -534,7 +587,7 @@ async fn ingest_session_tool(
             created_at: None,
         })
         .collect();
-    let inserted = gateway.store().append(entries).await?;
+    let inserted = gateway.store().append(user.owner(), entries).await?;
     let reply = CaptureResult {
         ok: true,
         conversation_id: args.session_id,

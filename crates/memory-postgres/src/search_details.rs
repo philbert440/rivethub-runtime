@@ -1,20 +1,18 @@
 use std::collections::BTreeMap;
 
+use crate::search::MemorySearchHit;
 use chrono::{DateTime, Utc};
-use kernel::memory::{
-    Limit, MemoryStore, MemoryStoreError, SearchQuery, SummaryDetail, SummaryExcerpt, TagListQuery,
-};
+use kernel::memory::MemoryEntry;
+use kernel::memory::{MemoryHitSource, SummaryKind};
+use kernel::memory::{MemoryStoreError, SearchQuery, SummaryDetail, SummaryExcerpt};
 use sqlx::types::Json;
 use uuid::Uuid;
-use wire::gateway::memory::{
-    MemoryHitSource, MemorySearchHit, SummaryKind, TagEntityType, TagState,
-};
-use wire::memory::MemoryEntry;
 
 use crate::{Error, PostgresMemory, read::MessageEntryRow};
 
 #[derive(sqlx::FromRow)]
 struct SummaryRow {
+    id: Uuid,
     kind: Json<SummaryKind>,
     conversation_id: Uuid,
     earliest_at: Option<DateTime<Utc>>,
@@ -23,8 +21,16 @@ struct SummaryRow {
 
 #[derive(sqlx::FromRow)]
 struct ChildRow {
+    parent_id: Uuid,
     kind: Json<SummaryKind>,
     content: String,
+}
+
+#[derive(sqlx::FromRow)]
+struct SourceRow {
+    summary_id: Uuid,
+    #[sqlx(flatten)]
+    entry: MessageEntryRow,
 }
 
 impl PostgresMemory {
@@ -33,75 +39,97 @@ impl PostgresMemory {
         hits: &[MemorySearchHit],
         query: &SearchQuery,
     ) -> Result<BTreeMap<String, SummaryDetail>, MemoryStoreError> {
-        let mut details = BTreeMap::new();
-        for hit in hits
-            .iter()
-            .filter(|hit| hit.source == MemoryHitSource::Summary)
-        {
-            let id = Uuid::parse_str(&hit.id).map_err(Error::from)?;
-            let row: SummaryRow = sqlx::query_as("SELECT to_json(kind) AS kind, conversation_id, earliest_at, latest_at FROM rh_summaries WHERE id = $1")
-                .bind(id).fetch_one(&self.pool).await.map_err(|source| Error::operation("summary detail", source))?;
-            let tags = self
-                .list_tags(TagListQuery {
-                    entity_type: Some(TagEntityType::Conversation),
-                    entity_id: Some(row.conversation_id),
-                    key: None,
-                    value: None,
-                    states: vec![TagState::Accepted],
-                    limit: Limit::clamped(None, 1000, 1..=1000),
-                })
-                .await?;
-            let (children, sources) = if query.expand == Some(false) {
-                (Vec::new(), Vec::new())
-            } else {
-                tokio::try_join!(self.summary_children(id), self.summary_sources(id, query))?
-            };
-            details.insert(
-                hit.id.clone(),
-                SummaryDetail {
+        let ids = crate::search::hit_uuids(hits, MemoryHitSource::Summary)?;
+        if ids.is_empty() {
+            return Ok(BTreeMap::new());
+        }
+        let expand = query.expand != Some(false);
+        let (rows, tags, mut children, mut sources) = tokio::try_join!(
+            self.summary_rows(&ids),
+            crate::tags::summary_conversation_tags(&self.pool, &ids),
+            self.summary_children(&ids, expand),
+            self.summary_sources(&ids, query, expand),
+        )?;
+        Ok(rows
+            .into_iter()
+            .map(|row| {
+                let detail = SummaryDetail {
                     kind: row.kind.0,
                     earliest_at: row.earliest_at,
                     latest_at: row.latest_at,
-                    tags,
-                    children,
-                    sources,
-                },
-            );
-        }
-        Ok(details)
-    }
-
-    async fn summary_children(&self, id: Uuid) -> Result<Vec<SummaryExcerpt>, Error> {
-        let rows: Vec<ChildRow> = sqlx::query_as("SELECT to_json(kind) AS kind, content FROM rh_summaries WHERE parent_id = $1 ORDER BY earliest_at, id")
-            .bind(id).fetch_all(&self.pool).await.map_err(|source| Error::operation("summary children", source))?;
-        Ok(rows
-            .into_iter()
-            .map(|row| SummaryExcerpt {
-                kind: row.kind.0,
-                content: row.content,
+                    tags: tags.get(&row.conversation_id).cloned().unwrap_or_default(),
+                    children: children.remove(&row.id).unwrap_or_default(),
+                    sources: sources.remove(&row.id).unwrap_or_default(),
+                };
+                (row.id.to_string(), detail)
             })
             .collect())
     }
 
+    async fn summary_rows(&self, ids: &[Uuid]) -> Result<Vec<SummaryRow>, MemoryStoreError> {
+        let rows = sqlx::query_as("SELECT id, to_json(kind) AS kind, conversation_id, earliest_at, latest_at FROM rh_summaries WHERE id = ANY($1)")
+            .bind(ids).fetch_all(&self.pool).await.map_err(|source| Error::operation("summary detail", source))?;
+        Ok(rows)
+    }
+
+    async fn summary_children(
+        &self,
+        ids: &[Uuid],
+        expand: bool,
+    ) -> Result<BTreeMap<Uuid, Vec<SummaryExcerpt>>, MemoryStoreError> {
+        if !expand {
+            return Ok(BTreeMap::new());
+        }
+        let rows: Vec<ChildRow> = sqlx::query_as("SELECT parent_id, to_json(kind) AS kind, content FROM rh_summaries WHERE parent_id = ANY($1) ORDER BY parent_id, earliest_at, id")
+            .bind(ids).fetch_all(&self.pool).await.map_err(|source| Error::operation("summary children", source))?;
+        let mut grouped: BTreeMap<Uuid, Vec<SummaryExcerpt>> = BTreeMap::new();
+        for row in rows {
+            grouped
+                .entry(row.parent_id)
+                .or_default()
+                .push(SummaryExcerpt {
+                    kind: row.kind.0,
+                    content: row.content,
+                });
+        }
+        Ok(grouped)
+    }
+
     async fn summary_sources(
         &self,
-        id: Uuid,
+        ids: &[Uuid],
         query: &SearchQuery,
-    ) -> Result<Vec<MemoryEntry>, Error> {
-        let rows: Vec<MessageEntryRow> = sqlx::query_as(
-            "SELECT m.id::text AS id, c.session_key, m.agent, m.channel, m.role AS role_text,
-                    m.content, m.tool_name, m.tool_args::text AS tool_args, m.tool_result,
-                    m.metadata::text AS metadata, m.created_at
-             FROM rh_messages m JOIN rh_conversations c ON c.id = m.conversation_id
-             WHERE EXISTS (SELECT 1 FROM rh_summary_sources ss WHERE ss.message_id = m.id
-               AND (ss.summary_id = $1 OR ss.summary_id IN (SELECT id FROM rh_summaries WHERE parent_id = $1)))
-             AND m.role <> 'tool' AND length(m.content) > 50
-             AND ($2::text IS NULL OR m.agent = $2)
-             AND ($3::timestamptz IS NULL OR m.created_at >= $3)
-             AND ($4::timestamptz IS NULL OR m.created_at < $4)
-             ORDER BY m.created_at, m.id LIMIT 200")
-            .bind(id).bind(&query.agent).bind(query.since).bind(query.before)
+        expand: bool,
+    ) -> Result<BTreeMap<Uuid, Vec<MemoryEntry>>, MemoryStoreError> {
+        if !expand {
+            return Ok(BTreeMap::new());
+        }
+        let rows: Vec<SourceRow> = sqlx::query_as(
+            "SELECT wanted.id AS summary_id, picked.*
+             FROM unnest($1::uuid[]) AS wanted(id)
+             CROSS JOIN LATERAL (
+                SELECT m.id::text AS id, c.session_key, m.agent, m.channel, m.role AS role_text,
+                       m.content, m.tool_name, m.tool_args::text AS tool_args, m.tool_result,
+                       m.metadata::text AS metadata, m.created_at, m.id AS message_id
+                FROM (SELECT DISTINCT ss.message_id FROM rh_summary_sources ss
+                       WHERE ss.summary_id = ANY (ARRAY(SELECT wanted.id UNION SELECT id FROM rh_summaries WHERE parent_id = wanted.id))) sources
+                JOIN rh_messages m ON m.id = sources.message_id
+                JOIN rh_conversations c ON c.id = m.conversation_id
+                WHERE m.role <> 'tool' AND length(m.content) > 50
+                AND ($2::text IS NULL OR m.agent = $2)
+                AND ($3::timestamptz IS NULL OR m.created_at >= $3)
+                AND ($4::timestamptz IS NULL OR m.created_at < $4)
+                ORDER BY m.created_at, m.id LIMIT 200) picked
+             ORDER BY wanted.id, picked.created_at, picked.message_id")
+            .bind(ids).bind(&query.agent).bind(query.since).bind(query.before)
             .fetch_all(&self.pool).await.map_err(|source| Error::operation("summary source messages", source))?;
-        Ok(crate::read::readable_entries(rows))
+        let mut grouped: BTreeMap<Uuid, Vec<MessageEntryRow>> = BTreeMap::new();
+        for row in rows {
+            grouped.entry(row.summary_id).or_default().push(row.entry);
+        }
+        Ok(grouped
+            .into_iter()
+            .map(|(id, rows)| (id, crate::read::readable_entries(rows)))
+            .collect())
     }
 }

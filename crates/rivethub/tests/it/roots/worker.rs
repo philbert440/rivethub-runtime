@@ -190,13 +190,13 @@ async fn seed_embed(pool: &PgPool) -> TestResult<HeldJob> {
         .execute(&mut *tx)
         .await?;
     let conversation: String = sqlx::query_scalar(
-        "insert into rh_conversations (session_key, agent) values ('embed-shutdown', 'rivet') returning id::text",
+        "insert into rh_conversations (session_key, agent, owner_user_id) values ('embed-shutdown', 'rivet', 'owner') returning id::text",
     )
     .fetch_one(&mut *tx)
     .await?;
     let message: String = sqlx::query_scalar(
-        "insert into rh_messages (conversation_id, agent, channel, role, content)
-         values ($1::uuid, 'rivet', 'test', 'user', 'hello ledger')
+        "insert into rh_messages (conversation_id, agent, channel, role, content, owner_user_id)
+         values ($1::uuid, 'rivet', 'test', 'user', 'hello ledger', 'owner')
          returning id::text",
     )
     .bind(&conversation)

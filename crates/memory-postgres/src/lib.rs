@@ -1,6 +1,7 @@
 mod access;
 pub mod admin;
 mod agent_presets;
+mod backfills;
 pub mod capture;
 mod cleanup;
 mod conversation;
@@ -9,19 +10,26 @@ pub mod dump;
 pub mod embed;
 mod embedding_store;
 pub mod error;
+mod flagged;
 mod graphile;
 mod graphile_sql;
 mod hub_state;
 mod listen;
 mod loss;
 mod memory_jobs;
+pub mod merge;
 pub mod queue;
 pub mod read;
 pub mod search;
+mod search_cap;
 mod search_complete;
 mod search_details;
+mod search_recent;
 mod search_sql;
+mod search_vector;
+mod stats;
 pub use search_complete::SearchSynthesis;
+mod stats_cache;
 mod store_impl;
 mod summary_dag;
 mod summary_store;
@@ -31,21 +39,27 @@ mod task_db;
 mod task_jobs;
 mod task_rows;
 mod task_watch;
+mod tenancy;
 mod tidy;
 mod title;
 mod topics;
 mod wiki;
 mod wiki_builder;
 mod wiki_citations;
+mod wiki_scope;
 pub mod wiki_writer;
 
 #[cfg(test)]
 mod resilience;
+mod scope;
+pub use scope::scoped;
 
 pub use agent_presets::PostgresPresets;
 pub use cleanup::DatabaseIdentity;
 pub use hub_state::PostgresHubState;
 pub use task_db::PostgresTasks;
+pub use tenancy::PostgresTenancy;
+pub use title::Untitled;
 
 use std::cmp::Ordering;
 use std::time::Duration;
@@ -57,6 +71,7 @@ pub use capture::ConversationRecord;
 pub use capture::ConversationUpdate;
 pub use capture::ConversationUpsert;
 pub use capture::MessageRow;
+pub use capture::UpsertedConversation;
 pub use embed::QueryEmbed;
 pub use error::Error;
 use graphile::GraphileQueue;
@@ -65,16 +80,19 @@ pub use queue::PostgresQueue;
 use sqlx::PgPool;
 use sqlx::postgres::PgPoolOptions;
 
-pub const SCHEMA_VERSION: i64 = 41;
+pub const SCHEMA_VERSION: i64 = 50;
 pub(crate) const ACQUIRE_TIMEOUT: Duration = Duration::from_secs(3);
 
 #[derive(Debug)]
 pub struct PostgresMemory {
     wiki_directory: Option<std::path::PathBuf>,
+    wiki_owner: Option<kernel::owner::Owner>,
     pool: PgPool,
     embed: Option<embed::EmbedArm>,
     synthesis: Option<SearchSynthesis>,
     access: std::sync::Arc<access::AccessLog>,
+    stats_cache: std::sync::Arc<stats_cache::StatsCache>,
+    backfills: std::sync::Arc<backfills::Backfills>,
     unverified: bool,
     summaries_written: tokio::sync::broadcast::Sender<kernel::memory::WrittenSummary>,
 }
@@ -86,10 +104,13 @@ impl PostgresMemory {
     pub fn new(pool: PgPool) -> Self {
         Self {
             wiki_directory: None,
+            wiki_owner: None,
             pool,
             embed: None,
             synthesis: None,
             access: std::sync::Arc::default(),
+            stats_cache: std::sync::Arc::default(),
+            backfills: std::sync::Arc::default(),
             unverified: false,
             summaries_written: tokio::sync::broadcast::channel(SUMMARY_WRITTEN_BUFFER).0,
         }
@@ -98,6 +119,12 @@ impl PostgresMemory {
     #[must_use]
     pub fn with_wiki_directory(mut self, directory: std::path::PathBuf) -> Self {
         self.wiki_directory = Some(directory);
+        self
+    }
+
+    #[must_use]
+    pub fn with_wiki_owner(mut self, owner: kernel::owner::Owner) -> Self {
+        self.wiki_owner = Some(owner);
         self
     }
 
@@ -114,15 +141,15 @@ impl PostgresMemory {
     }
 
     pub async fn connect(url: &str) -> Result<Self, Error> {
-        let pool = open_pool(url, 5, Some(Duration::from_secs(30)))
+        let pool = open_pool(url, POOL_CONNECTIONS, Some(Pooling::OnDemand.idle()))
             .await
             .map_err(Error::Connection)?;
         Self::prepare(&pool).await?;
         Ok(Self::new(pool))
     }
 
-    pub async fn connect_deferred(url: &str) -> Result<Self, Error> {
-        let options = pool_options(5, Some(Duration::from_secs(30)));
+    pub async fn connect_deferred(url: &str, pooling: Pooling) -> Result<Self, Error> {
+        let options = pool_options(POOL_CONNECTIONS, Some(pooling.idle()));
         match options.connect(url).await {
             Ok(pool) => {
                 Self::prepare(&pool).await?;
@@ -133,8 +160,8 @@ impl PostgresMemory {
                     %error,
                     "the memory database is unreachable; memory stays unavailable until it answers"
                 );
-                let pool =
-                    lazy_pool(url, 5, Some(Duration::from_secs(30))).map_err(Error::Connection)?;
+                let pool = lazy_pool(url, POOL_CONNECTIONS, Some(pooling.idle()))
+                    .map_err(Error::Connection)?;
                 tokio::spawn(check_when_reachable(pool.clone()));
                 Ok(Self {
                     unverified: true,
@@ -185,6 +212,22 @@ impl PostgresMemory {
 }
 
 const RECHECK: Duration = Duration::from_secs(5);
+const POOL_CONNECTIONS: u32 = 16;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Pooling {
+    OnDemand,
+    Serving,
+}
+
+impl Pooling {
+    const fn idle(self) -> Duration {
+        match self {
+            Self::OnDemand => Duration::from_secs(30),
+            Self::Serving => Duration::from_secs(600),
+        }
+    }
+}
 
 async fn check_when_reachable(pool: PgPool) {
     loop {
@@ -204,10 +247,12 @@ async fn check_when_reachable(pool: PgPool) {
 }
 
 fn pool_options(max_connections: u32, idle_timeout: Option<Duration>) -> PgPoolOptions {
-    let options = PgPoolOptions::new()
-        .max_connections(max_connections)
-        .acquire_timeout(ACQUIRE_TIMEOUT)
-        .test_before_acquire(true);
+    let options = scoped(
+        PgPoolOptions::new()
+            .max_connections(max_connections)
+            .acquire_timeout(ACQUIRE_TIMEOUT)
+            .test_before_acquire(false),
+    );
     match idle_timeout {
         Some(idle) => options.idle_timeout(idle),
         None => options,

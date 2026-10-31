@@ -2,7 +2,6 @@ use std::sync::Arc;
 
 use axum::extract::ws::{CloseFrame, Message, WebSocket};
 use kernel::terminal::{TermSize, TerminalId};
-use tokio::sync::oneshot;
 use wire::events::ProtocolVersion;
 use wire::gateway::term::{DeviceOwner, HelloState, PtyState, TermClientFrame, TermServerFrame};
 
@@ -32,17 +31,13 @@ pub(crate) async fn run(
     device: String,
 ) -> Result<(), TerminalSocketError> {
     let client = uuid::Uuid::new_v4();
-    let (reply, result) = oneshot::channel();
     handle
-        .send(Command::Join {
+        .ask(|reply| Command::Join {
             client,
             device,
             reply,
         })
         .await?;
-    result
-        .await
-        .map_err(|_| ApiError::Unavailable("terminal actor closed".into()))??;
     let result = stream(&mut socket, &service, &mut handle, client).await;
     handle.send(Command::Leave { client }).await?;
     if let Err(error) = &result {
@@ -156,17 +151,13 @@ async fn control(
             (size, true)
         }
     };
-    let (reply, result) = oneshot::channel();
     handle
-        .send(Command::Size {
+        .ask(|reply| Command::Size {
             client,
             size,
             claim,
             reply,
         })
         .await?;
-    result
-        .await
-        .map_err(|_| ApiError::Unavailable("terminal actor closed".into()))??;
     Ok(())
 }

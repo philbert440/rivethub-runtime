@@ -16,16 +16,11 @@ struct Skip {
     reason: String,
 }
 
-fn sources() -> [OwnerSource; 7] {
+fn sources() -> [OwnerSource; 5] {
     [
         OwnerSource {
             label: "replay",
             text: include_str!("../replay.rs"),
-            name: "CLAIMS",
-        },
-        OwnerSource {
-            label: "audio",
-            text: include_str!("audio.rs"),
             name: "CLAIMS",
         },
         OwnerSource {
@@ -42,11 +37,6 @@ fn sources() -> [OwnerSource; 7] {
             label: "session-term",
             text: include_str!("session_replay.rs"),
             name: "TERM_CLAIMS",
-        },
-        OwnerSource {
-            label: "v1",
-            text: include_str!("v1/replay.rs"),
-            name: "REPLAYED",
         },
         OwnerSource {
             label: "parity",

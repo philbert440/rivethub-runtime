@@ -197,7 +197,7 @@ pub(super) async fn ingest_transcript(
             title: title_for_create.as_deref(),
             settings: &settings,
             task_id: task_id(opts).as_deref(),
-            owner_user_id: owner.as_deref(),
+            owner_user_id: &owner,
             created_at: parsed.stamps.first().copied(),
             updated_at: parsed.stamps.last().copied(),
             active: opts.get("markInactive").and_then(Value::as_bool) != Some(true),
@@ -236,7 +236,7 @@ pub(super) async fn ingest_transcript(
                 tool_args: None,
                 tool_result: None,
                 metadata: &metadata,
-                owner_user_id: owner.as_deref(),
+                owner_user_id: &owner,
                 created_at: line.at,
             })
             .await?;
@@ -281,7 +281,7 @@ pub(super) async fn ingest_transcript(
                     tool_args: Some(&args),
                     tool_result: result.map(String::as_str),
                     metadata: &metadata,
-                    owner_user_id: owner.as_deref(),
+                    owner_user_id: &owner,
                     created_at: line.at,
                 })
                 .await?;
@@ -310,7 +310,7 @@ pub(super) async fn ingest_transcript(
                 tool_args: None,
                 tool_result: None,
                 metadata: &metadata,
-                owner_user_id: owner.as_deref(),
+                owner_user_id: &owner,
                 created_at: line.at,
             })
             .await?;
@@ -341,11 +341,6 @@ pub(super) async fn ingest_transcript(
             settings: &settings,
         })
         .await?;
-    if let Some(owner_name) = &owner
-        && !record.created
-    {
-        writer.adopt_owner(record.id, owner_name).await?;
-    }
     writer.commit().await?;
 
     Ok(encoded(HookOutcomeBody {

@@ -6,7 +6,7 @@ use serde::Serialize;
 use sha2::Digest as _;
 use sha2::Sha256;
 use uuid::Uuid;
-use wire::session_id::SessionId;
+use values::SessionId;
 
 use super::Fingerprint;
 use super::TidyError;

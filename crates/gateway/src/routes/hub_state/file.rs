@@ -8,6 +8,7 @@ use chrono::Utc;
 use kernel::hub_state::HubStateStore;
 use kernel::hub_state::HubStateStoreError;
 use kernel::hub_state::HubStateWrite;
+use kernel::hub_state::Versioned;
 use tempfile::NamedTempFile;
 use tokio::sync::Mutex;
 use wire::gateway::hub_state::HubState;
@@ -53,9 +54,9 @@ impl FileHubState {
 }
 
 #[async_trait]
-impl HubStateStore for FileHubState {
-    async fn load(&self, user: &str) -> Result<HubStateResponse, HubStateStoreError> {
-        self.read(user).await
+impl HubStateStore<HubState> for FileHubState {
+    async fn load(&self, user: &str) -> Result<Versioned<HubState>, HubStateStoreError> {
+        self.read(user).await.map(versioned)
     }
 
     async fn replace(
@@ -63,11 +64,11 @@ impl HubStateStore for FileHubState {
         user: &str,
         base_version: u64,
         state: HubState,
-    ) -> Result<HubStateWrite, HubStateStoreError> {
+    ) -> Result<HubStateWrite<HubState>, HubStateStoreError> {
         let _write = self.writes.lock().await;
         let current = self.read(user).await?;
         if current.version != base_version {
-            return Ok(HubStateWrite::Conflict(current));
+            return Ok(HubStateWrite::Conflict(versioned(current)));
         }
         let next = HubStateResponse {
             version: base_version + 1,
@@ -78,7 +79,14 @@ impl HubStateStore for FileHubState {
         tokio::task::spawn_blocking(move || write_file(&path, &written))
             .await
             .map_err(unavailable)??;
-        Ok(HubStateWrite::Saved(next))
+        Ok(HubStateWrite::Saved(versioned(next)))
+    }
+}
+
+fn versioned(document: HubStateResponse) -> Versioned<HubState> {
+    Versioned {
+        version: document.version,
+        state: document.state,
     }
 }
 

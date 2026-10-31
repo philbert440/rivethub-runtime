@@ -2,13 +2,13 @@ use std::collections::VecDeque;
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use kernel::model::LlmResponse;
 use kernel::model::{
     Embedding, ModelChunk, ModelProvider, ModelProviderError, ModelRequest, ModelStreamItem,
 };
 use parking_lot::Mutex;
 use tokio::sync::{Notify, mpsc};
 use tokio_util::sync::CancellationToken;
-use wire::stream::LlmResponse;
 
 #[derive(Debug)]
 pub enum Plan {

@@ -3,13 +3,13 @@ use chrono::DateTime;
 use chrono::Utc;
 use thiserror::Error;
 use uuid::Uuid;
-use wire::message::Role;
+use values::Role;
 
 use crate::BoxError;
 
 pub const HEARTBEAT_SESSION_PREFIX: &str = "heartbeat:";
 
-pub use wire::gateway::memory::SummaryKind;
+use super::SummaryKind;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ConversationHead {
@@ -123,4 +123,6 @@ pub trait SummaryStore: Send + Sync {
     async fn pending(&self) -> Result<Vec<PendingConversation>, SummaryStoreError>;
 
     async fn write_summary(&self, summary: NewSummary) -> Result<SummaryWrite, SummaryStoreError>;
+
+    async fn retitle(&self, id: Uuid, title: &str) -> Result<bool, SummaryStoreError>;
 }

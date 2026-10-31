@@ -28,7 +28,7 @@ async fn wiki_runner_claims_cron_extracts_and_shuts_down(pool: PgPool) -> TestRe
     wiki_support::filed(&store, &source).await?;
     queue
         .enqueue(Job {
-            name: JobName::Fixed(FixedJob::RecompileWiki),
+            name: JobName::Fixed(FixedJob::RunTask),
             payload: JsonObject::default(),
             key: None,
             key_mode: JobKeyMode::Replace,
@@ -57,12 +57,15 @@ async fn wiki_runner_claims_cron_extracts_and_shuts_down(pool: PgPool) -> TestRe
             provider: model.clone(),
             embed: EmbedSettings::standard(),
             summary: SummarySettings::standard("fake-chat")?,
+            scopes: None,
         },
     )
     .with_wiki_builder(WikiBuilderDeps {
         store: store.clone(),
         consolidate: None,
+        recompile: None,
         model: "fake-chat".to_owned(),
+        load: None,
     })
     .with_topic_pages(store.clone(), store.clone(), store.clone())
     .with_session_topics(workers::SessionTopics {
@@ -92,7 +95,7 @@ async fn wiki_runner_claims_cron_extracts_and_shuts_down(pool: PgPool) -> TestRe
             .await?
             .is_none()
     );
-    let untouched: (i64,) = sqlx::query_as("SELECT count(*) FROM graphile_worker._private_jobs j JOIN graphile_worker._private_tasks t ON t.id = j.task_id WHERE t.identifier = 'recompile-wiki' AND j.attempts = 0")
+    let untouched: (i64,) = sqlx::query_as("SELECT count(*) FROM graphile_worker._private_jobs j JOIN graphile_worker._private_tasks t ON t.id = j.task_id WHERE t.identifier = 'run-task' AND j.attempts = 0")
         .fetch_one(&pool).await?;
     assert_eq!(untouched.0, 1);
     assert!(
@@ -201,7 +204,7 @@ impl kernel::model::ModelProvider for WaitingProvider {
     async fn chat(
         &self,
         _request: kernel::model::ModelRequest,
-    ) -> Result<wire::stream::LlmResponse, kernel::model::ModelProviderError> {
+    ) -> Result<kernel::model::LlmResponse, kernel::model::ModelProviderError> {
         self.entered.notify_one();
         std::future::pending().await
     }

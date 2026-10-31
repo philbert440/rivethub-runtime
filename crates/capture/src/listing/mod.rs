@@ -1,6 +1,6 @@
 mod ancestors;
 mod claude;
-mod codex;
+pub(crate) mod codex;
 pub(crate) mod cowork;
 mod cursor;
 mod databases;
@@ -60,6 +60,7 @@ pub struct StoreRoots {
     pub omp: Option<PathBuf>,
     pub cursor: Option<PathBuf>,
     pub cowork: Vec<PathBuf>,
+    pub dsh: Option<PathBuf>,
 }
 
 impl StoreRoots {
@@ -109,6 +110,30 @@ pub(crate) async fn grok_title(
     id: String,
 ) -> Result<Option<String>, TranscriptReaderError> {
     blocking(move || grok::title(&root, &id)).await
+}
+
+pub(crate) async fn opencode_title(
+    root: PathBuf,
+    id: String,
+) -> Result<Option<String>, TranscriptReaderError> {
+    blocking(move || {
+        Ok(databases::opencode_describe(&root, &id)?
+            .map(|row| row.title)
+            .filter(|title| *title != id))
+    })
+    .await
+}
+
+pub(crate) async fn codex_session_title(
+    root: PathBuf,
+    id: String,
+) -> Result<Option<String>, TranscriptReaderError> {
+    blocking(move || {
+        Ok(codex::describe(&root, &id)?
+            .map(|row| row.title)
+            .filter(|title| *title != id))
+    })
+    .await
 }
 
 fn list_harness(
@@ -224,6 +249,27 @@ fn store_cwd_of(
     }
 }
 
+fn permission_mode_of(
+    roots: &StoreRoots,
+    harness: HarnessId,
+    native: &str,
+) -> Result<Option<String>, TranscriptReaderError> {
+    match harness {
+        HarnessId::ClaudeCode => absent_store(roots.claude.as_deref(), |root| {
+            claude::permission_mode(root, native)
+        }),
+        HarnessId::GrokBuild
+        | HarnessId::Hermes
+        | HarnessId::KimiCode
+        | HarnessId::Codex
+        | HarnessId::Opencode
+        | HarnessId::Omp
+        | HarnessId::Dsh
+        | HarnessId::Cursor
+        | HarnessId::Cowork => Ok(None),
+    }
+}
+
 fn rename_harness(
     roots: &StoreRoots,
     spawns: &grok::SpawnIndex,
@@ -318,6 +364,16 @@ impl SessionLister for StoreSessionLister {
         let roots = Arc::clone(&self.roots);
         let native = native.to_owned();
         blocking(move || store_cwd_of(&roots, harness, &native)).await
+    }
+
+    async fn permission_mode(
+        &self,
+        harness: HarnessId,
+        native: &str,
+    ) -> Result<Option<String>, TranscriptReaderError> {
+        let roots = Arc::clone(&self.roots);
+        let native = native.to_owned();
+        blocking(move || permission_mode_of(&roots, harness, &native)).await
     }
 
     async fn transcript(

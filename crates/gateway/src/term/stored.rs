@@ -1,3 +1,4 @@
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use kernel::transcript::SessionLister;
@@ -22,6 +23,20 @@ impl TerminalService {
             Some(lister) => Ok(Some(
                 lister.describe(harness, native, None).await?.is_some(),
             )),
+            None => Ok(None),
+        }
+    }
+
+    pub(crate) async fn recorded_cwd(
+        &self,
+        session: &wire::session_id::SessionId,
+    ) -> Result<Option<PathBuf>, ApiError> {
+        match &self.session_lister {
+            Some(lister) => Ok(lister
+                .store_cwd(session.harness(), session.native())
+                .await?
+                .map(PathBuf::from)
+                .filter(|dir| dir.is_dir())),
             None => Ok(None),
         }
     }

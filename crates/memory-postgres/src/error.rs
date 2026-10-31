@@ -8,6 +8,8 @@ pub enum Error {
     WikiContainment,
     #[error("wiki file access failed: {0}")]
     WikiIo(#[source] std::io::Error),
+    #[error("wiki scope: {0}")]
+    WikiScope(#[source] kernel::wiki::builder::WikiStoreError),
     #[error("capture channel is required")]
     MissingChannel,
     #[error("time windows must be resolved by the caller with its time zone")]
@@ -52,6 +54,8 @@ pub enum Error {
     DumpCancelled,
     #[error("{0}")]
     DumpMessage(String),
+    #[error("merge: {0}")]
+    Merge(String),
     #[error("{operation} failed: {message}")]
     Operation {
         operation: &'static str,
@@ -113,11 +117,13 @@ impl From<Error> for MemoryStoreError {
             | Error::DumpTruncated
             | Error::DumpDuplicate { .. }
             | Error::DumpCancelled
-            | Error::DumpMessage(_) => Self::InvalidRequest {
+            | Error::DumpMessage(_)
+            | Error::Merge(_) => Self::InvalidRequest {
                 message: value.to_string(),
             },
             Error::Integer(_)
             | Error::WikiIo(_)
+            | Error::WikiScope(_)
             | Error::ProjectIo(_)
             | Error::ProjectEncoding(_)
             | Error::ProjectTask(_) => Self::Unavailable(Box::new(value)),
@@ -157,6 +163,7 @@ impl From<Error> for JobQueueError {
             Error::MissingChannel
             | Error::WikiContainment
             | Error::WikiIo(_)
+            | Error::WikiScope(_)
             | Error::UnresolvedWindow
             | Error::InvalidId(_)
             | Error::Json(_)
@@ -169,7 +176,8 @@ impl From<Error> for JobQueueError {
             | Error::DumpTruncated
             | Error::DumpDuplicate { .. }
             | Error::DumpCancelled
-            | Error::DumpMessage(_) => Self::Unavailable(Box::new(value)),
+            | Error::DumpMessage(_)
+            | Error::Merge(_) => Self::Unavailable(Box::new(value)),
             error @ Error::StoredValue { .. } => Self::Claim {
                 message: error.to_string(),
                 source: Box::new(error),

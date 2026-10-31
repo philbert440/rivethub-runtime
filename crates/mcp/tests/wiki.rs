@@ -1,12 +1,13 @@
 #![cfg(test)]
 
 use kernel::wiki::WikiFilter;
+use kernel::wiki::page::WikiHistoryEntry;
+use kernel::wiki::{WikiCitation, WikiPageResponse};
 use mcp::Server;
 use rmcp::model::CallToolResult;
 use std::sync::Arc;
 use testkit::{FakeMemoryStore, MemoryRequest};
 use tokio_util::sync::CancellationToken;
-use wire::gateway::wiki::{WikiCitation, WikiHistoryEntry, WikiPageResponse};
 
 pub mod support;
 

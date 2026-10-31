@@ -4,7 +4,7 @@ use std::path::Path;
 use wire::gateway::memory::MemorySearchResponse;
 use wire::stream::openai::{EmbeddingRequest, EmbeddingResponse, EmbeddingRow};
 
-use super::{TestResult, free_port, provider_base, start, stop, write_config};
+use super::{TestResult, provider_base, start, stop, write_config};
 
 const QUERY: &str = "when does acmekit deploy";
 
@@ -48,7 +48,7 @@ async fn local_vector_search(
     );
     let server = testkit::stub_server(router).await?;
     let home = tempfile::tempdir()?;
-    let port = free_port()?;
+    let port = testkit::ports::claim()?;
     let database = home.path().join(".rivethub").join("memory.sqlite");
     if let Some(parent) = database.parent() {
         std::fs::create_dir_all(parent)?;

@@ -82,11 +82,6 @@ impl Drop for Node {
     }
 }
 
-fn free_port() -> TestResult<u16> {
-    let probe = std::net::TcpListener::bind(("127.0.0.1", 0))?;
-    Ok(probe.local_addr()?.port())
-}
-
 fn text(bytes: &[u8]) -> TestResult<String> {
     Ok(String::from_utf8(bytes.to_vec())?)
 }
@@ -105,7 +100,8 @@ async fn healthz(port: u16) -> TestResult<HealthzResponse> {
 #[tokio::test]
 async fn ensure_starts_one_detached_node_and_reuses_it() -> TestResult {
     let node = Node::new()?;
-    let port = free_port()?;
+    let claim = testkit::ports::claim()?;
+    let port = claim.number();
     let first = node.ensure(port, "30").await?;
     assert!(first.status.success(), "{first:?}");
     assert_eq!(
@@ -128,7 +124,8 @@ async fn ensure_starts_one_detached_node_and_reuses_it() -> TestResult {
 #[tokio::test]
 async fn concurrent_ensures_start_a_single_node() -> TestResult {
     let node = Node::new()?;
-    let port = free_port()?;
+    let claim = testkit::ports::claim()?;
+    let port = claim.number();
     let (left, right) = tokio::join!(node.ensure(port, "30"), node.ensure(port, "30"));
     let outputs = [left?, right?];
     let mut started = 0;
@@ -193,7 +190,8 @@ async fn ensure_fails_with_the_log_path_when_the_node_cannot_serve() -> TestResu
 async fn ensure_adopts_legacy_state_before_creating_its_own() -> TestResult {
     let node = Node::new()?;
     std::fs::create_dir(node.path().join(".rivetos"))?;
-    let port = free_port()?;
+    let claim = testkit::ports::claim()?;
+    let port = claim.number();
     let output = node.ensure(port, "30").await?;
     assert!(output.status.success(), "{output:?}");
     assert!(

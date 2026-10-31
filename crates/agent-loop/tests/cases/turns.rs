@@ -1,10 +1,11 @@
 use std::sync::Arc;
 
 use agent_loop::{Error, StopReason};
+use kernel::agent::TurnUsage;
 use kernel::model::ModelChunk;
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
-use wire::hooks::{HookContextKind, HookUsage};
+use wire::hooks::HookContextKind;
 use wire::message::{Message, MessageContent, Role};
 use wire::stream::LlmUsage;
 
@@ -66,7 +67,7 @@ async fn streams_reasoning_tools_results_and_usage_through_ports() {
     assert_eq!(result.tools_used, ["echo"]);
     assert_eq!(
         result.usage,
-        Some(HookUsage {
+        Some(TurnUsage {
             prompt_tokens: 14,
             completion_tokens: 6
         })

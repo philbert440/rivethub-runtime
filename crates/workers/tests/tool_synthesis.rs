@@ -12,11 +12,11 @@ use kernel::memory::{EmbedTarget, StoredChunk};
 use kernel::model::{
     Embedding, ModelCallFailure, ModelProvider, ModelProviderError, ModelRequest, ModelStreamItem,
 };
+use kernel::model::{LlmResponse, LlmResponseKind};
 use tokio::sync::{Mutex, mpsc};
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 use wire::JsonObject;
-use wire::stream::{LlmResponse, LlmResponseKind};
 use workers::tool_synthesis::handle_synthesize_tool_call;
 
 struct Store(Mutex<ToolCallMessage>);
@@ -78,7 +78,7 @@ impl MemoryJobStore for Store {
     async fn missing_wiki(
         &self,
         _limit: u32,
-    ) -> Result<Vec<kernel::wiki::builder::ExtractWiki>, MemoryJobError> {
+    ) -> Result<Vec<kernel::memory::jobs::MissingWiki>, MemoryJobError> {
         Ok(Vec::new())
     }
 }

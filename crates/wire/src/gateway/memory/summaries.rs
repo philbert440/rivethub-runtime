@@ -38,6 +38,8 @@ pub struct MemorySummaryNode {
     pub created_at: DateTime<Utc>,
     pub source_message_ids: Vec<String>,
     pub vector: VectorState,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub truncated: bool,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]

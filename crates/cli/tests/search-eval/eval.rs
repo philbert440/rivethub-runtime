@@ -17,9 +17,9 @@ use std::time::Instant;
 use chrono::Utc;
 use clap::Parser;
 use kernel::memory::Limit;
+use kernel::memory::MemoryScope;
 use kernel::memory::SearchQuery;
 use memory_sqlite::SqliteStore;
-use wire::gateway::memory::MemoryScope;
 
 use score::Metrics;
 use score::Scored;

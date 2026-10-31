@@ -83,6 +83,7 @@ pub fn new_topic(
                 .collect::<Result<_, _>>()?,
             parent,
             directory: None,
+            owner: Some(crate::owner().map_err(|error| TopicError::Unavailable(Box::new(error)))?),
         },
         at(0),
     )
@@ -257,11 +258,13 @@ pub async fn placements_keep_your_choice(store: &dyn TopicStore) -> Outcome {
     let mine = store.create(new_topic("Mine", &[], None)?).await?;
     let suggested = store.create(new_topic("Suggested", &[], None)?).await?;
     let session = session("00000000-0000-4000-8000-000000000001")?;
+    let owner = crate::owner()?;
     let placed = |topic: TopicId, by: PlacementSource, minute: u32| Placement {
         session: session.clone(),
         topic,
         by,
         at: at(minute),
+        owner: Some(owner.clone()),
     };
     same("forming", store.placement(&session).await?, None)?;
     let first = placed(suggested.id, PlacementSource::Categorizer, 1);
@@ -361,6 +364,7 @@ pub async fn topics_close_and_sessions_are_marked_as_history(store: &dyn TopicSt
             topic: topic.id,
             by: PlacementSource::You,
             at: at(12),
+            owner: Some(crate::owner()?),
         })
         .await?;
     store.unplace(&filed).await?;
@@ -396,6 +400,7 @@ pub async fn merges_move_placements_aliases_and_slugs(store: &dyn TopicStore) ->
         topic: source.id,
         by: PlacementSource::Categorizer,
         at: at(1),
+        owner: Some(crate::owner()?),
     };
     store.place(placement.clone()).await?;
     let merged = store.merge(source.id, into.id, at(5)).await?;
@@ -519,6 +524,7 @@ pub async fn suggestions_hold_until_the_session_is_placed(store: &dyn TopicStore
             topic: gateway.id,
             by: PlacementSource::Categorizer,
             at: at(3),
+            owner: Some(crate::owner()?),
         })
         .await?;
     same(

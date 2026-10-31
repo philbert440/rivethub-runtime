@@ -2,6 +2,7 @@
 
 use crate::wiki_support;
 
+use kernel::model::FinishReason;
 use kernel::queue::{FixedJob, JobName, JobQueue, WorkerRole};
 use kernel::wiki::builder::{ExtractWiki, WIKI_PIPELINE_VERSION, WikiBuilderStore, WikiWork};
 use memory_postgres::{PostgresMemory, PostgresQueue};
@@ -10,7 +11,6 @@ use testkit::fakes::FakeJobQueue;
 use tokio_util::sync::CancellationToken;
 use wiki_support::{TestResult, fixture, now, patch, provider, seed, seed_recording};
 use wire::message::MessageContent;
-use wire::stream::openai::FinishReason;
 use workers::wiki_builder::{
     WikiBuilderEnv, extract_wiki_job, handle_extract_wiki, handle_wiki_backfill,
 };
@@ -223,7 +223,92 @@ async fn wiki_claims_jobs_persists_sources_and_retries_embedding_delivery(
 }
 
 #[sqlx::test(migrator = "migrate::POSTGRES")]
-async fn wiki_backfill_requeues_old_done_and_failed_but_preserves_current_and_skipped(
+async fn pending_extractions_for_one_page_share_one_model_call(pool: PgPool) -> TestResult {
+    testkit::graphile_schema::install_graphile_worker(&pool).await?;
+    let queue = PostgresQueue::connect(pool.clone()).await?;
+    let wiki = tempfile::tempdir()?;
+    let store = PostgresMemory::new(pool.clone()).with_wiki_directory(wiki.path().to_path_buf());
+    let model = provider(&[patch()]);
+    let cancel = CancellationToken::new();
+    let mut jobs = Vec::new();
+    for _ in 0..3 {
+        let job = seed(&pool).await?;
+        wiki_support::filed(&store, &job).await?;
+        queue.enqueue(extract_wiki_job(&job)?).await?;
+        jobs.push(job);
+    }
+    let claimed = queue
+        .claim(&kernel::queue::ClaimSelector::matching(
+            queue.task_names(WorkerRole::WikiBuilder),
+        ))
+        .await?
+        .expect("wiki job");
+    let env = WikiBuilderEnv {
+        store: &store,
+        provider: &model,
+        queue: &queue,
+        model: "fake-chat",
+        now: now(),
+        cancel: &cancel,
+        topics: Some(wiki_support::ports(&store)),
+    };
+    assert_eq!(
+        handle_extract_wiki(&env, &claimed.payload).await?,
+        vec!["acmekit-deploys"]
+    );
+    let calls = model.chat_requests().await;
+    assert_eq!(calls.len(), 1);
+    let MessageContent::Text(user) = &calls
+        .first()
+        .expect("request")
+        .messages
+        .get(1)
+        .expect("user")
+        .content
+    else {
+        panic!("text");
+    };
+    let sent: wire::JsonObject = serde_json::from_str(user)?;
+    let summaries = sent
+        .get("summaries")
+        .and_then(|value| value.as_array())
+        .map(Vec::len);
+    assert_eq!(summaries, Some(3));
+    let ids: Vec<uuid::Uuid> = jobs.iter().map(|job| job.summary_id).collect();
+    let done: (i64, i64) = sqlx::query_as(
+        "SELECT (SELECT count(*) FROM rh_wiki_extractions WHERE status = 'done' AND summary_id = ANY($1)),
+                (SELECT count(DISTINCT summary_id) FROM rh_wiki_citations WHERE topic_slug = 'acmekit-deploys' AND summary_id = ANY($1))",
+    )
+    .bind(&ids)
+    .fetch_one(&pool)
+    .await?;
+    assert_eq!(done, (3, 3));
+    let left: (i64,) = sqlx::query_as(
+        "SELECT count(*) FROM graphile_worker._private_jobs WHERE key LIKE 'wiki-ext-%'",
+    )
+    .fetch_one(&pool)
+    .await?;
+    assert_eq!(
+        left.0, 1,
+        "only the lead job is left for its runner to complete"
+    );
+    let markdown = tokio::fs::read_to_string(wiki.path().join("topics/acmekit-deploys.md")).await?;
+    let page = kernel::wiki::page::parse_wiki_page(&markdown)?;
+    let mut sourced: Vec<String> = page
+        .meta
+        .sources
+        .iter()
+        .flat_map(|source| source.ids.clone())
+        .collect();
+    sourced.sort();
+    let mut expected: Vec<String> = ids.iter().map(ToString::to_string).collect();
+    expected.sort();
+    assert_eq!(sourced, expected);
+    Ok(())
+}
+
+#[sqlx::test(migrator = "migrate::POSTGRES")]
+async fn wiki_backfill_tops_up_missing_and_failed_leaves_and_never_reruns_done(
     pool: PgPool,
 ) -> TestResult {
     testkit::graphile_schema::install_graphile_worker(&pool).await?;
@@ -234,14 +319,14 @@ async fn wiki_backfill_requeues_old_done_and_failed_but_preserves_current_and_sk
     let cancel = CancellationToken::new();
     let mut expected = std::collections::BTreeSet::new();
     for (status, version, eligible) in [
-        ("done", 3, true),
+        ("done", 3, false),
         ("done", 4, false),
         ("failed", 4, true),
         ("skipped", 3, false),
         ("done", 5, false),
     ] {
         let job = seed(&pool).await?;
-        sqlx::query("INSERT INTO rh_wiki_extractions (summary_id, status, pipeline_version) VALUES ($1,$2,$3)")
+        sqlx::query("INSERT INTO rh_wiki_extractions (summary_id, status, pipeline_version, owner_user_id) VALUES ($1,$2,$3, 'owner')")
             .bind(job.summary_id).bind(status).bind(version).execute(&pool).await?;
         if eligible {
             expected.insert(job.summary_id);
@@ -257,8 +342,20 @@ async fn wiki_backfill_requeues_old_done_and_failed_but_preserves_current_and_sk
         cancel: &cancel,
         topics: Some(wiki_support::ports(&store)),
     };
-    assert_eq!(handle_wiki_backfill(&env).await?, expected.len());
-    assert_eq!(handle_wiki_backfill(&env).await?, expected.len());
+    let one = kernel::wiki::builder::BackfillBudget::flat(1);
+    assert_eq!(handle_wiki_backfill(&env, one).await?, 1);
+    assert_eq!(
+        handle_wiki_backfill(&env, one).await?,
+        0,
+        "the tier is full"
+    );
+    let all = kernel::wiki::builder::BackfillBudget::flat(100);
+    assert_eq!(handle_wiki_backfill(&env, all).await?, expected.len() - 1);
+    assert_eq!(
+        handle_wiki_backfill(&env, all).await?,
+        0,
+        "queued leaves are not added twice"
+    );
     let mut actual = std::collections::BTreeSet::new();
     while let Some(job) = queue
         .claim(&kernel::queue::ClaimSelector::matching(
@@ -275,8 +372,29 @@ async fn wiki_backfill_requeues_old_done_and_failed_but_preserves_current_and_sk
     let crons = PostgresQueue::crontab(WorkerRole::WikiBuilder);
     assert!(crons.iter().any(
         |cron| cron.task == JobName::Fixed(FixedJob::EnqueueWikiBackfill)
-            && cron.schedule == "*/10 * * * *"
+            && cron.schedule == "*/1 * * * *"
     ));
+    Ok(())
+}
+
+#[sqlx::test(migrator = "migrate::POSTGRES")]
+async fn waiting_new_work_holds_the_backfill_to_its_busy_size(pool: PgPool) -> TestResult {
+    testkit::graphile_schema::install_graphile_worker(&pool).await?;
+    let queue = PostgresQueue::connect(pool.clone()).await?;
+    let store = PostgresMemory::new(pool.clone());
+    for _ in 0..3 {
+        seed(&pool).await?;
+    }
+    let budget = kernel::wiki::builder::BackfillBudget { idle: 3, busy: 1 };
+    let fresh = seed(&pool).await?;
+    let mut new_work = extract_wiki_job(&fresh)?;
+    new_work.priority = -10;
+    queue.enqueue(new_work).await?;
+    assert_eq!(store.wiki_backfill(budget).await?.len(), 1);
+    sqlx::query("DELETE FROM graphile_worker._private_jobs")
+        .execute(&pool)
+        .await?;
+    assert_eq!(store.wiki_backfill(budget).await?.len(), 3);
     Ok(())
 }
 

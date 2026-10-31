@@ -3,11 +3,11 @@ use crate::common;
 use std::collections::{BTreeMap, BTreeSet};
 
 use chrono::{DateTime, Utc};
+use kernel::memory::{CaptureBatchRequest, CaptureResult};
 use memory_postgres::{CaptureOptions, Error, PostgresMemory};
 use serde::Deserialize;
 use sqlx::{PgPool, types::Json};
 use wire::JsonObject;
-use wire::capture::{CaptureBatchRequest, CaptureResult};
 use wire::message::Role;
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
@@ -59,6 +59,10 @@ struct Conversation {
     task_id: Option<String>,
     active: bool,
     owner_user_id: Option<String>,
+}
+
+fn caller_owned(recorded: Option<&str>) -> &str {
+    recorded.unwrap_or(testkit::OWNER)
 }
 
 #[derive(Deserialize)]
@@ -126,10 +130,12 @@ async fn capture_batch_golden(pool: PgPool) -> TestResult {
     let mut events = BTreeSet::new();
     let mut skipped_conversations = BTreeSet::new();
     for case in &recording.results {
-        let options = CaptureOptions {
-            owner_user_id: case.opts.owner_user_id.clone(),
-            node: None,
-        };
+        let options = CaptureOptions::owned_by(&kernel::owner::Owner::new(
+            case.opts
+                .owner_user_id
+                .clone()
+                .unwrap_or_else(|| testkit::OWNER.to_owned()),
+        )?);
         if MEMORY_SKIPS.iter().any(|(name, _)| *name == case.label) {
             assert!(matches!(
                 memory.capture_batch(&case.batch, &options).await,
@@ -157,10 +163,15 @@ async fn capture_batch_golden(pool: PgPool) -> TestResult {
         let id = conversations
             .get(&expected.id)
             .ok_or("unreplayed conversation")?;
-        let actual: Conversation = sqlx::query_as(
+        let mut actual: Conversation = sqlx::query_as(
             "SELECT session_key, agent, channel, title, settings, task_id::text, active, owner_user_id
              FROM rh_conversations WHERE id = $1::text::uuid",
         ).bind(id).fetch_one(&pool).await?;
+        assert_eq!(
+            actual.owner_user_id.as_deref(),
+            Some(caller_owned(expected.row.owner_user_id.as_deref()))
+        );
+        actual.owner_user_id.clone_from(&expected.row.owner_user_id);
         assert_eq!(actual, expected.row);
     }
     let mut checked = 0i64;
@@ -178,11 +189,16 @@ async fn capture_batch_golden(pool: PgPool) -> TestResult {
         let id = conversations
             .get(&expected.conversation_id)
             .ok_or("unreplayed message")?;
-        let actual: Message = sqlx::query_as(
+        let mut actual: Message = sqlx::query_as(
             "SELECT agent, channel, to_json(role) AS role, content, tool_name, tool_args, tool_result, metadata,
                     created_at, owner_user_id, content_hash
              FROM rh_messages WHERE conversation_id = $1::text::uuid AND metadata->>'event_id' = $2",
         ).bind(id).bind(event_id).fetch_one(&pool).await?;
+        assert_eq!(
+            actual.owner_user_id.as_deref(),
+            Some(caller_owned(expected.row.owner_user_id.as_deref()))
+        );
+        actual.owner_user_id.clone_from(&expected.row.owner_user_id);
         assert_eq!(actual, expected.row);
         checked += 1;
     }

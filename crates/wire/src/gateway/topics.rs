@@ -67,6 +67,12 @@ pub struct TopicRecord {
     #[serde(default)]
     #[serde_as(as = "Option<serde_with::TimestampMilliSeconds>")]
     pub closed_at: Option<DateTime<Utc>>,
+    #[serde(default)]
+    pub owner: Option<String>,
+    #[serde(default)]
+    pub visibility: Option<String>,
+    #[serde(default)]
+    pub visibility_mark: Option<String>,
 }
 
 #[serde_as]
@@ -194,6 +200,10 @@ pub struct TopicSession {
     pub parent_session_id: Option<SessionId>,
     #[serde(default)]
     pub task_id: Option<String>,
+    #[serde(default)]
+    pub visibility: Option<String>,
+    #[serde(default)]
+    pub visibility_mark: Option<String>,
 }
 
 #[serde_as]

@@ -120,9 +120,11 @@ impl Tasks {
         };
         let above = self.store.by_child(&session).await?;
         let parent = Parent::of(Some(session.clone()), source, above.as_ref())?;
-        let mode = terminal
-            .and_then(|terminal| terminal.permission_mode(&session))
-            .or_else(|| above.and_then(|task| task.target.permission_mode));
+        let mode = match terminal {
+            Some(terminal) => terminal.permission_mode(&session).await,
+            None => None,
+        }
+        .or_else(|| above.and_then(|task| task.target.permission_mode));
         Ok((parent, mode))
     }
 }

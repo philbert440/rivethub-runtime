@@ -4,15 +4,15 @@ use super::store_error;
 use chrono::DateTime;
 use chrono::Utc;
 use kernel::memory::MemoryStoreError;
+use kernel::memory::TagState;
 use kernel::memory::TagTaxonomyDecision;
+use kernel::memory::TagTaxonomyEntry;
+use kernel::memory::TagTaxonomyMerge;
+use kernel::memory::TagTaxonomyMergeResult;
 use kernel::memory::TagTaxonomyQuery;
 use kernel::memory::TagTaxonomyUpsert;
 use sqlx::PgPool;
 use sqlx::QueryBuilder;
-use wire::gateway::memory::TagState;
-use wire::gateway::memory::TagTaxonomyEntry;
-use wire::gateway::memory::TagTaxonomyMerge;
-use wire::gateway::memory::TagTaxonomyMergeResult;
 
 #[derive(Debug, sqlx::FromRow)]
 struct TagTaxonomyRow {

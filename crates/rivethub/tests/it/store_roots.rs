@@ -27,6 +27,7 @@ fn store_roots_default_under_home() {
                 home.join("Library/Application Support/Claude"),
                 home.join(".config/Claude"),
             ],
+            dsh: Some(home.join(".dsh")),
         }
     );
 }

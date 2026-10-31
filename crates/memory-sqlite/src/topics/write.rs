@@ -1,3 +1,5 @@
+use kernel::filing::conversation_keys;
+use kernel::owner::Owner;
 use kernel::topics::MergePlan;
 use kernel::topics::Placement;
 use kernel::topics::Root;
@@ -51,8 +53,9 @@ pub(super) fn insert(conn: &Connection, topic: &Topic) -> Result<(), TopicError>
     let directory = topic.directory.as_ref();
     conn.execute(
         "INSERT INTO rh_topics (id, slug, name, parent_id, directory_kind, directory_node,
-                                directory_path, created_at, updated_at, closed_at, kind)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+                                directory_path, created_at, updated_at, closed_at, kind,
+                                owner_user_id)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
         params![
             topic.id.to_string(),
             topic.slug.as_str(),
@@ -65,6 +68,7 @@ pub(super) fn insert(conn: &Connection, topic: &Topic) -> Result<(), TopicError>
             time::stamp(topic.updated_at),
             topic.closed_at.map(time::stamp),
             topic.kind.to_string(),
+            topic.owner.as_ref().map(Owner::as_str),
         ],
     )
     .map_err(failed("topic create"))?;
@@ -243,16 +247,22 @@ pub(super) fn rename_redirect(
 
 pub(super) fn placement(conn: &Connection, placement: &Placement) -> Result<(), TopicError> {
     conn.execute(
-        "INSERT INTO rh_session_placements (session_id, topic_id, placed_by, placed_at)
-         VALUES (?1, ?2, ?3, ?4)
+        "INSERT INTO rh_session_placements (session_id, topic_id, placed_by, placed_at, owner_user_id)
+         VALUES (?1, ?2, ?3, ?4,
+                 coalesce((SELECT c.owner_user_id FROM ros_conversations c
+                            WHERE c.session_key IN (?1, ?6)
+                            ORDER BY c.created_at LIMIT 1), ?5))
          ON CONFLICT (session_id) DO UPDATE SET topic_id = excluded.topic_id,
                                                 placed_by = excluded.placed_by,
-                                                placed_at = excluded.placed_at",
+                                                placed_at = excluded.placed_at,
+                                                owner_user_id = excluded.owner_user_id",
         params![
             placement.session.as_str(),
             placement.topic.to_string(),
             placement.by.to_string(),
             time::stamp(placement.at),
+            placement.owner.as_ref().map(Owner::as_str),
+            conversation_keys(&placement.session).get(1),
         ],
     )
     .map_err(failed("session placement write"))?;

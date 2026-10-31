@@ -4,8 +4,8 @@ use chrono::DateTime;
 use chrono::Utc;
 use kernel::filing::Filable;
 use kernel::memory::ConversationHead;
+use kernel::wiki::WikiCitation;
 use uuid::Uuid;
-use wire::gateway::wiki::WikiCitation;
 use wire::session_id::SessionId;
 
 use crate::Error;

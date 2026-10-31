@@ -282,7 +282,7 @@ impl Attached<'_> {
                 return Ok(false);
             }
         };
-        let turns = read.read.turns;
+        let turns = crate::history::body::turns(read.read.turns);
         if follow && self.last.as_ref() == Some(&turns) {
             return Ok(false);
         }

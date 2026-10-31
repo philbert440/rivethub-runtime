@@ -1,5 +1,5 @@
 use crate::queue::{FixedJob, Job, JobKeyMode, JobName, MAINTENANCE_PRIORITY, WorkerRole};
-use wire::JsonObject;
+use values::JsonObject;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CronEntry {
@@ -47,7 +47,7 @@ impl WorkerRole {
             ],
             Self::Categorizer => vec![cron("tidy-sweep", FixedJob::ProposeTidy, 60)],
             Self::WikiBuilder => {
-                let mut entries = vec![cron("wiki-backfill", FixedJob::EnqueueWikiBackfill, 10)];
+                let mut entries = vec![cron("wiki-backfill", FixedJob::EnqueueWikiBackfill, 1)];
                 if wiki_enabled {
                     entries.push(cron("stale-wiki-sweep", FixedJob::EnqueueStaleWiki, 15));
                 }

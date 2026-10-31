@@ -278,8 +278,8 @@ pub(crate) async fn insert_chunk(
 ) -> Result<(), EmbeddingStoreError> {
     sqlx::query(
         "insert into rh_message_chunks
-            (message_id, idx, char_start, char_end, content, embedding, embed_failures)
-         values ($1, $2, $3, $4, $5, $6, 0)",
+            (message_id, idx, char_start, char_end, content, embedding, embed_failures, owner_user_id)
+         values ($1, $2, $3, $4, $5, $6, 0, (select owner_user_id from rh_messages where id = $1))",
     )
     .bind(message_id)
     .bind(chunk.index)

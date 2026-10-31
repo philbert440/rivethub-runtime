@@ -2,15 +2,15 @@ use super::*;
 use chrono::DateTime;
 use chrono::Utc;
 use kernel::memory::MemoryExport;
+use kernel::memory::MemoryMessageTally;
 use kernel::memory::MemoryStoreError;
+use kernel::memory::MemorySummaryNode;
 use kernel::memory::SummaryDag;
+use kernel::memory::SummaryKind;
 use kernel::memory::SummaryOwner;
+use kernel::memory::VectorState;
 use tokio_util::sync::CancellationToken;
-use wire::gateway::memory::MemoryMessageTally;
 use wire::gateway::memory::MemorySummaryDagResponse;
-use wire::gateway::memory::MemorySummaryNode;
-use wire::gateway::memory::SummaryKind;
-use wire::gateway::memory::VectorState;
 
 const DUMP: &[u8] = &[0x1f, 0x8b, 0x08, 0x00, 0x2d, 0x2d];
 
@@ -76,6 +76,7 @@ fn node(
         created_at: at("2026-10-10T12:10:00Z"),
         source_message_ids: vec!["00000000-0000-4000-8000-000000000101".to_owned()],
         vector,
+        truncated: false,
     }
 }
 
@@ -124,8 +125,14 @@ fn summaries_route_returns_the_session_dag_root_first() {
     let parsed: MemorySummaryDagResponse =
         serde_json::from_slice(&response.body).expect("summary dag response");
     assert_eq!(parsed.session_id, SESSION);
-    assert_eq!(parsed.summaries, dag.summaries);
-    assert_eq!(parsed.messages, dag.messages);
+    assert_eq!(
+        serde_json::to_string(&parsed.summaries).expect("summaries"),
+        serde_json::to_string(&dag.summaries).expect("summaries")
+    );
+    assert_eq!(
+        serde_json::to_string(&parsed.messages).expect("messages"),
+        serde_json::to_string(&dag.messages).expect("messages")
+    );
     let requests = block_on(store.requests());
     assert!(
         requests.contains(&testkit::MemoryRequest::SummaryDag(SummaryOwner::Session(
@@ -139,7 +146,59 @@ fn summaries_route_returns_the_session_dag_root_first() {
         serde_json::from_slice(&response.body).expect("empty summary dag response");
     assert_eq!(parsed.session_id, "unknown-session");
     assert_eq!(parsed.summaries.len(), 0);
-    assert_eq!(parsed.messages, MemoryMessageTally::default());
+    assert_eq!(
+        parsed.messages,
+        wire::gateway::memory::MemoryMessageTally::default()
+    );
+}
+
+#[test]
+fn an_outline_drops_sources_and_one_summary_reads_whole_and_compressed() {
+    let (gateway, store) = common::gateway();
+    let leaf = "00000000-0000-4000-8000-000000000002";
+    let mut long = node(leaf, None, 0, SummaryKind::Leaf, VectorState::Embedded);
+    long.content = "summary text ".repeat(60);
+    let dag = SummaryDag {
+        session_key: Some(SESSION.to_owned()),
+        summaries: vec![long.clone()],
+        messages: MemoryMessageTally::default(),
+    };
+    block_on(store.script_summary_dag(SummaryOwner::Session(SESSION.to_owned()), dag));
+    let app = gateway.router(false);
+    let response = get(
+        &app,
+        &format!("/api/memory/summaries/{SESSION}?outline=true"),
+    );
+    assert_eq!(response.status, 200);
+    let parsed: MemorySummaryDagResponse =
+        serde_json::from_slice(&response.body).expect("summary outline");
+    let shown = parsed.summaries.first().expect("leaf");
+    assert!(shown.truncated && shown.source_message_ids.is_empty());
+    assert!(long.content.starts_with(&shown.content) && shown.content.len() < long.content.len());
+    let one = get(&app, &format!("/api/memory/summaries/{SESSION}/{leaf}"));
+    assert_eq!(one.status, 200);
+    let whole: wire::gateway::memory::MemorySummaryNode =
+        serde_json::from_slice(&one.body).expect("one summary");
+    assert_eq!(whole.content, long.content);
+    assert!(!whole.truncated && whole.source_message_ids.len() == 1);
+    assert_eq!(
+        get(
+            &app,
+            &format!("/api/memory/summaries/{SESSION}/00000000-0000-4000-8000-000000000009")
+        )
+        .status,
+        404
+    );
+    let mut request = recorded(
+        "GET",
+        &format!("/api/memory/summaries/{SESSION}"),
+        Vec::new(),
+    );
+    request
+        .headers
+        .push(("Accept-Encoding".to_owned(), "gzip".to_owned()));
+    let packed = block_on(answer(app, request)).expect("in-process answer");
+    assert_eq!(header(&packed, "content-encoding"), Some("gzip"));
 }
 
 #[test]
@@ -170,7 +229,10 @@ fn a_conversation_answers_its_summary_dag_under_its_own_key() {
         parsed.session_id,
         "discord:00000000-0000-4000-8000-000000000062"
     );
-    assert_eq!(parsed.summaries, dag.summaries);
+    assert_eq!(
+        serde_json::to_string(&parsed.summaries).expect("summaries"),
+        serde_json::to_string(&dag.summaries).expect("summaries")
+    );
     let unknown = get(
         &app,
         "/api/memory/conversations/00000000-0000-4000-8000-000000000064/summaries",

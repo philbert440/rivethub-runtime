@@ -69,6 +69,8 @@ pub enum TidyError {
     Topic(#[from] TopicError),
     #[error(transparent)]
     Wiki(#[from] crate::wiki::builder::WikiStoreError),
+    #[error("proposal {id} is out of date and was set aside: {reason}")]
+    Stale { id: ProposalId, reason: String },
     #[error("wiki pages are not configured")]
     PagesUnavailable,
     #[error("tidy store is unavailable")]

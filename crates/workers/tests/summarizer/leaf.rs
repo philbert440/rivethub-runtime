@@ -333,9 +333,66 @@ async fn configured_token_caps_bound_the_leaf_request() {
         .lock()
         .await
         .iter()
+        .filter(|call| call.kind == "LEAF_SYSTEM_PROMPT")
         .map(|call| call.max_tokens)
         .collect();
     assert_ne!(caps.len(), 0);
     assert!(caps.iter().all(|cap| *cap == Some(4096)), "{caps:?}");
     assert!(settings.clone().with_max_tokens(0, 1, 1).is_err());
+}
+
+#[tokio::test]
+async fn the_first_leaf_names_a_session_whose_title_is_weak() {
+    let weak = Uuid::parse_str("00000000-0000-4000-8000-000000000004").expect("id");
+    let named = Uuid::parse_str("00000000-0000-4000-8000-000000000005").expect("id");
+    let store = Arc::new(MemStore::new(vec![
+        window(
+            weak,
+            "cli:weak",
+            "Session cli:weak",
+            messages(at("2026-10-10T12:00:00Z"), 10),
+        ),
+        window(
+            named,
+            "cli:named",
+            "AcmeKit deploy plan",
+            messages(at("2026-10-10T12:00:00Z"), 10),
+        ),
+    ]));
+    let script = Arc::new(Scripted::success());
+    let jobs = Arc::new(Seen::default());
+    let settings = settings();
+    let token = cancel();
+    let env = bind(
+        &store,
+        &script,
+        &jobs,
+        &settings,
+        at("2026-10-10T12:10:00Z"),
+        &token,
+    );
+    for id in [weak, named] {
+        handle_summarize(&env, &payload_of(id, SummaryTrigger::Threshold))
+            .await
+            .expect("summarize");
+    }
+    let kinds: Vec<String> = script
+        .calls
+        .lock()
+        .await
+        .iter()
+        .map(|call| call.kind.clone())
+        .collect();
+    assert_eq!(
+        kinds,
+        [
+            "LEAF_SYSTEM_PROMPT",
+            "TITLE_SYSTEM_PROMPT",
+            "LEAF_SYSTEM_PROMPT"
+        ]
+    );
+    assert_eq!(
+        *store.retitled.lock().await,
+        [(weak, "Plan blue-green AcmeKit deploys".to_owned())]
+    );
 }

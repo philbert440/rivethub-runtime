@@ -5,8 +5,6 @@ use std::path::PathBuf;
 use std::pin::Pin;
 use std::pin::pin;
 use std::sync::Arc;
-use std::sync::atomic::AtomicBool;
-use std::sync::atomic::Ordering;
 use std::task::{Context, Poll};
 use std::time::Duration;
 
@@ -322,34 +320,9 @@ fn peer_certificate(
     }
 }
 
-#[derive(Clone, Debug)]
-pub(crate) struct ConnectionAbort {
-    flag: Arc<AtomicBool>,
-}
-
-impl ConnectionAbort {
-    fn new() -> Self {
-        Self {
-            flag: Arc::new(AtomicBool::new(false)),
-        }
-    }
-
-    pub(crate) fn trip(&self) {
-        self.flag.store(true, Ordering::Release);
-    }
-
-    fn tripped(&self) -> bool {
-        self.flag.load(Ordering::Acquire)
-    }
-}
-
-#[derive(Debug, Error)]
-#[error("the connection was closed without a response")]
-struct ConnectionAborted;
-
 impl tower::Service<Request<Incoming>> for GatewayService {
     type Response = Response<KeepAliveBody>;
-    type Error = ConnectionAborted;
+    type Error = std::convert::Infallible;
     type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
 
     fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
@@ -362,8 +335,6 @@ impl tower::Service<Request<Incoming>> for GatewayService {
         if let Some(peer) = &self.peer {
             request.extensions_mut().insert(peer.clone());
         }
-        let abort = ConnectionAbort::new();
-        request.extensions_mut().insert(abort.clone());
         let start = self.clock.start();
         let request = request.map(|body| DeadlineBody::new(body, start, self.request_timeout));
         let routed = self.router.call(request);
@@ -374,9 +345,6 @@ impl tower::Service<Request<Incoming>> for GatewayService {
                 Ok(response) => response,
                 Err(never) => match never {},
             };
-            if abort.tripped() {
-                return Err(ConnectionAborted);
-            }
             let arm = if response.status() == StatusCode::SWITCHING_PROTOCOLS {
                 None
             } else {

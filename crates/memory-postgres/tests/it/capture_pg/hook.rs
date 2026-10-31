@@ -68,7 +68,7 @@ pub(super) async fn ingest_hook_event(
             title: Some(&title),
             settings: &settings,
             task_id: task_id(opts).as_deref(),
-            owner_user_id: owner.as_deref(),
+            owner_user_id: &owner,
             created_at: None,
             updated_at: None,
             active: true,
@@ -112,7 +112,7 @@ pub(super) async fn ingest_hook_event(
                 tool_args: None,
                 tool_result: None,
                 metadata: &metadata,
-                owner_user_id: owner.as_deref(),
+                owner_user_id: &owner,
                 created_at: None,
             }
         } else {
@@ -130,7 +130,7 @@ pub(super) async fn ingest_hook_event(
                 tool_args: args.as_ref(),
                 tool_result: result.as_deref(),
                 metadata: &metadata,
-                owner_user_id: owner.as_deref(),
+                owner_user_id: &owner,
                 created_at: None,
             }
         };
@@ -138,11 +138,6 @@ pub(super) async fn ingest_hook_event(
         inserted = 1;
     }
     writer.touch_settings(record.id, &settings).await?;
-    if let Some(owner_name) = &owner
-        && !record.created
-    {
-        writer.adopt_owner(record.id, owner_name).await?;
-    }
     writer.commit().await?;
 
     Ok(encoded(HookOutcomeBody {

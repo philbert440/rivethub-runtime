@@ -7,22 +7,22 @@ use std::sync::atomic::Ordering;
 use agent_client_protocol::schema::v1 as acp;
 use async_trait::async_trait;
 use config::Config;
+use kernel::harness::ApprovalDecision;
 use kernel::harness::HarnessAdapter;
 use kernel::harness::HarnessAdapterError;
 use kernel::harness::HarnessCommands;
 use kernel::harness::SessionEvent;
 use kernel::harness::SessionOption;
 use kernel::harness::SessionSpec;
+use kernel::harness::SessionSwitches;
+use kernel::harness::SteerOutcome;
 use kernel::harness::SystemPromptSupport;
 use kernel::harness::TurnInput;
 use parking_lot::Mutex;
 use tokio::sync::mpsc;
 use tokio::sync::mpsc::Receiver;
 use tokio_util::sync::CancellationToken;
-use wire::gateway::sessions::SessionSwitches;
-use wire::harness::ApprovalDecision;
 use wire::harness::HarnessId;
-use wire::harness::SteerOutcome;
 use wire::session_id::SessionId;
 
 use crate::connection::AgentConnection;
@@ -84,6 +84,7 @@ pub struct AcpHarnessAdapter {
     search_paths: Vec<PathBuf>,
     discoveries: Arc<crate::discovery::Discoveries>,
     discovery_dir: Option<PathBuf>,
+    unsaved: bool,
 }
 
 impl AcpHarnessAdapter {
@@ -95,6 +96,7 @@ impl AcpHarnessAdapter {
     ) -> Self {
         let mut adapter = Self::new(config).with_search_paths(search_paths);
         adapter.launch = LaunchTable::from_entries([(harness, crate::AcpLaunch::Native(command))]);
+        adapter.unsaved = true;
         adapter
     }
 
@@ -120,6 +122,7 @@ impl AcpHarnessAdapter {
             search_paths: Vec::new(),
             discoveries: Arc::default(),
             discovery_dir: None,
+            unsaved: false,
         }
     }
 
@@ -133,6 +136,7 @@ impl AcpHarnessAdapter {
             search_paths: Vec::new(),
             discoveries: Arc::default(),
             discovery_dir: None,
+            unsaved: false,
         }
     }
 
@@ -320,10 +324,13 @@ impl HarnessAdapter for AcpHarnessAdapter {
         Self::requested_session(&spec)?;
         let command = self.session_command(spec.harness, &spec.session)?;
         let working_dir = self.working_dir(&spec, &command)?;
-        let meta = match spec.startup_context.as_deref() {
+        let mut meta = match spec.startup_context.as_deref() {
             Some(text) => crate::launch::startup_meta(spec.harness, text).map_err(port)?,
             None => None,
         };
+        if self.unsaved {
+            meta = crate::launch::unsaved(spec.harness, meta).map_err(port)?;
+        }
         let agent = crate::connection::start_new(&command, &working_dir, meta)
             .await
             .map_err(port)?;
@@ -368,7 +375,11 @@ impl HarnessAdapter for AcpHarnessAdapter {
         Ok(canonical)
     }
 
-    async fn resume(&self, session: &SessionId) -> Result<(), HarnessAdapterError> {
+    async fn resume(
+        &self,
+        session: &SessionId,
+        cwd: Option<&std::path::Path>,
+    ) -> Result<(), HarnessAdapterError> {
         let native = identity::from_canonical(session).map_err(port)?;
         let command = self.session_command(native.harness(), session)?;
         {
@@ -379,7 +390,7 @@ impl HarnessAdapter for AcpHarnessAdapter {
                 }));
             }
         }
-        let working_dir = self.resume_dir(&command)?;
+        let working_dir = cwd.map_or_else(|| self.resume_dir(&command), |cwd| Ok(cwd.into()))?;
         let protocol_session = acp::SessionId::new(native.native());
         let agent = crate::connection::start_loaded(&command, &working_dir, &protocol_session)
             .await
@@ -541,7 +552,9 @@ impl HarnessAdapter for AcpHarnessAdapter {
         receiver.ok_or_else(|| HarnessAdapterError::EventStreamTaken(session.clone()))
     }
 
-    async fn offerings(&self) -> Result<Vec<wire::harness::HarnessOffering>, HarnessAdapterError> {
+    async fn offerings(
+        &self,
+    ) -> Result<Vec<kernel::harness::HarnessOffering>, HarnessAdapterError> {
         let facts = self.launch.facts();
         let search = self.search_paths.clone();
         let installed = tokio::task::spawn_blocking(move || probe(&facts, &search))

@@ -1,5 +1,6 @@
 use kernel::memory::SummaryKind;
 use kernel::memory::names_session;
+use kernel::memory::needs_title;
 use kernel::memory::summary_title;
 use rusqlite::Connection;
 use rusqlite::OptionalExtension as _;
@@ -16,6 +17,10 @@ const SUMMARIZED_SQL: &str = "SELECT id, title FROM ros_conversations c \
 struct Retitle {
     current: Option<String>,
     title: String,
+}
+
+struct Stored {
+    title: Option<String>,
 }
 
 impl SqliteStore {
@@ -52,30 +57,54 @@ pub(crate) fn title_from_first_leaf(conn: &Connection, id: &str) -> Result<bool,
     let Some(retitle) = retitle(conn, id)? else {
         return Ok(false);
     };
-    let current = retitle.current.map_or(Value::Null, Value::Text);
+    set_title(conn, id, retitle.current, retitle.title)
+}
+
+pub(crate) fn name_conversation(
+    conn: &Connection,
+    id: &str,
+    title: &str,
+) -> Result<bool, SqliteError> {
+    let Some(Stored { title: current }) = current_title(conn, id)? else {
+        return Ok(false);
+    };
+    if !needs_title(current.as_deref()) {
+        return Ok(false);
+    }
+    set_title(conn, id, current, title.to_owned())
+}
+
+fn set_title(
+    conn: &Connection,
+    id: &str,
+    current: Option<String>,
+    title: String,
+) -> Result<bool, SqliteError> {
     let updated = conn
         .execute(
             "UPDATE ros_conversations SET title = ?1 WHERE id = ?2 AND title IS ?3",
             params_from_iter([
-                Value::Text(retitle.title),
+                Value::Text(title),
                 Value::Text(id.to_owned()),
-                current,
+                current.map_or(Value::Null, Value::Text),
             ]),
         )
-        .map_err(SqliteError::query("set summary title"))?;
+        .map_err(SqliteError::query("set conversation title"))?;
     Ok(updated == 1)
 }
 
+fn current_title(conn: &Connection, id: &str) -> Result<Option<Stored>, SqliteError> {
+    conn.query_row(
+        "SELECT title FROM ros_conversations WHERE id = ?1",
+        params_from_iter([Value::Text(id.to_owned())]),
+        |row| Ok(Stored { title: row.get(0)? }),
+    )
+    .optional()
+    .map_err(SqliteError::query("conversation title"))
+}
+
 fn retitle(conn: &Connection, id: &str) -> Result<Option<Retitle>, SqliteError> {
-    let current: Option<Option<String>> = conn
-        .query_row(
-            "SELECT title FROM ros_conversations WHERE id = ?1",
-            params_from_iter([Value::Text(id.to_owned())]),
-            |row| row.get(0),
-        )
-        .optional()
-        .map_err(SqliteError::query("conversation title"))?;
-    let Some(current) = current else {
+    let Some(Stored { title: current }) = current_title(conn, id)? else {
         return Ok(None);
     };
     if current.as_deref().is_some_and(names_session) {

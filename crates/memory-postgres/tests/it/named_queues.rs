@@ -246,3 +246,45 @@ async fn task_and_worker_claims_share_named_queue_exclusion(pool: PgPool) -> Tes
     assert_eq!(owner(&pool, "serial").await?, None);
     Ok(())
 }
+
+#[sqlx::test(migrator = "migrate::POSTGRES")]
+async fn a_compaction_added_while_one_runs_waits_for_it(pool: PgPool) -> TestResult {
+    common::install_graphile(&pool).await?;
+    let compact = || kernel::queue::Job {
+        name: JobName::Fixed(kernel::queue::FixedJob::SummarizeConversation),
+        payload: wire::JsonObject::default(),
+        key: Some("compact-one".to_owned()),
+        key_mode: kernel::queue::JobKeyMode::Replace,
+        priority: 0,
+        run_at: None,
+        max_attempts: None,
+    };
+    let left = PostgresQueue::connect(pool.clone()).await?;
+    let right = PostgresQueue::connect(pool.clone()).await?;
+    let selector = ClaimSelector::matching(left.task_names(WorkerRole::Summarizer));
+    left.enqueue(compact()).await?;
+    let running = left.claim(&selector).await?.ok_or("first compaction")?;
+    let waiting = right.enqueue(compact()).await?;
+    assert_ne!(waiting, running.id, "the running job keeps going");
+    assert!(right.claim(&selector).await?.is_none());
+    left.complete(running.id).await?;
+    let next = right.claim(&selector).await?.ok_or("queued compaction")?;
+    assert_eq!(next.id, waiting);
+    Ok(())
+}
+
+#[sqlx::test(migrator = "migrate::POSTGRES")]
+async fn a_claim_ceiling_leaves_lower_priority_jobs_for_others(pool: PgPool) -> TestResult {
+    common::install_graphile(&pool).await?;
+    sqlx::query("SELECT graphile_worker.add_job('embed-target', '{}'::json, priority => 50)")
+        .execute(&pool)
+        .await?;
+    let capped = PostgresQueue::connect(pool.clone())
+        .await?
+        .claiming_at_most(Some(49));
+    let selector = ClaimSelector::matching(capped.task_names(WorkerRole::Embedder));
+    assert!(capped.claim(&selector).await?.is_none());
+    let open = PostgresQueue::connect(pool.clone()).await?;
+    assert!(open.claim(&selector).await?.is_some());
+    Ok(())
+}

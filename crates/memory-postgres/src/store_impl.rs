@@ -8,31 +8,32 @@ use async_trait::async_trait;
 use chrono::DateTime;
 use chrono::Utc;
 use kernel::memory::BrowseFilter;
+use kernel::memory::CaptureBatchRequest;
+use kernel::memory::CaptureMessage;
+use kernel::memory::CaptureResult;
+use kernel::memory::MemoryEntry;
 use kernel::memory::MemoryStore;
 use kernel::memory::MemoryStoreError;
+use kernel::memory::PendingTagWire;
 use kernel::memory::SearchQuery;
 use kernel::memory::TagAdd;
+use kernel::memory::TagCount;
 use kernel::memory::TagCountsQuery;
 use kernel::memory::TagDecision;
 use kernel::memory::TagId;
 use kernel::memory::TagListQuery;
 use kernel::memory::TagLookup;
 use kernel::memory::TagTaxonomyDecision;
+use kernel::memory::TagTaxonomyEntry;
+use kernel::memory::TagTaxonomyMerge;
+use kernel::memory::TagTaxonomyMergeResult;
 use kernel::memory::TagTaxonomyQuery;
 use kernel::memory::TagTaxonomyUpsert;
+use kernel::memory::TagWire;
 use kernel::memory::spoken_title;
+use kernel::owner::Owner;
 use serde::Deserialize as _;
 use uuid::Uuid;
-use wire::capture::CaptureBatchRequest;
-use wire::capture::CaptureMessage;
-use wire::capture::CaptureResult;
-use wire::gateway::memory::PendingTagWire;
-use wire::gateway::memory::TagCount;
-use wire::gateway::memory::TagTaxonomyEntry;
-use wire::gateway::memory::TagTaxonomyMerge;
-use wire::gateway::memory::TagTaxonomyMergeResult;
-use wire::gateway::memory::TagWire;
-use wire::memory::MemoryEntry;
 
 const UNKNOWN_CHANNEL: &str = "unknown";
 
@@ -43,12 +44,11 @@ impl crate::PostgresMemory {
         options: &CaptureOptions,
     ) -> Result<CaptureResult, Error> {
         let channel = batch.channel.as_deref().ok_or(Error::MissingChannel)?;
-        let owner = options.owner_user_id.as_deref();
         let mut writer = CaptureWriter::begin(&self.pool, &batch.session_key).await?;
         if let Some(dropped) = dropped_when_deleted(&mut writer, batch).await? {
             return Ok(dropped);
         }
-        let conversation_id = writer
+        let conversation = writer
             .upsert_conversation(&ConversationUpsert {
                 session_key: &batch.session_key,
                 agent: &batch.agent,
@@ -56,10 +56,11 @@ impl crate::PostgresMemory {
                 title: batch.title.as_deref().and_then(spoken_title),
                 settings: batch.settings.as_ref(),
                 task_id: batch.task_id.as_deref(),
-                owner_user_id: owner,
+                owner_user_id: options.owner.as_str(),
                 node: options.node.as_deref(),
             })
             .await?;
+        let conversation_id = conversation.id;
         let event_ids: Vec<String> = batch
             .messages
             .iter()
@@ -83,7 +84,7 @@ impl crate::PostgresMemory {
                     tool_args: message.tool_args.as_ref(),
                     tool_result: prepared.tool_result.as_deref(),
                     metadata: &prepared.metadata,
-                    owner_user_id: owner,
+                    owner_user_id: &conversation.owner_user_id,
                     created_at: prepared.created_at,
                 })
                 .await?;
@@ -251,7 +252,7 @@ impl MemoryStore for crate::PostgresMemory {
     async fn wiki_topics(
         &self,
         filter: kernel::wiki::WikiFilter,
-    ) -> Result<wire::gateway::wiki::WikiTopicList, MemoryStoreError> {
+    ) -> Result<kernel::wiki::WikiTopicList, MemoryStoreError> {
         self.read_wiki_topics(filter).await.map_err(Into::into)
     }
 
@@ -265,33 +266,49 @@ impl MemoryStore for crate::PostgresMemory {
     async fn wiki_gaps(
         &self,
         limit: u32,
-    ) -> Result<wire::gateway::wiki::WikiGapsResponse, MemoryStoreError> {
+    ) -> Result<kernel::wiki::WikiGapsResponse, MemoryStoreError> {
         self.read_wiki_gaps(limit).await.map_err(Into::into)
+    }
+
+    async fn wiki_archive(
+        &self,
+        slug: &kernel::wiki::page::WikiSlug,
+        month: Option<&str>,
+    ) -> Result<Option<String>, MemoryStoreError> {
+        self.read_wiki_archive(slug, month)
+            .await
+            .map_err(Into::into)
     }
 
     async fn capture(
         &self,
         mut batch: CaptureBatchRequest,
+        owner: &Owner,
         node: Option<&str>,
     ) -> Result<CaptureResult, MemoryStoreError> {
         batch
             .channel
             .get_or_insert_with(|| UNKNOWN_CHANNEL.to_owned());
         let options = CaptureOptions {
+            owner: owner.clone(),
             node: node.map(str::to_owned),
-            ..CaptureOptions::default()
         };
         self.capture_batch(&batch, &options)
             .await
             .map_err(MemoryStoreError::from)
     }
 
-    async fn append(&self, batch: Vec<MemoryEntry>) -> Result<u64, MemoryStoreError> {
+    async fn append(
+        &self,
+        owner: &Owner,
+        batch: Vec<MemoryEntry>,
+    ) -> Result<u64, MemoryStoreError> {
         let mut inserted = 0u64;
+        let options = CaptureOptions::owned_by(owner);
         for group in group_entries(batch) {
             let request = capture_request(&group)?;
             let result = self
-                .capture_batch(&request, &CaptureOptions::default())
+                .capture_batch(&request, &options)
                 .await
                 .map_err(MemoryStoreError::from)?;
             inserted += result.inserted;
@@ -312,8 +329,18 @@ impl MemoryStore for crate::PostgresMemory {
             .map_err(MemoryStoreError::from)
     }
 
-    async fn stats(&self) -> Result<wire::gateway::memory::MemoryStatsResponse, MemoryStoreError> {
-        self.memory_stats().await.map_err(MemoryStoreError::from)
+    async fn stats(&self) -> Result<kernel::memory::MemoryStatsResponse, MemoryStoreError> {
+        if let Some(answer) = self.stats_cache.fresh() {
+            self.probe().await?;
+            return Ok(answer);
+        }
+        let _computing = self.stats_cache.computing().await;
+        if let Some(answer) = self.stats_cache.fresh() {
+            return Ok(answer);
+        }
+        let answer = self.memory_stats().await.map_err(MemoryStoreError::from)?;
+        self.stats_cache.keep(&answer);
+        Ok(answer)
     }
 
     async fn get_full(&self, id: &str) -> Result<Option<MemoryEntry>, MemoryStoreError> {
@@ -333,6 +360,21 @@ impl MemoryStore for crate::PostgresMemory {
         owner: &kernel::memory::SummaryOwner,
     ) -> Result<kernel::memory::SummaryDag, MemoryStoreError> {
         self.read_summary_dag(owner).await
+    }
+
+    async fn summary_outline(
+        &self,
+        owner: &kernel::memory::SummaryOwner,
+    ) -> Result<kernel::memory::SummaryDag, MemoryStoreError> {
+        self.read_summary_outline(owner).await
+    }
+
+    async fn summary_node(
+        &self,
+        owner: &kernel::memory::SummaryOwner,
+        id: &str,
+    ) -> Result<Option<kernel::memory::MemorySummaryNode>, MemoryStoreError> {
+        self.read_summary_node(owner, id).await
     }
 
     async fn list_tags(&self, query: TagListQuery) -> Result<Vec<TagWire>, MemoryStoreError> {

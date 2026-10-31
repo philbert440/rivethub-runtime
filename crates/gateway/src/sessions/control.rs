@@ -57,14 +57,10 @@ pub struct ChatHandle {
 
 impl ChatHandle {
     pub async fn close(&self) -> Result<(), ApiError> {
-        let (reply, result) = oneshot::channel();
-        self.send(Request::Close { reply }).await?;
-        result.await.map_err(|_| closed())?
+        self.ask(|reply| Request::Close { reply }).await
     }
     pub(crate) async fn terminal(&self, launch: Launch) -> Result<TermSpawnResponse, ApiError> {
-        let (reply, result) = oneshot::channel();
-        self.send(Request::Terminal { launch, reply }).await?;
-        result.await.map_err(|_| closed())?
+        self.ask(|reply| Request::Terminal { launch, reply }).await
     }
 
     pub async fn prompt(
@@ -74,15 +70,13 @@ impl ChatHandle {
         attachments: Vec<TurnAttachment>,
         options: Vec<SessionOption>,
     ) -> Result<(), ApiError> {
-        let (reply, result) = oneshot::channel();
         let turn = Queued {
             text,
             system_prompt,
             attachments,
             options,
         };
-        self.send(Request::Prompt { turn, reply }).await?;
-        result.await.map_err(|_| closed())?
+        self.ask(|reply| Request::Prompt { turn, reply }).await
     }
 
     pub async fn steer(
@@ -90,21 +84,17 @@ impl ChatHandle {
         text: String,
         attachments: Vec<TurnAttachment>,
     ) -> Result<SteerOutcome, ApiError> {
-        let (reply, result) = oneshot::channel();
         let message = Queued {
             text,
             system_prompt: None,
             attachments,
             options: Vec::new(),
         };
-        self.send(Request::Steer { message, reply }).await?;
-        result.await.map_err(|_| closed())?
+        self.ask(|reply| Request::Steer { message, reply }).await
     }
 
     pub async fn stop(&self) -> Result<(), ApiError> {
-        let (reply, result) = oneshot::channel();
-        self.send(Request::Stop { reply }).await?;
-        result.await.map_err(|_| closed())?
+        self.ask(|reply| Request::Stop { reply }).await
     }
 
     pub async fn turn_end(&self) -> Result<(), ApiError> {
@@ -133,6 +123,19 @@ impl ChatHandle {
 
     async fn send(&self, request: Request) -> Result<(), ApiError> {
         self.commands.send(request).await.map_err(|_| closed())
+    }
+
+    async fn ask<T>(
+        &self,
+        request: impl FnOnce(oneshot::Sender<Result<T, ApiError>>) -> Request,
+    ) -> Result<T, ApiError> {
+        let (reply, answer) = oneshot::channel();
+        self.send(request(reply)).await?;
+        tokio::select! {
+            biased;
+            answer = answer => answer.map_err(|_| closed())?,
+            () = self.commands.closed() => Err(closed()),
+        }
     }
 }
 
@@ -423,7 +426,10 @@ impl ChatActor {
             }
             self.approval = None;
             self.surface = Surface::Idle;
-            self.harness.resume(&self.session).await?;
+            if let Err(error) = self.resume().await {
+                self.queued.clear();
+                return self.turn_failed(&error);
+            }
             self.surface = Surface::Chat;
             self.events = Some(self.harness.events(&self.session).await?);
         }
@@ -472,7 +478,11 @@ impl ChatActor {
         let text = message.text.clone();
         let input = message.input();
         self.steering.spawn(async move {
-            let outcome = harness.steer(&session, input).await.map_err(ApiError::from);
+            let outcome = harness
+                .steer(&session, input)
+                .await
+                .map(steer_body)
+                .map_err(ApiError::from);
             Steered {
                 text,
                 outcome,
@@ -524,5 +534,13 @@ async fn next_event(events: &mut Option<mpsc::Receiver<SessionEvent>>) -> Option
 fn respond<T>(reply: oneshot::Sender<Result<T, ApiError>>, result: Result<T, ApiError>) {
     if reply.send(result).is_err() {
         tracing::debug!("session request caller disconnected");
+    }
+}
+
+const fn steer_body(outcome: kernel::harness::SteerOutcome) -> SteerOutcome {
+    match outcome {
+        kernel::harness::SteerOutcome::Steered => SteerOutcome::Steered,
+        kernel::harness::SteerOutcome::StartedNewTurn => SteerOutcome::StartedNewTurn,
+        kernel::harness::SteerOutcome::PromptRequired => SteerOutcome::PromptRequired,
     }
 }

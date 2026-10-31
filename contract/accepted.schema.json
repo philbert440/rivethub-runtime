@@ -944,100 +944,6 @@
         "toolbox"
       ]
     },
-    "NodeCapabilities": {
-      "type": "object",
-      "properties": {
-        "subsystems": {
-          "$ref": "#/$defs/Subsystems"
-        },
-        "harnesses": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/HarnessCapability"
-          }
-        }
-      },
-      "required": [
-        "subsystems",
-        "harnesses"
-      ]
-    },
-    "Subsystems": {
-      "type": "object",
-      "properties": {
-        "den": {
-          "type": "boolean"
-        },
-        "devices": {
-          "type": "boolean"
-        },
-        "mesh": {
-          "type": "boolean"
-        }
-      },
-      "required": [
-        "den",
-        "devices",
-        "mesh"
-      ]
-    },
-    "HarnessCapability": {
-      "type": "object",
-      "properties": {
-        "harnessId": {
-          "$ref": "#/$defs/HarnessId"
-        },
-        "list": {
-          "type": "boolean"
-        },
-        "read": {
-          "type": "boolean"
-        },
-        "drive": {
-          "type": "boolean"
-        },
-        "resume": {
-          "type": "boolean"
-        }
-      },
-      "required": [
-        "harnessId",
-        "list",
-        "read",
-        "drive",
-        "resume"
-      ]
-    },
-    "HarnessInspectCapability": {
-      "type": "object",
-      "properties": {
-        "list": {
-          "type": "boolean"
-        },
-        "read": {
-          "type": "boolean"
-        }
-      },
-      "required": [
-        "list",
-        "read"
-      ]
-    },
-    "HarnessDriveCapability": {
-      "type": "object",
-      "properties": {
-        "drive": {
-          "type": "boolean"
-        },
-        "resume": {
-          "type": "boolean"
-        }
-      },
-      "required": [
-        "drive",
-        "resume"
-      ]
-    },
     "MeshDevice": {
       "type": "object",
       "properties": {
@@ -1629,255 +1535,6 @@
         "failed",
         "killed",
         "timeout"
-      ]
-    },
-    "AudioBackend": {
-      "type": "string",
-      "enum": [
-        "fifo-shim",
-        "none"
-      ]
-    },
-    "AudioMicErrorCode": {
-      "type": "string",
-      "enum": [
-        "busy",
-        "disabled",
-        "badHello",
-        "noRuntime"
-      ]
-    },
-    "AudioMicServerFrame": {
-      "oneOf": [
-        {
-          "type": "object",
-          "properties": {
-            "type": {
-              "type": "string",
-              "const": "ready"
-            },
-            "device": {
-              "type": "string"
-            },
-            "sampleRate": {
-              "type": "integer",
-              "format": "uint32",
-              "minimum": 0
-            },
-            "format": {
-              "$ref": "#/$defs/AudioFormat"
-            },
-            "backend": {
-              "$ref": "#/$defs/AudioBackend"
-            }
-          },
-          "required": [
-            "type",
-            "device",
-            "sampleRate",
-            "format",
-            "backend"
-          ]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "type": {
-              "type": "string",
-              "const": "error"
-            },
-            "code": {
-              "$ref": "#/$defs/AudioMicErrorCode"
-            },
-            "message": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "type",
-            "code",
-            "message"
-          ]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "type": {
-              "type": "string",
-              "const": "stopped"
-            }
-          },
-          "required": [
-            "type"
-          ]
-        }
-      ]
-    },
-    "AudioFormat": {
-      "type": "string",
-      "enum": [
-        "s16le"
-      ]
-    },
-    "AudioMicClientFrame": {
-      "oneOf": [
-        {
-          "type": "object",
-          "properties": {
-            "type": {
-              "type": "string",
-              "const": "hello"
-            },
-            "v": {
-              "$ref": "#/$defs/ProtocolVersion"
-            },
-            "sampleRate": {
-              "type": [
-                "integer",
-                "null"
-              ],
-              "format": "uint32",
-              "minimum": 0
-            },
-            "channels": {
-              "type": [
-                "integer",
-                "null"
-              ],
-              "format": "uint32",
-              "minimum": 0
-            },
-            "format": {
-              "anyOf": [
-                {
-                  "$ref": "#/$defs/AudioFormat"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            }
-          },
-          "required": [
-            "type",
-            "v"
-          ]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "type": {
-              "type": "string",
-              "const": "start"
-            }
-          },
-          "required": [
-            "type"
-          ]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "type": {
-              "type": "string",
-              "const": "stop"
-            }
-          },
-          "required": [
-            "type"
-          ]
-        }
-      ]
-    },
-    "AudioStatus": {
-      "type": "object",
-      "properties": {
-        "enabled": {
-          "type": "boolean"
-        },
-        "backend": {
-          "$ref": "#/$defs/AudioBackend"
-        },
-        "device": {
-          "type": "string"
-        },
-        "sampleRate": {
-          "type": "integer",
-          "format": "uint32",
-          "minimum": 0
-        },
-        "channels": {
-          "type": "integer",
-          "format": "uint32",
-          "minimum": 0
-        },
-        "format": {
-          "$ref": "#/$defs/AudioFormat"
-        },
-        "fifoPath": {
-          "type": "string"
-        },
-        "armed": {
-          "type": "boolean"
-        },
-        "publisherId": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "armedAt": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "format": "int64"
-        },
-        "bytesWritten": {
-          "type": "integer",
-          "format": "uint64",
-          "minimum": 0
-        },
-        "runtimeReady": {
-          "type": "boolean"
-        }
-      },
-      "required": [
-        "enabled",
-        "backend",
-        "device",
-        "sampleRate",
-        "channels",
-        "format",
-        "fifoPath",
-        "armed",
-        "bytesWritten",
-        "runtimeReady"
-      ]
-    },
-    "AudioHealth": {
-      "type": "object",
-      "properties": {
-        "ok": {
-          "type": "boolean"
-        },
-        "runtimeReady": {
-          "type": "boolean"
-        },
-        "fifoPath": {
-          "type": "string"
-        },
-        "message": {
-          "type": [
-            "string",
-            "null"
-          ]
-        }
-      },
-      "required": [
-        "ok",
-        "runtimeReady",
-        "fifoPath"
       ]
     },
     "VoiceSpeakRequest": {
@@ -3251,6 +2908,9 @@
         },
         "vector": {
           "$ref": "#/$defs/VectorState"
+        },
+        "truncated": {
+          "type": "boolean"
         }
       },
       "required": [
@@ -6285,6 +5945,174 @@
         "ptys"
       ]
     },
+    "SpaceKind": {
+      "type": "string",
+      "enum": [
+        "household",
+        "team",
+        "compartment"
+      ]
+    },
+    "SpaceConfig": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/SpaceKind"
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "members": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "kind",
+        "members"
+      ]
+    },
+    "SpaceRecord": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/SpaceKind"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "name"
+      ]
+    },
+    "UserSettings": {
+      "type": "object",
+      "properties": {
+        "defaultVisibility": {
+          "type": "string"
+        },
+        "chosen": {
+          "type": "boolean",
+          "default": false
+        },
+        "defaultSince": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64"
+        }
+      },
+      "required": [
+        "defaultVisibility"
+      ]
+    },
+    "UserSettingsUpdate": {
+      "type": "object",
+      "properties": {
+        "defaultVisibility": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "defaultVisibility"
+      ]
+    },
+    "MeResponse": {
+      "type": "object",
+      "properties": {
+        "user": {
+          "type": "string"
+        },
+        "spaces": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SpaceRecord"
+          }
+        },
+        "settings": {
+          "$ref": "#/$defs/UserSettings"
+        }
+      },
+      "required": [
+        "user",
+        "spaces",
+        "settings"
+      ]
+    },
+    "VisibilityUpdate": {
+      "type": "object",
+      "properties": {
+        "visibility": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "additionalProperties": false
+    },
+    "SessionVisibilityRecord": {
+      "type": "object",
+      "properties": {
+        "sessionId": {
+          "$ref": "#/$defs/SessionId"
+        },
+        "visibility": {
+          "type": "string"
+        },
+        "mark": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "owner": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "sessionId",
+        "visibility"
+      ]
+    },
+    "TopicVisibilityRecord": {
+      "type": "object",
+      "properties": {
+        "topicId": {
+          "type": "string"
+        },
+        "visibility": {
+          "type": "string"
+        },
+        "mark": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "topicId",
+        "visibility"
+      ]
+    },
     "TermCommand": {
       "type": "object",
       "properties": {
@@ -6694,6 +6522,15 @@
           "additionalProperties": {
             "$ref": "#/$defs/UserRecord"
           }
+        },
+        "spaces": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": {
+            "$ref": "#/$defs/SpaceConfig"
+          }
         }
       },
       "required": [
@@ -6737,513 +6574,14 @@
             "string",
             "null"
           ]
-        }
-      }
-    },
-    "ChatRequest": {
-      "type": "object",
-      "properties": {
-        "model": {
-          "type": "string"
         },
-        "messages": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/OpenAiMessage"
-          }
-        },
-        "stream": {
+        "admin": {
           "type": [
             "boolean",
             "null"
           ]
-        },
-        "max_tokens": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "format": "uint32",
-          "minimum": 0
-        },
-        "stream_options": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/StreamOptions"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        }
-      },
-      "additionalProperties": false,
-      "required": [
-        "model",
-        "messages"
-      ]
-    },
-    "OpenAiMessage": {
-      "type": "object",
-      "properties": {
-        "role": {
-          "$ref": "#/$defs/Role"
-        },
-        "content": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "reasoning_content": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "tool_calls": {
-          "type": [
-            "array",
-            "null"
-          ],
-          "items": {
-            "$ref": "#/$defs/MessageToolCall"
-          }
-        },
-        "tool_call_id": {
-          "type": [
-            "string",
-            "null"
-          ]
-        }
-      },
-      "required": [
-        "role"
-      ]
-    },
-    "MessageToolCall": {
-      "oneOf": [
-        {
-          "type": "object",
-          "properties": {
-            "type": {
-              "type": "string",
-              "const": "function"
-            }
-          },
-          "$ref": "#/$defs/StreamedPlainToolCall",
-          "required": [
-            "type"
-          ]
-        }
-      ]
-    },
-    "FunctionDelta": {
-      "type": "object",
-      "properties": {
-        "name": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "arguments": {
-          "type": [
-            "string",
-            "null"
-          ]
         }
       }
-    },
-    "StreamedPlainToolCall": {
-      "type": "object",
-      "properties": {
-        "index": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "format": "uint32",
-          "minimum": 0
-        },
-        "id": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "function": {
-          "$ref": "#/$defs/FunctionDelta"
-        }
-      },
-      "required": [
-        "function"
-      ]
-    },
-    "StreamOptions": {
-      "type": "object",
-      "properties": {
-        "include_usage": {
-          "type": "boolean"
-        }
-      },
-      "required": [
-        "include_usage"
-      ]
-    },
-    "chat.completion": {
-      "type": "object",
-      "properties": {
-        "id": {
-          "type": "string"
-        },
-        "created": {
-          "type": "integer",
-          "format": "int64"
-        },
-        "model": {
-          "type": "string"
-        },
-        "choices": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/CompletionChoice"
-          }
-        },
-        "usage": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/Usage"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        }
-      },
-      "required": [
-        "id",
-        "created",
-        "model",
-        "choices"
-      ]
-    },
-    "CompletionChoice": {
-      "type": "object",
-      "properties": {
-        "index": {
-          "type": "integer",
-          "format": "uint32",
-          "minimum": 0
-        },
-        "message": {
-          "$ref": "#/$defs/OpenAiMessage"
-        },
-        "finish_reason": {
-          "$ref": "#/$defs/FinishReason"
-        }
-      },
-      "required": [
-        "index",
-        "message",
-        "finish_reason"
-      ]
-    },
-    "FinishReason": {
-      "type": "string",
-      "enum": [
-        "stop",
-        "length",
-        "tool_calls",
-        "content_filter"
-      ]
-    },
-    "Usage": {
-      "type": "object",
-      "properties": {
-        "prompt_tokens": {
-          "type": "integer",
-          "format": "uint64",
-          "minimum": 0
-        },
-        "completion_tokens": {
-          "type": "integer",
-          "format": "uint64",
-          "minimum": 0
-        },
-        "total_tokens": {
-          "type": "integer",
-          "format": "uint64",
-          "minimum": 0
-        },
-        "prompt_tokens_details": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/PromptTokensDetails"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "completion_tokens_details": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/CompletionTokensDetails"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        }
-      },
-      "required": [
-        "prompt_tokens",
-        "completion_tokens",
-        "total_tokens"
-      ]
-    },
-    "PromptTokensDetails": {
-      "type": "object",
-      "properties": {
-        "cached_tokens": {
-          "type": "integer",
-          "format": "uint64",
-          "minimum": 0
-        }
-      },
-      "required": [
-        "cached_tokens"
-      ]
-    },
-    "CompletionTokensDetails": {
-      "type": "object",
-      "properties": {
-        "reasoning_tokens": {
-          "type": "integer",
-          "format": "uint64",
-          "minimum": 0
-        }
-      },
-      "required": [
-        "reasoning_tokens"
-      ]
-    },
-    "chat.completion.chunk": {
-      "type": "object",
-      "properties": {
-        "id": {
-          "type": "string"
-        },
-        "created": {
-          "type": "integer",
-          "format": "int64"
-        },
-        "model": {
-          "type": "string"
-        },
-        "choices": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/ChunkChoice"
-          }
-        },
-        "usage": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/Usage"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        }
-      },
-      "required": [
-        "id",
-        "created",
-        "model",
-        "choices"
-      ]
-    },
-    "ChunkChoice": {
-      "type": "object",
-      "properties": {
-        "index": {
-          "type": "integer",
-          "format": "uint32",
-          "minimum": 0
-        },
-        "delta": {
-          "$ref": "#/$defs/CompletionDelta"
-        },
-        "finish_reason": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/FinishReason"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        }
-      },
-      "required": [
-        "index",
-        "delta"
-      ]
-    },
-    "CompletionDelta": {
-      "type": "object",
-      "properties": {
-        "role": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/Role"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "content": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "reasoning_content": {
-          "type": [
-            "string",
-            "null"
-          ]
-        }
-      }
-    },
-    "list": {
-      "type": "object",
-      "properties": {
-        "data": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/model"
-          }
-        }
-      },
-      "required": [
-        "data"
-      ]
-    },
-    "model": {
-      "type": "object",
-      "properties": {
-        "id": {
-          "type": "string"
-        },
-        "created": {
-          "type": "integer",
-          "format": "int64"
-        },
-        "owned_by": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "id",
-        "created",
-        "owned_by"
-      ]
-    },
-    "ErrorKind": {
-      "type": "string",
-      "enum": [
-        "invalid_request_error",
-        "server_error"
-      ]
-    },
-    "ErrorDetail": {
-      "type": "object",
-      "properties": {
-        "message": {
-          "type": "string"
-        },
-        "type": {
-          "$ref": "#/$defs/ErrorKind"
-        }
-      },
-      "required": [
-        "message",
-        "type"
-      ]
-    },
-    "ErrorResponse": {
-      "type": "object",
-      "properties": {
-        "error": {
-          "$ref": "#/$defs/ErrorDetail"
-        }
-      },
-      "required": [
-        "error"
-      ]
-    },
-    "Conversation": {
-      "type": "object",
-      "properties": {
-        "id": {
-          "type": "string"
-        },
-        "title": {
-          "type": "string"
-        },
-        "createdAt": {
-          "type": "integer",
-          "format": "int64"
-        },
-        "updatedAt": {
-          "type": "integer",
-          "format": "int64"
-        },
-        "messages": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/OpenAiMessage"
-          }
-        }
-      },
-      "required": [
-        "id",
-        "title",
-        "createdAt",
-        "updatedAt",
-        "messages"
-      ]
-    },
-    "Conversations": {
-      "type": "object",
-      "properties": {
-        "conversations": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/Conversation"
-          }
-        }
-      },
-      "required": [
-        "conversations"
-      ]
-    },
-    "ConversationTitle": {
-      "type": "object",
-      "properties": {
-        "title": {
-          "type": "string"
-        }
-      },
-      "additionalProperties": false,
-      "required": [
-        "title"
-      ]
     },
     "WikiQuery": {
       "type": "object",
@@ -8257,6 +7595,110 @@
         "pendingProposals"
       ]
     },
+    "FlaggedJob": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "task": {
+          "type": "string"
+        },
+        "key": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "subject": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "payload": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "error": {
+          "type": "string"
+        },
+        "failures": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "firstFailedAt": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64"
+        },
+        "lastFailedAt": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "flaggedAt": {
+          "type": "integer",
+          "format": "int64"
+        }
+      },
+      "required": [
+        "id",
+        "task",
+        "payload",
+        "error",
+        "failures",
+        "lastFailedAt",
+        "flaggedAt"
+      ]
+    },
+    "FlaggedGroup": {
+      "type": "object",
+      "properties": {
+        "task": {
+          "type": "string"
+        },
+        "cause": {
+          "type": "string"
+        },
+        "count": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "lastFailedAt": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "sample": {
+          "$ref": "#/$defs/FlaggedJob"
+        }
+      },
+      "required": [
+        "task",
+        "cause",
+        "count",
+        "lastFailedAt",
+        "sample"
+      ]
+    },
+    "FlaggedJobs": {
+      "type": "object",
+      "properties": {
+        "groups": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/FlaggedGroup"
+          }
+        }
+      },
+      "required": [
+        "groups"
+      ]
+    },
     "TopicDirectory": {
       "oneOf": [
         {
@@ -8364,6 +7806,24 @@
             "null"
           ],
           "format": "int64"
+        },
+        "owner": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "visibility": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "visibilityMark": {
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "required": [
@@ -8427,6 +7887,24 @@
             "null"
           ],
           "format": "int64"
+        },
+        "owner": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "visibility": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "visibilityMark": {
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "sessionCount": {
           "type": "integer",
@@ -8731,6 +8209,18 @@
           ]
         },
         "taskId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "visibility": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "visibilityMark": {
           "type": [
             "string",
             "null"

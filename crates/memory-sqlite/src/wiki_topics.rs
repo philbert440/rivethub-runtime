@@ -7,6 +7,8 @@ use kernel::wiki::builder::WikiSummary;
 use kernel::wiki::page::WikiAction;
 use kernel::wiki::page::WikiPatch;
 use kernel::wiki::page::WikiSlug;
+use kernel::wiki::page::bound::{MergeBase, rebase};
+use kernel::wiki::page::lead::stable_summary;
 use kernel::wiki::page::topic_identity;
 use rusqlite::Connection;
 use rusqlite::OptionalExtension as _;
@@ -206,6 +208,22 @@ fn update_topic(
         ],
     )
     .map_err(query)
+}
+
+pub(crate) fn rebase_merged(
+    conn: &Connection,
+    patch: &mut WikiPatch,
+    base: &MergeBase,
+) -> Result<(), WikiStoreError> {
+    let Some(row) = load(conn, patch.slug.as_ref())? else {
+        return Ok(());
+    };
+    patch.summary = stable_summary(&row.current_state, &patch.summary);
+    patch.article = patch
+        .article
+        .take()
+        .map(|article| rebase(&base.article, &article, &row.article));
+    Ok(())
 }
 
 fn load(conn: &Connection, slug: &str) -> Result<Option<Existing>, WikiStoreError> {

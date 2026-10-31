@@ -92,6 +92,10 @@ impl TaskStore for SqliteStore {
         })
         .await
     }
+
+    async fn expire(&self, now: DateTime<Utc>) -> Result<Vec<Uuid>, TaskError> {
+        call(self, move |conn| rows::expire(conn, now)).await
+    }
 }
 
 pub(crate) async fn call<T, F>(store: &SqliteStore, body: F) -> Result<T, TaskError>

@@ -274,7 +274,7 @@ fn filter_all() -> kernel::memory::BrowseFilter {
         since: None,
         before: None,
         include_tools: true,
-        order: wire::gateway::memory::MemoryBrowseOrder::Desc,
+        order: kernel::memory::MemoryBrowseOrder::Desc,
         limit: kernel::memory::Limit::clamped(Some(100), 100, 1..=100),
     }
 }

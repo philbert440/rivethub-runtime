@@ -29,12 +29,6 @@ pub struct TermMuxChoice {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct AudioSwitch {
-    pub enabled: bool,
-    pub ignored: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct VoiceEndpoints {
     pub stt_url: Option<String>,
     pub tts_url: Option<String>,
@@ -71,6 +65,7 @@ pub const CONFIG_PATH_VARIABLE: &str = "RIVETHUB_CONFIG";
 pub const LOG_LEVEL_VARIABLE: &str = "RIVETHUB_LOG_LEVEL";
 pub const NODE_NAME_VARIABLE: &str = "RIVETHUB_NODE_NAME";
 pub const NODE_ID_VARIABLE: &str = "RIVETHUB_NODE_ID";
+pub const MODEL_RUN_VARIABLE: &str = "RIVETHUB_MODEL_RUN";
 pub const POSTGRES_URL_VARIABLE: &str = "RIVETHUB_PG_URL";
 pub const UPLOAD_MAX_BYTES_VARIABLE: &str = "RIVETHUB_UPLOAD_MAX_BYTES";
 pub const UPLOAD_TTL_MS_VARIABLE: &str = "RIVETHUB_UPLOAD_TTL_MS";
@@ -117,14 +112,13 @@ enum Alias {
     TermConfig,
     UploadMax,
     UploadTtl,
-    Audio,
     VoiceStt,
     VoiceTts,
     VoiceInstructions,
 }
 
 impl Alias {
-    const ALL: [Self; 24] = [
+    const ALL: [Self; 23] = [
         Self::LogLevel,
         Self::NodeName,
         Self::NodeId,
@@ -145,7 +139,6 @@ impl Alias {
         Self::TermConfig,
         Self::UploadMax,
         Self::UploadTtl,
-        Self::Audio,
         Self::VoiceStt,
         Self::VoiceTts,
         Self::VoiceInstructions,
@@ -182,7 +175,6 @@ impl Alias {
             Self::TermConfig => ("RIVETHUB_TERM_CONFIG", "RIVETOS_DEN_TERM_CONFIG"),
             Self::UploadMax => (UPLOAD_MAX_BYTES_VARIABLE, "RIVETOS_DEN_UPLOAD_MAX_BYTES"),
             Self::UploadTtl => (UPLOAD_TTL_MS_VARIABLE, "RIVETOS_DEN_UPLOAD_TTL"),
-            Self::Audio => ("RIVETHUB_AUDIO", "RIVETOS_DEN_AUDIO"),
             Self::VoiceStt => ("RIVETHUB_VOICE_STT_URL", "RIVETOS_DEN_VOICE_STT_URL"),
             Self::VoiceTts => ("RIVETHUB_VOICE_TTS_URL", "RIVETOS_DEN_VOICE_TTS_URL"),
             Self::VoiceInstructions => (
@@ -323,28 +315,6 @@ impl Environment {
             return Some((current, value));
         }
         self.trimmed(legacy).map(|value| (legacy, value))
-    }
-
-    #[must_use]
-    pub fn audio_switch(&self) -> AudioSwitch {
-        let Some((name, value)) = self.named_setting(Alias::Audio) else {
-            return AudioSwitch {
-                enabled: false,
-                ignored: None,
-            };
-        };
-        let Some(enabled) = explicit_flag(value) else {
-            return AudioSwitch {
-                enabled: false,
-                ignored: Some(format!(
-                    "{name}={value} is not a boolean flag and audio stays off"
-                )),
-            };
-        };
-        AudioSwitch {
-            enabled,
-            ignored: None,
-        }
     }
 
     #[must_use]
@@ -520,23 +490,5 @@ impl Environment {
             }
         }
         warnings
-    }
-}
-
-fn explicit_flag(value: &str) -> Option<bool> {
-    if value.eq_ignore_ascii_case("1")
-        || value.eq_ignore_ascii_case("true")
-        || value.eq_ignore_ascii_case("yes")
-        || value.eq_ignore_ascii_case("on")
-    {
-        Some(true)
-    } else if value.eq_ignore_ascii_case("0")
-        || value.eq_ignore_ascii_case("false")
-        || value.eq_ignore_ascii_case("no")
-        || value.eq_ignore_ascii_case("off")
-    {
-        Some(false)
-    } else {
-        None
     }
 }

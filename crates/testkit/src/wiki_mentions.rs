@@ -124,6 +124,7 @@ pub async fn a_mention_held_before_its_entity_existed_still_lands(
                 aliases: Vec::new(),
                 parent: Some(hosts.id),
                 directory: None,
+                owner: Some(crate::owner()?),
             },
             at(0),
         )?)

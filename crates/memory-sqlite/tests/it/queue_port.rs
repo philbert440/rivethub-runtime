@@ -299,3 +299,41 @@ async fn the_sweeps_run_before_an_older_backlog() -> TestResult {
     let opened = open()?;
     testkit::sweeps::the_sweeps_run_before_an_older_backlog(&opened.store).await
 }
+
+#[tokio::test]
+async fn a_dead_job_is_named_by_the_conversation_it_worked_on() -> TestResult {
+    use kernel::flagged::FlaggedJobs as _;
+    let opened = open()?;
+    let store = &opened.store;
+    store
+        .with_conn(|conn| {
+            Ok(conn.execute_batch(
+                "INSERT INTO ros_conversations (id, session_key, agent, title, created_at, updated_at)
+                 VALUES ('c1', 'claude-code:one', 'claude', 'Fix the flaky gate', '2026-10-30T10:00:00Z',
+                         '2026-10-30T10:00:00Z');
+                 INSERT INTO ros_jobs (id, task, job_key, payload, run_at, attempts, state, created_at, updated_at)
+                 VALUES ('j1', 'compact-conversation', 'named', '{\"conversationId\":\"c1\"}',
+                         '2026-10-30T10:00:00Z', 5, 'dead', '2026-10-30T10:00:00Z', '2026-10-30T10:02:00Z'),
+                        ('j2', 'embed-target', 'bare', 'null', '2026-10-30T10:00:00Z', 5, 'dead',
+                         '2026-10-30T10:00:00Z', '2026-10-30T10:01:00Z');",
+            ))
+        })
+        .await??;
+    let named: Vec<(Option<String>, Option<String>)> = store
+        .flagged()
+        .await?
+        .into_iter()
+        .map(|job| (job.key, job.subject))
+        .collect();
+    assert_eq!(
+        named,
+        [
+            (
+                Some("named".to_owned()),
+                Some("Fix the flaky gate".to_owned())
+            ),
+            (Some("bare".to_owned()), None)
+        ]
+    );
+    Ok(())
+}

@@ -16,6 +16,8 @@ const EARLIER_CONVERSATION: &str = "00000000-0000-4000-8000-0000000000c2";
 const EARLIER_SUMMARY: &str = "00000000-0000-4000-8000-0000000000d2";
 const SUBAGENT_CONVERSATION: &str = "00000000-0000-4000-8000-0000000000c3";
 const SUBAGENT_SUMMARY: &str = "00000000-0000-4000-8000-0000000000d3";
+const SECOND_SUMMARY: &str = "00000000-0000-4000-8000-0000000000d4";
+const THIRD_SUMMARY: &str = "00000000-0000-4000-8000-0000000000d5";
 
 async fn seeded() -> TestResult<(TempDir, SqliteStore, ExtractWiki)> {
     let directory = tempfile::tempdir()?;
@@ -25,8 +27,8 @@ async fn seeded() -> TestResult<(TempDir, SqliteStore, ExtractWiki)> {
     execute(
         &store,
         &format!(
-            "INSERT INTO ros_conversations (id, session_key, agent, title, created_at, updated_at)
-             VALUES ('{CONVERSATION}', '{}', 'rivet', '{}', '2026-10-10T12:00:00.000Z', '2026-10-10T12:00:00.000Z');
+            "INSERT INTO ros_conversations (id, session_key, agent, title, created_at, updated_at, owner_user_id)
+             VALUES ('{CONVERSATION}', '{}', 'rivet', '{}', '2026-10-10T12:00:00.000Z', '2026-10-10T12:00:00.000Z', 'owner');
              INSERT INTO ros_summaries (id, conversation_id, content, created_at)
              VALUES ('{SUMMARY}', '{CONVERSATION}', 'AcmeKit notes.', '2026-10-10T12:00:00.000Z');",
             wiki_routes::SESSION_KEY,
@@ -100,8 +102,8 @@ async fn a_mention_held_before_its_entity_existed_still_lands() -> TestResult {
     execute(
         &store,
         &format!(
-            "INSERT INTO ros_conversations (id, session_key, agent, title, created_at, updated_at)
-             VALUES ('{EARLIER_CONVERSATION}', '{}', 'rivet', 'Lab rack', '2026-10-10T11:00:00.000Z', '2026-10-10T11:00:00.000Z');
+            "INSERT INTO ros_conversations (id, session_key, agent, title, created_at, updated_at, owner_user_id)
+             VALUES ('{EARLIER_CONVERSATION}', '{}', 'rivet', 'Lab rack', '2026-10-10T11:00:00.000Z', '2026-10-10T11:00:00.000Z', 'owner');
              INSERT INTO ros_summaries (id, conversation_id, content, created_at)
              VALUES ('{EARLIER_SUMMARY}', '{EARLIER_CONVERSATION}', 'Lab notes.', '2026-10-10T11:00:00.000Z');",
             testkit::wiki_mentions::EARLIER_KEY
@@ -163,8 +165,8 @@ async fn a_subagent_key_s_notes_land_on_its_parent_s_topic() -> TestResult {
     execute(
         &store,
         &format!(
-            "INSERT INTO ros_conversations (id, session_key, agent, title, created_at, updated_at)
-             VALUES ('{SUBAGENT_CONVERSATION}', '{}', 'rivet', 'Billing check', '2026-10-10T12:00:00.000Z', '2026-10-10T12:00:00.000Z');
+            "INSERT INTO ros_conversations (id, session_key, agent, title, created_at, updated_at, owner_user_id)
+             VALUES ('{SUBAGENT_CONVERSATION}', '{}', 'rivet', 'Billing check', '2026-10-10T12:00:00.000Z', '2026-10-10T12:00:00.000Z', 'owner');
              INSERT INTO ros_summaries (id, conversation_id, content, created_at)
              VALUES ('{SUBAGENT_SUMMARY}', '{SUBAGENT_CONVERSATION}', 'Billing notes.', '2026-10-10T12:00:00.000Z');",
             testkit::wiki_lineage::SUBAGENT_KEY
@@ -201,5 +203,64 @@ async fn a_deleted_entity_is_not_recreated() -> TestResult {
 async fn a_sub_topic_summary_lands_in_its_section() -> TestResult {
     let (_directory, store, job) = seeded().await?;
     wiki_routes::a_sub_topic_summary_lands_in_its_section(stores(&store), &job).await?;
+    Ok(())
+}
+
+async fn second(store: &SqliteStore) -> TestResult<ExtractWiki> {
+    summary(store, SECOND_SUMMARY, "2026-10-10T13:00:00.000Z").await
+}
+
+async fn summary(store: &SqliteStore, id: &str, at: &str) -> TestResult<ExtractWiki> {
+    execute(
+        store,
+        &format!(
+            "INSERT INTO ros_summaries (id, conversation_id, content, created_at)
+             VALUES ('{id}', '{CONVERSATION}', 'More AcmeKit notes.', '{at}');"
+        ),
+    )
+    .await?;
+    Ok(ExtractWiki {
+        summary_id: Uuid::parse_str(id)?,
+        conversation_id: Some(Uuid::parse_str(CONVERSATION)?),
+    })
+}
+
+#[tokio::test]
+async fn a_sub_topic_rewrite_replaces_its_section() -> TestResult {
+    let (_directory, store, job) = seeded().await?;
+    let next = second(&store).await?;
+    testkit::wiki_bounded::a_sub_topic_rewrite_replaces_its_section(stores(&store), &job, &next)
+        .await?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn concurrent_rewrites_of_one_page_keep_both() -> TestResult {
+    let (_directory, store, job) = seeded().await?;
+    let next = second(&store).await?;
+    testkit::wiki_bounded::concurrent_rewrites_of_one_page_keep_both(stores(&store), &job, &next)
+        .await?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn an_entity_mention_is_merged_into_its_page() -> TestResult {
+    let (_directory, store, job) = seeded().await?;
+    let next = second(&store).await?;
+    testkit::wiki_bounded::an_entity_mention_is_merged_into_its_page(stores(&store), &job, &next)
+        .await?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn updates_keep_the_lead_and_replace_only_the_currently_sentence() -> TestResult {
+    let (_directory, store, job) = seeded().await?;
+    let next = second(&store).await?;
+    let last = summary(&store, THIRD_SUMMARY, "2026-10-10T14:00:00.000Z").await?;
+    testkit::wiki_bounded::updates_keep_the_lead_and_replace_only_the_currently_sentence(
+        stores(&store),
+        [&job, &next, &last],
+    )
+    .await?;
     Ok(())
 }

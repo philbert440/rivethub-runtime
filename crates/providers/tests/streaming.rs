@@ -118,7 +118,7 @@ async fn chat_assembles_the_llm_response() {
     let server = repeating_server(A_TEXT_SSE.to_owned()).await;
     let provider = chat_provider(server.addr);
     let response = provider.chat(request()).await.expect("the chat completes");
-    assert_eq!(response.r#type, wire::stream::LlmResponseKind::Text);
+    assert_eq!(response.r#type, kernel::model::LlmResponseKind::Text);
     assert_eq!(response.content.as_deref(), Some("Hi there!"));
     assert_eq!(response.usage.map(|usage| usage.prompt_tokens), Some(25));
     assert!(response.tool_calls.is_none());
@@ -129,7 +129,7 @@ async fn chat_assembles_tool_calls_from_the_streamed_fragments() {
     let server = repeating_server(B_TOOL_SSE.to_owned()).await;
     let provider = chat_provider(server.addr);
     let response = provider.chat(request()).await.expect("the chat completes");
-    assert_eq!(response.r#type, wire::stream::LlmResponseKind::ToolCalls);
+    assert_eq!(response.r#type, kernel::model::LlmResponseKind::ToolCalls);
     assert_eq!(response.content, None);
     let calls = response.tool_calls.unwrap_or_default();
     let call = calls.first().expect("the tool call is assembled");

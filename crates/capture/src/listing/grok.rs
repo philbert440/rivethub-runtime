@@ -259,7 +259,7 @@ struct HistoryLine {
 }
 
 fn user_turn(history: &Path) -> bool {
-    whole_file(history).is_none_or(|text| {
+    whole_file(history).is_some_and(|text| {
         text.lines()
             .filter_map(object_line::<HistoryLine>)
             .any(|line| {

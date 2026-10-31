@@ -179,6 +179,7 @@ pub async fn apply_filing(env: &FilingEnv<'_>, plan: &FilingPlan) -> Result<(), 
                     topic: *topic,
                     by: PlacementSource::Categorizer,
                     at: env.now,
+                    owner: None,
                 })
                 .await?;
         }

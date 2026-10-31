@@ -3,14 +3,12 @@ use std::os::unix::fs::PermissionsExt as _;
 use std::sync::Arc;
 use std::time::Duration;
 
-use kernel::model::ModelRequest;
 use rivethub::composition::Composition;
 use rivethub::models::ModelFactory;
 use tokio_util::sync::CancellationToken;
-use wire::gateway::v1::Completion;
 use wire::gateway::{DegradedProvider, HealthzResponse, ProviderRecovery};
 
-use super::{TestResult, chat_request, harness, recorded};
+use super::{TestResult, harness, recorded, turn};
 
 fn configured(home: &std::path::Path) -> TestResult<(config::Config, config::Environment)> {
     let stalled = home.join("hermes");
@@ -44,14 +42,7 @@ async fn refuses_a_turn_fast(
     let degraded = factory.build(config, "q", Some("slow-model"), cancel)?;
     let Err(refused) = tokio::time::timeout(
         Duration::from_secs(2),
-        degraded.provider.chat(ModelRequest {
-            model: "slow-model".into(),
-            messages: Vec::new(),
-            tools: Vec::new(),
-            thinking: None,
-            max_tokens: None,
-            options: kernel::model::ModelOptions::default(),
-        }),
+        degraded.provider.chat(turn("slow-model")),
     )
     .await?
     else {
@@ -100,20 +91,6 @@ async fn reports_degraded_health(
     Ok(())
 }
 
-async fn chat(
-    client: &reqwest::Client,
-    addr: std::net::SocketAddr,
-    agent: &str,
-) -> TestResult<reqwest::Response> {
-    let mut request = chat_request();
-    request.model = agent.into();
-    Ok(client
-        .post(format!("http://{addr}/v1/chat/completions"))
-        .json(&request)
-        .send()
-        .await?)
-}
-
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_harness_that_fails_discovery_degrades_its_provider_not_the_gateway() -> TestResult {
     let home = tempfile::tempdir()?;
@@ -144,25 +121,12 @@ async fn a_harness_that_fails_discovery_degrades_its_provider_not_the_gateway() 
         .timeout(Duration::from_secs(5))
         .build()?;
     reports_degraded_health(&client, server.addr, home.path()).await?;
-    let reply: Completion = chat(&client, server.addr, "main")
-        .await?
-        .error_for_status()?
-        .json()
+    let reply = factory
+        .build(&config, "p", Some("agent-model"), &cancel)?
+        .provider
+        .chat(turn("agent-model"))
         .await?;
-    assert_eq!(
-        reply
-            .choices
-            .first()
-            .ok_or("completion choice")?
-            .message
-            .content
-            .as_deref(),
-        Some(expected.as_str())
-    );
-    assert_eq!(
-        chat(&client, server.addr, "slow").await?.status(),
-        reqwest::StatusCode::BAD_GATEWAY
-    );
+    assert_eq!(reply.content.as_deref(), Some(expected.as_str()));
     server.close().await?;
     tokio::time::timeout(Duration::from_secs(5), composition.close()).await??;
     Ok(())

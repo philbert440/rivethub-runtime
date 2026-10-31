@@ -10,6 +10,7 @@ use wire::gateway::agents::AgentPresetUpdate;
 use wire::gateway::agents::AgentStoreBackend;
 use wire::harness::HarnessId;
 
+use super::body;
 use super::changes;
 use super::check;
 use super::error::AgentError;
@@ -46,15 +47,18 @@ impl Registry {
     }
 
     pub(crate) fn backend(&self) -> AgentStoreBackend {
-        self.store.backend()
+        body::backend_body(self.store.backend())
     }
 
     pub(crate) async fn list(&self, node: Option<String>) -> Result<Vec<AgentPreset>, AgentError> {
-        let mut agents = self
+        let mut agents: Vec<AgentPreset> = self
             .store
             .list(node.as_deref())
             .await
-            .map_err(AgentError::from_store)?;
+            .map_err(AgentError::from_store)?
+            .into_iter()
+            .map(body::preset_body)
+            .collect();
         agents.sort_by(preset_order);
         Ok(agents)
     }
@@ -78,8 +82,9 @@ impl Registry {
         })
         .await?;
         self.store
-            .create(agent)
+            .create(body::preset(agent))
             .await
+            .map(body::preset_body)
             .map_err(AgentError::from_store)
     }
 
@@ -107,9 +112,10 @@ impl Registry {
         let after = next.clone();
         blocking(move || apply_links(&shared, &before, &after)).await?;
         self.store
-            .update(&current.id, changes)
+            .update(&current.id, body::update(changes))
             .await
             .map_err(AgentError::from_store)?
+            .map(body::preset_body)
             .ok_or(AgentError::NotFound)
     }
 
@@ -131,7 +137,11 @@ impl Registry {
     }
 
     async fn all(&self) -> Result<Vec<AgentPreset>, AgentError> {
-        self.store.list(None).await.map_err(AgentError::from_store)
+        self.store
+            .list(None)
+            .await
+            .map(|agents| agents.into_iter().map(body::preset_body).collect())
+            .map_err(AgentError::from_store)
     }
 
     async fn find(&self, id: &str) -> Result<AgentPreset, AgentError> {
@@ -142,6 +152,7 @@ impl Registry {
             .get(id)
             .await
             .map_err(AgentError::from_store)?
+            .map(body::preset_body)
             .ok_or(AgentError::NotFound)
     }
 }

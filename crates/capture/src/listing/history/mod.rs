@@ -6,14 +6,14 @@ mod tools;
 use std::path::Path;
 use std::path::PathBuf;
 
+use kernel::transcript::HarnessTranscriptTurn;
+use kernel::transcript::SessionMessageRole;
 use kernel::transcript::StoreTranscript;
 use kernel::transcript::ToolOutputRead;
 use kernel::transcript::TranscriptRead;
 use kernel::transcript::TranscriptReader;
 use kernel::transcript::TranscriptReaderError;
 use kernel::transcript::Turn;
-use wire::gateway::sessions::HarnessTranscriptTurn;
-use wire::gateway::sessions::SessionMessageRole;
 use wire::harness::HarnessId;
 use wire::message::Role;
 use wire::session_id::SessionId;

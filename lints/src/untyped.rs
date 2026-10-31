@@ -86,7 +86,7 @@ impl<'tcx> LateLintPass<'tcx> for Untyped {
         if pkg.starts_with("wire") && util::in_test_code(cx, ty.hir_id, ty.span) {
             return;
         }
-        if pkg.starts_with("wire")
+        if pkg == "values"
             && is_json
             && util::file_path(cx, ty.span).is_some_and(|path| path.ends_with("src/json.rs"))
         {
@@ -127,10 +127,11 @@ impl<'tcx> LateLintPass<'tcx> for Untyped {
         if pkg == "testkit" {
             return;
         }
-        if pkg.starts_with("wire")
-            && (util::in_test_code(cx, expr.hir_id, data.call_site)
-                || util::file_path(cx, data.call_site)
-                    .is_some_and(|path| path.ends_with("src/json.rs")))
+        if pkg.starts_with("wire") && util::in_test_code(cx, expr.hir_id, data.call_site) {
+            return;
+        }
+        if pkg == "values"
+            && util::file_path(cx, data.call_site).is_some_and(|path| path.ends_with("src/json.rs"))
         {
             return;
         }

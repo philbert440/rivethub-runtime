@@ -11,6 +11,7 @@ use super::TreeEdit;
 use crate::filing::ConversationPlacement;
 use crate::filing::FilingStore;
 use crate::filing::Target;
+use crate::owner::Owner;
 use crate::topics::Change;
 use crate::topics::NewTopic;
 use crate::topics::Placement;
@@ -40,6 +41,7 @@ pub struct TidyPorts<'a> {
     pub topics: &'a dyn TopicStore,
     pub filing: &'a dyn FilingStore,
     pub pages: Option<&'a dyn TopicPageStore>,
+    pub owner: &'a Owner,
 }
 
 #[derive(Debug)]
@@ -107,11 +109,32 @@ async fn approve_pending(
     now: DateTime<Utc>,
 ) -> Result<Proposal, TidyError> {
     proposal.pending()?;
-    apply(ports, &proposal.change, now).await?;
+    match apply(ports, &proposal.change, now).await {
+        Ok(()) => {}
+        Err(error) if stale(&error) => {
+            ports
+                .tidy
+                .decide(proposal.id, ProposalState::Rejected, now)
+                .await?;
+            return Err(TidyError::Stale {
+                id: proposal.id,
+                reason: error.to_string(),
+            });
+        }
+        Err(error) => return Err(error),
+    }
     ports
         .tidy
         .decide(proposal.id, ProposalState::Approved, now)
         .await
+}
+
+const fn stale(error: &TidyError) -> bool {
+    matches!(
+        error,
+        TidyError::Wiki(crate::wiki::builder::WikiStoreError::TopicMissing(_))
+            | TidyError::Topic(crate::topics::TopicError::NotFound { .. })
+    )
 }
 
 async fn apply(
@@ -161,6 +184,7 @@ async fn apply(
                 aliases: aliases.clone(),
                 parent: *parent,
                 directory: None,
+                owner: Some(ports.owner.clone()),
             };
             if !exists(topics, *topic).await? {
                 topics.create(Topic::create(*topic, new, now)?).await?;
@@ -233,6 +257,7 @@ async fn create(
         aliases: Vec::new(),
         parent,
         directory: None,
+        owner: None,
     };
     topics.create(Topic::create(id, new, now)?).await?;
     Ok(())
@@ -253,6 +278,7 @@ async fn file(
                     topic,
                     by: PlacementSource::Categorizer,
                     at: now,
+                    owner: Some(ports.owner.clone()),
                 })
                 .await?;
         }

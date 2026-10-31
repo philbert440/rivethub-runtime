@@ -9,7 +9,7 @@ use agent_loop::hooks::{HookError, HookPipeline};
 use agent_loop::shell::ShellDanger;
 use agent_loop::{Turn, TurnLimits};
 use kernel::ToolContext;
-use kernel::agent::excluded_names;
+use kernel::agent::{TurnContext, excluded_names};
 use kernel::model::ModelRequest;
 use tempfile::TempDir;
 use tokio::task::JoinSet;
@@ -88,6 +88,16 @@ pub fn base() -> HookContextBase {
     }
 }
 
+fn context() -> TurnContext {
+    let base = base();
+    TurnContext {
+        agent_id: base.agent_id,
+        session_id: base.session_id,
+        timestamp: base.timestamp,
+        metadata: base.metadata,
+    }
+}
+
 pub fn turn() -> Turn {
     Turn {
         request: ModelRequest {
@@ -104,7 +114,7 @@ pub fn turn() -> Turn {
             thinking: None,
             max_tokens: Some(100),
         },
-        context: base(),
+        context: context(),
         tool_context: ToolContext {
             agent_id: Some("test-agent".to_owned()),
             working_dir: None::<PathBuf>,

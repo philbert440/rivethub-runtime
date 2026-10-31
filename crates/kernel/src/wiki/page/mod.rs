@@ -1,9 +1,12 @@
+pub mod archive;
 mod article;
+pub mod bound;
 mod citations;
 mod extraction;
 mod fold;
 mod frontmatter;
 mod identity;
+pub mod lead;
 mod limits;
 mod lines;
 mod parse;
@@ -18,7 +21,7 @@ mod yaml;
 use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 
-use wire::Extra;
+use values::Extra;
 
 pub use article::{
     ArticlePatch, ArticlePatchMode, ArticleSection, ArticleSections, apply_article_patches,
@@ -149,13 +152,6 @@ pub struct WikiHistoryEntry {
     pub body: String,
 }
 
-#[cfg_attr(
-    dylint_lib = "rr_lints",
-    expect(
-        duptype,
-        reason = "KERNELWIRE: the kernel owns a page's source kinds; wire::gateway::wiki::WikiSourceKind is the contract's copy, translated where a page becomes a response"
-    )
-)]
 #[derive(
     Debug,
     Clone,

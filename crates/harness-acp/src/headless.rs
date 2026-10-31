@@ -48,6 +48,9 @@ pub(crate) async fn prepare(
             _ => command.program = PathBuf::from(binary),
         }
     }
+    command
+        .env
+        .push((config::MODEL_RUN_VARIABLE.to_owned(), "1".to_owned()));
     command.working_dir = provider.cwd.clone().or(command.working_dir).or_else(|| {
         config
             .runtime

@@ -71,16 +71,38 @@ fn assert_sun_path(path: &Path) -> Result<PathBuf, Error> {
     Ok(path.to_path_buf())
 }
 
+#[derive(Debug)]
+pub struct Starting {
+    pub child: tokio::process::Child,
+    pub said: PathBuf,
+}
+
+#[must_use]
+pub fn server_errors(socket: &Path) -> PathBuf {
+    socket.with_file_name("rivethub-server.err")
+}
+
 pub async fn wait_for_socket(
     socket: &Path,
     timeout: std::time::Duration,
     session: &str,
+    mut server: Option<&mut Starting>,
 ) -> Result<(), Error> {
     let timeout_ms = timeout.as_millis();
     let deadline = tokio::time::Instant::now() + timeout;
     loop {
         if tokio::fs::try_exists(socket).await? {
             return Ok(());
+        }
+        if let Some(starting) = server.as_deref_mut()
+            && let Some(status) = starting.child.try_wait()?
+        {
+            let said = tokio::fs::read_to_string(&starting.said).await?;
+            return Err(Error::HerdrServerExited {
+                session: session.to_owned(),
+                status,
+                said: said.trim().to_owned(),
+            });
         }
         if tokio::time::Instant::now() >= deadline {
             return Err(Error::HerdrServerTimeout {

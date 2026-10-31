@@ -18,7 +18,7 @@ const DEAD: &str = "00000000-0000-4000-8000-000000000203";
 
 #[tokio::test]
 async fn reembed_clears_vectors_requeues_rows_and_forgets_the_model() -> TestResult {
-    let fresh = fresh_store(None)?;
+    let fresh = fresh_store()?;
     seed(&fresh.store).await?;
     let old = fresh.store.clone().with_embed_model("embed-a");
     old.write(stored(EMBEDDED)).await?;

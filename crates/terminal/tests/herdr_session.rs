@@ -297,23 +297,27 @@ fn agent_pane_steps(name: &str) -> Vec<FakeStep> {
             }),
             ACK_PLAIN,
         ),
-        fake_step(
-            RpcMethod::EventsSubscribe,
-            RequestParams::EventsSubscribe(codec::EventsSubscribeParams {
-                subscriptions: vec![
-                    codec::SubscriptionParams {
-                        event: HerdrEventKind::PaneAgentStatusChanged,
-                        pane_id: "w1:p1".to_owned(),
-                    },
-                    codec::SubscriptionParams {
-                        event: HerdrEventKind::PaneAgentDetected,
-                        pane_id: "w1:p1".to_owned(),
-                    },
-                ],
-            }),
-            ACK_SUBSCRIPTION,
-        ),
+        status_subscription(),
     ]
+}
+
+fn status_subscription() -> FakeStep {
+    fake_step(
+        RpcMethod::EventsSubscribe,
+        RequestParams::EventsSubscribe(codec::EventsSubscribeParams {
+            subscriptions: vec![
+                codec::SubscriptionParams {
+                    event: HerdrEventKind::PaneAgentStatusChanged,
+                    pane_id: "w1:p1".to_owned(),
+                },
+                codec::SubscriptionParams {
+                    event: HerdrEventKind::PaneAgentDetected,
+                    pane_id: "w1:p1".to_owned(),
+                },
+            ],
+        }),
+        ACK_SUBSCRIPTION,
+    )
 }
 
 async fn agent_panes_run_the_recorded_setup_sequence() -> Result<(), Failed> {
@@ -379,6 +383,7 @@ async fn stop_reports_success_only_after_the_server_is_gone() -> Result<(), Fail
                 }),
                 ACK_PLAIN,
             ),
+            status_subscription(),
         ],
         closed_tx,
     ));
@@ -437,6 +442,7 @@ async fn plain_panes_are_started_with_send_text() -> Result<(), Failed> {
                 }),
                 ACK_PLAIN,
             ),
+            status_subscription(),
         ],
     ));
     let setup = mux::HerdrSetup {
@@ -460,7 +466,7 @@ async fn plain_panes_are_started_with_send_text() -> Result<(), Failed> {
 async fn a_missing_server_hits_the_recorded_timeout_text() -> Result<(), Failed> {
     let dir = tempfile::tempdir()?;
     let socket = dir.path().join("herdr").join("sessions").join("herdr.sock");
-    let error = paths::wait_for_socket(&socket, Duration::from_millis(300), "d0123456789ab")
+    let error = paths::wait_for_socket(&socket, Duration::from_millis(300), "d0123456789ab", None)
         .await
         .err()
         .ok_or("expected the timeout")?;
@@ -468,6 +474,28 @@ async fn a_missing_server_hits_the_recorded_timeout_text() -> Result<(), Failed>
         return Err(format!("expected the server-open timeout, got {error}").into());
     };
     assert_eq!(timeout_ms, 300);
+    Ok(())
+}
+
+async fn a_server_that_exits_is_reported_at_once_with_what_it_said() -> Result<(), Failed> {
+    let dir = tempfile::tempdir()?;
+    let socket = dir.path().join("herdr.sock");
+    let said = paths::server_errors(&socket);
+    let child = tokio::process::Command::new("sh")
+        .args(["-c", "echo socket name too long >&2; exit 3"])
+        .stderr(std::fs::File::create(&said)?)
+        .spawn()?;
+    let mut starting = paths::Starting { child, said };
+    let waited =
+        paths::wait_for_socket(&socket, Duration::from_secs(30), "d0", Some(&mut starting));
+    let error = tokio::time::timeout(Duration::from_secs(5), waited)
+        .await?
+        .err()
+        .ok_or("expected the exit")?;
+    let Error::HerdrServerExited { said, .. } = error else {
+        return Err(format!("expected the server exit, got {error}").into());
+    };
+    assert_eq!(said, "socket name too long");
     Ok(())
 }
 
@@ -480,5 +508,6 @@ fn the_herdr_probe_paths_and_session_setup() -> Result<(), Failed> {
     runtime.block_on(agent_panes_run_the_recorded_setup_sequence())?;
     runtime.block_on(plain_panes_are_started_with_send_text())?;
     runtime.block_on(stop_reports_success_only_after_the_server_is_gone())?;
-    runtime.block_on(a_missing_server_hits_the_recorded_timeout_text())
+    runtime.block_on(a_missing_server_hits_the_recorded_timeout_text())?;
+    runtime.block_on(a_server_that_exits_is_reported_at_once_with_what_it_said())
 }

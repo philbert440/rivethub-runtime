@@ -1,7 +1,7 @@
 use super::*;
 
 #[tokio::test]
-async fn a_permanent_status_still_retries_until_the_rest_revives_it() {
+async fn a_permanent_status_fails_and_the_reap_flags_dead_jobs() {
     let fixture = fixture();
     let recorded = scenario(&fixture, recorded_name(4));
     let row = recorded.tables.summaries.first().expect("summary");
@@ -13,14 +13,8 @@ async fn a_permanent_status_still_retries_until_the_rest_revives_it() {
     )]));
     let script = Arc::new(Scripted::fail_with(vec![400, 400, 400]));
     let jobs = Arc::new(Seen::with_dead(vec![
-        (
-            JobName::Fixed(FixedJob::SummarizeConversation),
-            at("2026-10-04T12:30:00Z"),
-        ),
-        (
-            JobName::Fixed(FixedJob::EmbedTarget),
-            at("2026-10-04T12:30:00Z"),
-        ),
+        JobName::Fixed(FixedJob::SummarizeConversation),
+        JobName::Fixed(FixedJob::EmbedTarget),
     ]));
     let settings = settings();
     let token = cancel();
@@ -44,17 +38,7 @@ async fn a_permanent_status_still_retries_until_the_rest_revives_it() {
             .any(|line| line.contains("LLM HTTP 400 (not retrying)"))
     );
     assert_eq!(store.written.lock().await.len(), 0);
-    let within = bind(
-        &store,
-        &script,
-        &jobs,
-        &settings,
-        at("2026-10-04T12:50:00Z"),
-        &token,
-    );
-    assert_eq!(handle_reap(&within).await.expect("within rest"), 0);
-    assert_eq!(jobs.dead_count(FixedJob::SummarizeConversation).await, 1);
-    let after = bind(
+    let reap = bind(
         &store,
         &script,
         &jobs,
@@ -62,10 +46,10 @@ async fn a_permanent_status_still_retries_until_the_rest_revives_it() {
         at("2026-10-04T13:51:00Z"),
         &token,
     );
-    assert_eq!(handle_reap(&after).await.expect("after rest"), 1);
+    assert_eq!(handle_reap(&reap).await.expect("reap"), 2);
     assert_eq!(jobs.dead_count(FixedJob::SummarizeConversation).await, 0);
-    assert_eq!(jobs.dead_count(FixedJob::EmbedTarget).await, 1);
-    let outcome = handle_summarize(&after, &payload).await.expect("revived");
+    assert_eq!(jobs.dead_count(FixedJob::EmbedTarget).await, 0);
+    let outcome = handle_summarize(&reap, &payload).await.expect("retried");
     assert_eq!(outcome.summaries, 1);
     assert_rows(&store.written.lock().await, &recorded.tables.summaries);
 }

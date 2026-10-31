@@ -46,12 +46,18 @@ fn recorded_upgrade_files_reach_the_migrated_state() -> TestResult<()> {
             );
         }
         for (table, expected) in &migrated.tables {
-            assert_eq!(
-                read_rows(&conn, table)?,
-                *expected,
-                "rows of {table} in {}",
-                case.input_file
-            );
+            let mut actual = read_rows(&conn, table)?;
+            if table == "ros_conversations" || table == "ros_messages" {
+                for row in &mut actual {
+                    assert_eq!(
+                        row.insert("owner_user_id".to_owned(), common::Cell::Null),
+                        Some(common::Cell::Text("owner".to_owned())),
+                        "schema v28 gives an unowned {table} row the registry owner in {}",
+                        case.input_file
+                    );
+                }
+            }
+            assert_eq!(actual, *expected, "rows of {table} in {}", case.input_file);
         }
         for (name, expected) in &migrated.fts {
             assert_eq!(
@@ -62,9 +68,15 @@ fn recorded_upgrade_files_reach_the_migrated_state() -> TestResult<()> {
             );
         }
         for (table, expected) in &migrated.column_types {
+            let mut actual = read_column_types(&conn, table)?;
+            if (table == "ros_conversations" || table == "ros_messages")
+                && let Some(owners) = actual.get_mut("owner_user_id")
+                && let Some(owned) = owners.remove("text")
+            {
+                owners.insert("null".to_owned(), owned);
+            }
             assert_eq!(
-                read_column_types(&conn, table)?,
-                *expected,
+                actual, *expected,
                 "typeof over {table} in {}",
                 case.input_file
             );

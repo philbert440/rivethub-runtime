@@ -4,6 +4,7 @@ use std::collections::BTreeSet;
 
 use chrono::DateTime;
 use chrono::Utc;
+use kernel::memory::MemoryScope;
 use kernel::memory::SearchMode;
 use kernel::memory::SearchQuery;
 use memory_sqlite::SqliteStore;
@@ -11,7 +12,6 @@ use search_support::TestResult;
 use search_support::failed;
 use search_support::query;
 use search_support::store;
-use wire::gateway::memory::MemoryScope;
 use wire::message::Role;
 
 const USER: &str = "00000000-0000-4000-8000-000000000201";

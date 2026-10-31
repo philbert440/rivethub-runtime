@@ -4,9 +4,8 @@ use std::sync::atomic::Ordering;
 use std::time::Duration;
 
 use async_trait::async_trait;
-use chrono::DateTime;
-use chrono::Utc;
 use kernel::model::Embedding;
+use kernel::model::LlmResponse;
 use kernel::model::ModelProvider;
 use kernel::model::ModelProviderError;
 use kernel::model::ModelRequest;
@@ -27,7 +26,6 @@ use tokio::sync::mpsc::Receiver;
 use tokio::sync::watch;
 use tokio_util::sync::CancellationToken;
 use wire::JsonObject;
-use wire::stream::LlmResponse;
 mod store;
 
 pub use store::Store;
@@ -130,7 +128,6 @@ struct Queued {
     bypass: bool,
     priority: i16,
     last_error: Option<String>,
-    dead_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug)]
@@ -290,7 +287,6 @@ impl Queue {
             bypass,
             priority,
             last_error: None,
-            dead_at: None,
         });
         self.bump();
         id
@@ -510,7 +506,6 @@ impl JobQueue for Queue {
             row.last_error = Some(error.to_owned());
             if row.attempt >= row.max_attempts {
                 row.phase = Phase::Dead;
-                row.dead_at = Some(Utc::now());
             } else {
                 row.phase = Phase::Backoff;
             }
@@ -520,46 +515,13 @@ impl JobQueue for Queue {
         Ok(())
     }
 
-    async fn revive_dead(
-        &self,
-        name: &JobName,
-        dead_before: DateTime<Utc>,
-    ) -> Result<u64, JobQueueError> {
-        let outcome = {
-            let mut rows = self.rows.lock().await;
-            let mut revived = 0u64;
-            let mut missing = None;
-            for row in rows.iter_mut() {
-                if row.phase != Phase::Dead || &row.name != name {
-                    continue;
-                }
-                let Some(dead_at) = row.dead_at else {
-                    missing = Some(row.id);
-                    break;
-                };
-                if dead_at < dead_before {
-                    row.phase = Phase::Ready;
-                    row.attempt = 0;
-                    row.last_error = None;
-                    row.dead_at = None;
-                    revived = revived.saturating_add(1);
-                }
-            }
-            drop(rows);
-            missing.map_or(Ok(revived), Err)
-        };
-        match outcome {
-            Ok(revived) => {
-                if revived > 0 {
-                    self.bump();
-                }
-                Ok(revived)
-            }
-            Err(id) => Err(JobQueueError::Claim {
-                message: format!("dead job {id} has no dead time"),
-                source: Box::new(std::io::Error::other("dead job has no dead time")),
-            }),
-        }
+    async fn flag_stuck(&self) -> Result<u64, JobQueueError> {
+        let mut rows = self.rows.lock().await;
+        let before = rows.len();
+        rows.retain(|row| row.phase != Phase::Dead);
+        let flagged = before - rows.len();
+        drop(rows);
+        u64::try_from(flagged).map_err(|_| JobQueueError::Stored("flagged".to_owned()))
     }
 
     async fn read(&self, id: JobId) -> Result<Option<StoredJob>, JobQueueError> {

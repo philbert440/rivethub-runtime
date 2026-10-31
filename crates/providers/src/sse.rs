@@ -5,11 +5,12 @@ use std::sync::atomic::Ordering;
 use eventsource_stream::EventStreamError;
 use eventsource_stream::Eventsource;
 use futures::StreamExt;
+use kernel::model::FinishReason;
 use kernel::model::ModelChunk;
 use kernel::model::ModelProviderError;
 use kernel::model::ModelStreamItem;
 use wire::stream::openai::ChatCompletionChunk;
-use wire::stream::openai::FinishReason;
+use wire::stream::openai::FinishReason as ChunkFinish;
 use wire::stream::openai::StreamedToolCall;
 
 use crate::error::StreamFault;
@@ -199,19 +200,19 @@ fn translate(
     Ok(())
 }
 
-fn note_finish(slot: Option<&AtomicU8>, reason: FinishReason) {
+fn note_finish(slot: Option<&AtomicU8>, reason: ChunkFinish) {
     let Some(slot) = slot else {
         return;
     };
     slot.store(encode_finish(reason), Ordering::Relaxed);
 }
 
-fn encode_finish(reason: FinishReason) -> u8 {
+fn encode_finish(reason: ChunkFinish) -> u8 {
     match reason {
-        FinishReason::Stop => FINISH_STOP,
-        FinishReason::Length => FINISH_LENGTH,
-        FinishReason::ToolCalls => FINISH_TOOL_CALLS,
-        FinishReason::ContentFilter => FINISH_CONTENT_FILTER,
+        ChunkFinish::Stop => FINISH_STOP,
+        ChunkFinish::Length => FINISH_LENGTH,
+        ChunkFinish::ToolCalls => FINISH_TOOL_CALLS,
+        ChunkFinish::ContentFilter => FINISH_CONTENT_FILTER,
     }
 }
 
@@ -250,9 +251,9 @@ mod tests {
 
     use super::decode_finish;
     use super::translate;
+    use kernel::model::FinishReason;
     use kernel::model::ModelChunk;
     use wire::stream::openai::ChatCompletionChunk;
-    use wire::stream::openai::FinishReason;
 
     #[test]
     fn a_length_finish_is_recorded_for_chat() {

@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use super::{LastVerified, PageSource, WikiMeta, WikiSectionRef};
-use wire::Extra;
+use values::Extra;
 
 use super::WikiSlug;
 

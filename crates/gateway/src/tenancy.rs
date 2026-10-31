@@ -6,23 +6,30 @@ use std::net::SocketAddr;
 use axum::extract::ConnectInfo;
 use axum::extract::FromRequestParts;
 use axum::http::request::Parts;
+use kernel::owner::Owner;
+use kernel::tenancy::Space;
+use kernel::tenancy::Viewer;
 use sha2::{Digest, Sha256};
 use subtle::ConstantTimeEq;
 
 use crate::error::ApiError;
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub struct UserId(String);
+pub struct UserId(Owner);
 
 impl UserId {
     pub fn new(id: String) -> Result<Self, ApiError> {
-        if id.is_empty() || id.chars().any(char::is_control) {
-            return Err(ApiError::BadRequest("invalid user id".into()));
-        }
-        Ok(Self(id))
+        Owner::new(id)
+            .map(Self)
+            .map_err(|_| ApiError::BadRequest("invalid user id".into()))
     }
 
     pub fn as_str(&self) -> &str {
+        self.0.as_str()
+    }
+
+    #[must_use]
+    pub fn owner(&self) -> &Owner {
         &self.0
     }
 }
@@ -73,9 +80,41 @@ pub struct Tenancy {
     tokens: Vec<([u8; 32], UserId)>,
     devices: BTreeMap<String, UserId>,
     unmapped_device_owner: Option<UserId>,
+    spaces: Vec<Space>,
+    admins: Vec<UserId>,
 }
 
 impl Tenancy {
+    #[must_use]
+    pub fn with_spaces(mut self, spaces: Vec<Space>) -> Self {
+        self.spaces = spaces;
+        self
+    }
+
+    #[must_use]
+    pub fn with_admin(mut self, user: UserId) -> Self {
+        if !self.admins.contains(&user) {
+            self.admins.push(user);
+        }
+        self
+    }
+
+    #[must_use]
+    pub fn spaces(&self) -> &[Space] {
+        &self.spaces
+    }
+
+    #[must_use]
+    pub fn viewer(&self, user: &UserId) -> Viewer {
+        let spaces = self
+            .spaces
+            .iter()
+            .filter(|space| space.members.contains(user.owner()))
+            .map(|space| space.id.clone())
+            .collect();
+        Viewer::new(user.owner().clone(), spaces)
+    }
+
     #[must_use]
     pub fn local_user(&self) -> Option<&UserId> {
         self.local.as_ref()
@@ -120,7 +159,7 @@ impl Tenancy {
     }
 
     pub(crate) fn owner(&self, user: &UserId) -> Result<(), ApiError> {
-        if self.local.as_ref() == Some(user) {
+        if self.local.as_ref() == Some(user) || self.admins.contains(user) {
             Ok(())
         } else {
             Err(ApiError::OwnerRequired)
@@ -184,7 +223,7 @@ impl FromRequestParts<std::sync::Arc<crate::Gateway>> for UserId {
     }
 }
 
-fn caller(gateway: &crate::Gateway, parts: &Parts) -> Result<UserId, ApiError> {
+pub(crate) fn caller(gateway: &crate::Gateway, parts: &Parts) -> Result<UserId, ApiError> {
     if parts
         .extensions
         .get::<crate::plugins::PluginCaller>()

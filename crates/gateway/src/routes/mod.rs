@@ -1,16 +1,17 @@
 pub mod agents;
-pub mod audio;
 pub mod ca;
 pub mod capture;
 pub mod capture_schema;
 pub mod chat;
 pub mod devices;
 pub mod files;
+mod flagged;
 pub mod harnesses;
 mod history;
 pub(crate) mod hub_state;
 pub mod memory;
 mod memory_archive;
+mod memory_snippet;
 mod notifications;
 mod plugins;
 mod session_delete;
@@ -20,7 +21,8 @@ pub mod tasks;
 pub mod terminal;
 mod tidy;
 pub(crate) mod topics;
-pub mod v1;
+mod updates;
+pub(crate) mod voice;
 pub mod wiki;
 
 mod surface;
@@ -33,7 +35,7 @@ use axum::extract::State;
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use kernel::memory::MemoryStoreError;
-use kernel::model::{ProviderHealth, ProviderStatus};
+use kernel::model::{ProviderHealth, ProviderRecovery, ProviderStatus};
 use wire::gateway::{DegradedProvider, HealthzResponse};
 
 use crate::Gateway;
@@ -46,7 +48,9 @@ pub(crate) use surface::plain_get;
 pub(crate) use surface::rewrite_request;
 
 pub(crate) fn router() -> axum::Router<Arc<Gateway>> {
-    audio::mount(harnesses::mount(files::mount(wiki::router())))
+    harnesses::mount(files::mount(wiki::router()))
+        .merge(voice::router())
+        .merge(updates::router())
         .nest("/api/agents", agents::router())
         .merge(devices::router())
         .merge(ca::router())
@@ -117,11 +121,18 @@ fn degraded_providers(providers: &[ProviderHealth]) -> Vec<DegradedProvider> {
             ProviderStatus::Ready => None,
             ProviderStatus::Degraded(degradation) => Some(DegradedProvider {
                 id: provider.id.clone(),
-                recovery: degradation.recovery,
+                recovery: recovery_body(degradation.recovery),
                 reason: degradation.cause.to_string(),
             }),
         })
         .collect()
+}
+
+const fn recovery_body(recovery: ProviderRecovery) -> wire::gateway::ProviderRecovery {
+    match recovery {
+        ProviderRecovery::Retrying => wire::gateway::ProviderRecovery::Retrying,
+        ProviderRecovery::Permanent => wire::gateway::ProviderRecovery::Permanent,
+    }
 }
 
 fn degraded_reason(error: &MemoryStoreError) -> String {
@@ -135,16 +146,8 @@ fn degraded_reason(error: &MemoryStoreError) -> String {
     format!("database unreachable: {detail}")
 }
 
-pub(crate) async fn not_found(
-    State(gateway): State<Arc<Gateway>>,
-    request: axum::extract::Request,
-) -> axum::response::Response {
-    use tower::ServiceExt as _;
-
-    match v1::router().with_state(gateway).oneshot(request).await {
-        Ok(response) => response,
-        Err(never) => match never {},
-    }
+pub(crate) async fn not_found() -> ApiError {
+    ApiError::NotFound("not found")
 }
 
 pub(crate) async fn method_not_allowed() -> ApiError {
