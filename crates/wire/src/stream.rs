@@ -317,7 +317,7 @@ pub mod openai {
         pub prompt_n: u64,
         pub prompt_ms: f64,
         pub prompt_per_token_ms: f64,
-        pub prompt_per_second: u64,
+        pub prompt_per_second: f64,
         pub predicted_n: u64,
         pub predicted_ms: f64,
         pub predicted_per_token_ms: f64,
