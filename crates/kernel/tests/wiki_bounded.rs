@@ -1,7 +1,9 @@
 #![cfg(test)]
 
 use chrono::{DateTime, NaiveDate, Utc};
-use kernel::wiki::page::archive::{settle_archive, unarchived};
+use kernel::wiki::page::archive::{
+    ArchivePart, SEGMENT_BUDGET, next_part, settle_archive, unarchived,
+};
 use kernel::wiki::page::bound::{
     ARCHIVED_TITLE, ARTICLE_BUDGET, Archived, HISTORY_LINE, SECTION_BUDGET, SECTIONS_BUDGET,
     bound_page, dropped, fit, history_line, rebase, tail,
@@ -413,4 +415,29 @@ fn a_recompile_keeps_what_a_concurrent_write_added() -> TestResult {
     assert_eq!(titles, vec!["Staging port", "First release"]);
     assert_eq!(archived, Vec::<Archived>::new());
     Ok(())
+}
+
+#[test]
+fn archive_writes_fill_numbered_parts_and_never_the_month_file() {
+    let part = |month: &str, part: u32| ArchivePart {
+        month: month.to_owned(),
+        part,
+    };
+    assert_eq!(ArchivePart::parse("2026-10.md"), Some(part("2026-10", 0)));
+    assert_eq!(ArchivePart::parse("2026-10.3.md"), Some(part("2026-10", 3)));
+    assert_eq!(ArchivePart::parse("2026-10.03.md"), None);
+    assert_eq!(ArchivePart::parse("2026-10.0.md"), None);
+    assert_eq!(ArchivePart::parse("2026-13.md"), None);
+    assert_eq!(part("2026-11", 2).name(), "2026-11.2.md");
+    assert_eq!(next_part("2026-11", &[], 10), part("2026-11", 1));
+    assert_eq!(
+        next_part("2026-10", &[(part("2026-10", 0), 3_000_000)], 10),
+        part("2026-10", 1)
+    );
+    let parts = [(part("2026-10", 0), 3_000_000), (part("2026-10", 1), 1024)];
+    assert_eq!(next_part("2026-10", &parts, 10), part("2026-10", 1));
+    assert_eq!(
+        next_part("2026-10", &parts, SEGMENT_BUDGET),
+        part("2026-10", 2)
+    );
 }

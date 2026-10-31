@@ -1,4 +1,4 @@
-mod archive;
+pub(crate) mod archive;
 mod history;
 mod lock;
 

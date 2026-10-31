@@ -1197,13 +1197,16 @@ the legacy "Superseded article", "Superseded current state" and "Summary overflo
 are written), History entries pushed past 48, and the long body of an existing History entry when it is shortened. A
 block counts as removed only when fewer than 60% of its words (four or more letters, or containing a digit) are still
 on the page after the write, and is archived only when no block already in that month's archive holds 60% or more of
-them, so a rephrasing, a "Currently" swap or a repeat archives nothing. Archived text is appended to
-`archive/<slug>/<YYYY-MM>.md` (one file a month) in the wiki repository, outside `topics/`, as a block under
+them, so a rephrasing, a "Currently" swap or a repeat archives nothing. Archived text is appended to the month's
+newest numbered part, `archive/<slug>/<YYYY-MM>.<n>.md`, while the part stays within 64 KiB, and otherwise starts part
+`n + 1`, so a write never re-stores a large file; an unnumbered `<YYYY-MM>.md` from before parts is read and served but
+never appended to. The month's parts are in the wiki repository, outside `topics/`, each archived text a block under
 `<a id="a-<UTC timestamp>"></a>` that names the commit where it was last inline, and is committed with the page. The
 page gets at most one History entry a day titled "Archived" that links `/wiki/<slug>/archive/<YYYY-MM>#<anchor>` and names that
 commit; History pushed out on its own adds no entry. Archive files are not pages: they have no `rh_wiki_topics` row and
 are not embedded, searched or listed. `GET /api/wiki/{slug}/archive/{month}` answers one month as `text/markdown` and
-`/wiki/{slug}/archive/{month}` as HTML keeping the anchors; without `{month}` they answer every month joined, oldest first,
+`/wiki/{slug}/archive/{month}` as HTML keeping the anchors (all of the month's files, oldest first); without `{month}`
+they answer every month joined, oldest first,
 after a pre-month `archive/<slug>.md` if one is left; `404` when there is none. The writers run git with `gc.auto=0` and
 `maintenance.auto=false`, so packing never runs inside a worker; it runs outside them (`git gc --auto` on a timer). Repair: `recompile-wiki`
 (`{slug, since}`, handled by the wiki builder; key `wiki-recompile-<slug>`, priority 5) restores the page's real History
