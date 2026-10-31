@@ -32,6 +32,7 @@ pub(crate) struct JobEnv {
     pub(crate) topic_pages: Option<crate::topic_page::TopicPages>,
     pub(crate) tidy: Option<Arc<dyn kernel::tidy::TidyStore>>,
     pub(crate) deletions: Option<Arc<dyn kernel::memory::SessionDeletion>>,
+    pub(crate) scopes: Option<crate::OwnerScopes>,
 }
 
 pub(crate) async fn dispatch<Q: JobQueue>(
@@ -130,7 +131,10 @@ async fn dispatch_file(
         now: Utc::now(),
         cancel,
     };
-    handle_file(&filing, conversation).await.map(|_| ())
+    let scope = crate::scopes::conversation_scope(env.scopes.as_ref(), conversation).await?;
+    crate::scopes::within(scope, handle_file(&filing, conversation))
+        .await
+        .map(|_| ())
 }
 
 async fn dispatch_purge(env: &JobEnv, cancel: &CancellationToken) -> Result<(), WorkerError> {
@@ -159,7 +163,10 @@ async fn dispatch_tidy(env: &JobEnv, cancel: &CancellationToken) -> Result<(), W
         now: Utc::now(),
         cancel,
     };
-    crate::tidy::handle_tidy(&run).await.map(|_| ())
+    let scope = crate::scopes::primary_scope(env.scopes.as_ref()).await?;
+    crate::scopes::within(scope, crate::tidy::handle_tidy(&run))
+        .await
+        .map(|_| ())
 }
 
 async fn dispatch_topic_page(
@@ -173,7 +180,12 @@ async fn dispatch_topic_page(
         .ok_or(WorkerError::MissingDependencies {
             role: ProcessRole::Summarizer,
         })?;
-    crate::topic_page::handle_sync_topic_page(deps, &job.payload, cancel).await
+    let scope = crate::scopes::primary_scope(env.scopes.as_ref()).await?;
+    crate::scopes::within(
+        scope,
+        crate::topic_page::handle_sync_topic_page(deps, &job.payload, cancel),
+    )
+    .await
 }
 
 async fn dispatch_wiki<Q: JobQueue>(
@@ -207,7 +219,8 @@ async fn dispatch_wiki<Q: JobQueue>(
         topics,
     };
     if job.name == JobName::Fixed(FixedJob::ExtractWiki) {
-        handle_extract_wiki(&wiki_env, &job.payload)
+        let scope = crate::scopes::primary_scope(env.scopes.as_ref()).await?;
+        crate::scopes::within(scope, handle_extract_wiki(&wiki_env, &job.payload))
             .await
             .map(|_| ())
     } else {

@@ -172,6 +172,13 @@ async fn run(
                 load: crate::model_load::VllmMetrics::from_environment(env)
                     .map_err(|error| RootError::Invalid(format!("model load probe: {error}")))?
                     .map(|probe| Arc::new(probe) as Arc<dyn kernel::model::ModelLoadProbe>),
+                scopes: Some(workers::OwnerScopes {
+                    store: Arc::new(memory_postgres::PostgresTenancy::new(memory.pool().clone())),
+                    primary: crate::composition::identities::load(&config, env)
+                        .await
+                        .map_err(StartupError::from)?
+                        .primary(),
+                }),
             },
             &config,
             env,
@@ -220,6 +227,7 @@ pub struct WorkerPorts<Q> {
     pub tidy: Arc<dyn TidyStore>,
     pub lineage: Arc<dyn SessionLister>,
     pub load: Option<Arc<dyn kernel::model::ModelLoadProbe>>,
+    pub scopes: Option<workers::OwnerScopes>,
 }
 
 pub(crate) fn session_lineage(env: &Environment) -> Arc<dyn SessionLister> {
@@ -263,6 +271,7 @@ pub fn with_models<Q: JobQueue + 'static>(
         provider,
         embed: EmbedSettings::from_config(config)?,
         summary: SummarySettings::standard(model.clone())?,
+        scopes: ports.scopes,
     };
     let runner = Runner::new(
         ports.queue,

@@ -6,6 +6,7 @@ use chrono::Utc;
 use kernel::owner::Owner;
 use kernel::tenancy::SessionVisibility;
 use kernel::tenancy::Space;
+use kernel::tenancy::SpaceId;
 use kernel::tenancy::TenancyStore;
 use kernel::tenancy::TenancyStoreError;
 use kernel::tenancy::TopicVisibility;
@@ -417,5 +418,51 @@ impl TenancyStore for SqliteStore {
             Err(true) => Err(TenancyStoreError::NotOwner(topic.to_string())),
             Err(false) => Err(TenancyStoreError::NotFound(topic.to_string())),
         }
+    }
+
+    async fn viewer_of(&self, owner: &Owner) -> Result<Viewer, TenancyStoreError> {
+        let user = owner.as_str().to_owned();
+        let spaces = self
+            .with_conn(move |conn| {
+                conn.prepare(
+                    "SELECT space_id FROM rh_space_members WHERE user_id = ?1 ORDER BY space_id",
+                )
+                .and_then(|mut statement| {
+                    statement
+                        .query_map(params![user], |row| row.get::<_, String>(0))?
+                        .collect::<Result<Vec<_>, _>>()
+                })
+                .map_err(query("viewer"))
+            })
+            .await
+            .map_err(unavailable)?
+            .into_iter()
+            .map(SpaceId::new)
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(Viewer::new(owner.clone(), spaces))
+    }
+
+    async fn conversation_owner(
+        &self,
+        conversation: uuid::Uuid,
+    ) -> Result<Option<Owner>, TenancyStoreError> {
+        let id = conversation.to_string();
+        let owner: Option<Option<String>> = self
+            .with_conn(move |conn| {
+                conn.query_row(
+                    "SELECT owner_user_id FROM ros_conversations WHERE id = ?1",
+                    params![id],
+                    |row| row.get(0),
+                )
+                .optional()
+                .map_err(query("conversation owner"))
+            })
+            .await
+            .map_err(unavailable)?;
+        owner
+            .flatten()
+            .map(Owner::new)
+            .transpose()
+            .map_err(|error| TenancyStoreError::Unavailable(Box::new(error)))
     }
 }

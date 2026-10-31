@@ -80,6 +80,7 @@ pub(super) async fn run(
             Target::Sqlite(_) => Err(Error::TitlesSqlite),
         },
         MemoryCommand::Reembed { dry_run, sqlite } => reembed(dry_run, sqlite, env).await,
+        MemoryCommand::MergeStore(args) => super::merge::run(args, env, shutdown).await,
         MemoryCommand::ConsolidateWiki {
             limit,
             dry_run,

@@ -6571,6 +6571,12 @@
             "string",
             "null"
           ]
+        },
+        "admin": {
+          "type": [
+            "boolean",
+            "null"
+          ]
         }
       }
     },

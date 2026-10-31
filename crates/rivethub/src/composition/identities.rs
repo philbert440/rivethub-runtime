@@ -23,6 +23,10 @@ pub(crate) struct Identity {
 }
 
 impl Identity {
+    pub(crate) fn primary(&self) -> kernel::owner::Owner {
+        self.owner.owner().clone()
+    }
+
     pub(crate) fn owner_scope(&self) -> Scope {
         Scope::Viewer(self.tenancy.viewer(&self.owner))
     }
@@ -101,6 +105,9 @@ fn registry(users: UsersRegistry) -> Result<Identity, ComposeError> {
     }
     for (id, record) in users.users {
         let user = UserId::new(id)?;
+        if record.admin == Some(true) {
+            tenancy = tenancy.with_admin(user.clone());
+        }
         if let Some(devices) = record.devices {
             for device in devices {
                 tenancy = tenancy.with_device(&device, user.clone())?;

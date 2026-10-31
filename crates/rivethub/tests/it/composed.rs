@@ -113,6 +113,7 @@ fn write_registry(directory: &std::path::Path) -> TestResult {
                 pg_url: None,
                 env_file: None,
                 persona: None,
+                admin: None,
             },
         )]),
     };

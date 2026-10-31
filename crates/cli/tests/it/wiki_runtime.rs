@@ -57,6 +57,7 @@ async fn wiki_runner_claims_cron_extracts_and_shuts_down(pool: PgPool) -> TestRe
             provider: model.clone(),
             embed: EmbedSettings::standard(),
             summary: SummarySettings::standard("fake-chat")?,
+            scopes: None,
         },
     )
     .with_wiki_builder(WikiBuilderDeps {

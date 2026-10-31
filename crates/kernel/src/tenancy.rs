@@ -258,4 +258,11 @@ pub trait TenancyStore: Send + Sync {
         topic: TopicId,
         mark: Option<&Visibility>,
     ) -> Result<TopicVisibility, TenancyStoreError>;
+
+    async fn viewer_of(&self, owner: &Owner) -> Result<Viewer, TenancyStoreError>;
+
+    async fn conversation_owner(
+        &self,
+        conversation: uuid::Uuid,
+    ) -> Result<Option<Owner>, TenancyStoreError>;
 }

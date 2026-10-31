@@ -14,6 +14,14 @@ pub async fn postgres(url: &str) -> Result<Status, Error> {
     let pool = PgPoolOptions::new()
         .max_connections(2)
         .acquire_timeout(Duration::from_secs(10))
+        .after_connect(|conn, _| {
+            Box::pin(async move {
+                sqlx::query("SELECT set_config('rh.maintenance', 'on', false)")
+                    .execute(conn)
+                    .await
+                    .map(drop)
+            })
+        })
         .connect(url)
         .await
         .map_err(Error::PostgresConnect)?;

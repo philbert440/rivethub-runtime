@@ -43,4 +43,6 @@ pub struct UserRecord {
     pub pg_url: Option<String>,
     pub env_file: Option<String>,
     pub persona: Option<String>,
+    #[serde(default)]
+    pub admin: Option<bool>,
 }

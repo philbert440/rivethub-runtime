@@ -9,6 +9,7 @@ mod flagged;
 mod hub_state;
 mod index_friendly;
 mod memory_golden;
+mod merge;
 mod named_queues;
 mod owners;
 mod queue;

@@ -6,6 +6,7 @@ use chrono::Utc;
 use kernel::owner::Owner;
 use kernel::tenancy::SessionVisibility;
 use kernel::tenancy::Space;
+use kernel::tenancy::SpaceId;
 use kernel::tenancy::TenancyStore;
 use kernel::tenancy::TenancyStoreError;
 use kernel::tenancy::TopicVisibility;
@@ -289,5 +290,32 @@ impl TenancyStore for PostgresTenancy {
                 .transpose()?,
             effective: Visibility::parse(&row.visibility)?,
         })
+    }
+
+    async fn viewer_of(&self, owner: &Owner) -> Result<Viewer, TenancyStoreError> {
+        let spaces = sqlx::query_as::<_, (String,)>(
+            "SELECT space_id FROM rh_space_members WHERE user_id = $1 ORDER BY space_id",
+        )
+        .bind(owner.as_str())
+        .fetch_all(&self.pool)
+        .await
+        .map_err(failed("viewer"))?
+        .into_iter()
+        .map(|(space,)| SpaceId::new(space))
+        .collect::<Result<Vec<_>, _>>()?;
+        Ok(Viewer::new(owner.clone(), spaces))
+    }
+
+    async fn conversation_owner(
+        &self,
+        conversation: uuid::Uuid,
+    ) -> Result<Option<Owner>, TenancyStoreError> {
+        sqlx::query_as::<_, (String,)>("SELECT owner_user_id FROM rh_conversations WHERE id = $1")
+            .bind(conversation)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(failed("conversation owner"))?
+            .map(|(owner,)| stored_owner(owner))
+            .transpose()
     }
 }
