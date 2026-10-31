@@ -2911,6 +2911,14 @@
         },
         "truncated": {
           "type": "boolean"
+        },
+        "children": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
         }
       },
       "required": [
@@ -2999,12 +3007,79 @@
         },
         "messages": {
           "$ref": "#/$defs/MemoryMessageTally"
+        },
+        "counts": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MemorySummaryCounts"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "required": [
         "sessionId",
         "summaries",
         "messages"
+      ]
+    },
+    "MemorySummaryCounts": {
+      "type": "object",
+      "properties": {
+        "leaves": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "branches": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "roots": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "embedded": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "top": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "leaves",
+        "branches",
+        "roots",
+        "embedded",
+        "top"
+      ]
+    },
+    "MemorySummaryChildren": {
+      "type": "object",
+      "properties": {
+        "summaries": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/MemorySummaryNode"
+          }
+        },
+        "total": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "summaries",
+        "total"
       ]
     },
     "TopTool": {

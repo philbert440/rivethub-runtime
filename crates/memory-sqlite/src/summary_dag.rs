@@ -175,6 +175,7 @@ fn summary_node(
         source_message_ids,
         vector: row.vector,
         truncated: false,
+        children: None,
     })
 }
 

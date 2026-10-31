@@ -8,9 +8,12 @@ use axum::response::IntoResponse;
 use axum::response::Response;
 use kernel::memory::SummaryDag;
 use kernel::memory::SummaryOwner;
+use kernel::memory::TreeWindow;
 use serde::Deserialize;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
+use wire::gateway::memory::MemorySummaryChildren;
+use wire::gateway::memory::MemorySummaryCounts;
 use wire::gateway::memory::MemorySummaryDagResponse;
 use wire::gateway::memory::MemorySummaryNode;
 
@@ -29,6 +32,22 @@ pub(crate) struct ExportParams {
 #[derive(Debug, Default, Deserialize)]
 pub(crate) struct DagParams {
     outline: Option<bool>,
+    tree: Option<bool>,
+    offset: Option<usize>,
+    limit: Option<usize>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+pub(crate) struct TreeParams {
+    offset: Option<usize>,
+    limit: Option<usize>,
+}
+
+fn window(offset: Option<usize>, limit: Option<usize>) -> TreeWindow {
+    TreeWindow {
+        offset: offset.unwrap_or(TreeWindow::ALL.offset),
+        limit: limit.unwrap_or(TreeWindow::ALL.limit),
+    }
 }
 
 async fn read_dag(
@@ -53,7 +72,14 @@ fn dag_body(session_id: String, dag: SummaryDag) -> MemorySummaryDagResponse {
             .map(crate::memory_body::memory_summary_node_body)
             .collect(),
         messages: crate::memory_body::memory_message_tally_body(dag.messages),
+        counts: None,
     }
+}
+
+fn nodes(tree: Vec<kernel::memory::MemorySummaryNode>) -> Vec<MemorySummaryNode> {
+    tree.into_iter()
+        .map(crate::memory_body::memory_summary_node_body)
+        .collect()
 }
 
 pub(crate) async fn summaries(
@@ -61,8 +87,50 @@ pub(crate) async fn summaries(
     Path(session): Path<String>,
     Query(params): Query<DagParams>,
 ) -> Result<Json<MemorySummaryDagResponse>, ApiError> {
-    let dag = read_dag(&gateway, &SummaryOwner::Session(session.clone()), &params).await?;
+    let owner = SummaryOwner::Session(session.clone());
+    if params.tree == Some(true) {
+        let tree = gateway
+            .store()
+            .summary_tree(&owner, None, window(params.offset, params.limit))
+            .await?
+            .unwrap_or_default();
+        return Ok(Json(MemorySummaryDagResponse {
+            session_id: session,
+            summaries: nodes(tree.summaries),
+            messages: crate::memory_body::memory_message_tally_body(tree.messages),
+            counts: Some(MemorySummaryCounts {
+                leaves: tree.counts.leaves,
+                branches: tree.counts.branches,
+                roots: tree.counts.roots,
+                embedded: tree.counts.embedded,
+                top: tree.counts.top,
+            }),
+        }));
+    }
+    let dag = read_dag(&gateway, &owner, &params).await?;
     Ok(Json(dag_body(session, dag)))
+}
+
+pub(crate) async fn children(
+    State(gateway): State<Arc<Gateway>>,
+    Path((session, summary)): Path<(String, String)>,
+    Query(params): Query<TreeParams>,
+) -> Result<Json<MemorySummaryChildren>, ApiError> {
+    Uuid::parse_str(&summary)
+        .map_err(|_| ApiError::BadRequest(format!("{summary} is not a summary id")))?;
+    let tree = gateway
+        .store()
+        .summary_tree(
+            &SummaryOwner::Session(session),
+            Some(&summary),
+            window(params.offset, params.limit),
+        )
+        .await?
+        .ok_or_else(|| ApiError::Missing(format!("unknown summary {summary}")))?;
+    Ok(Json(MemorySummaryChildren {
+        summaries: nodes(tree.summaries),
+        total: tree.total,
+    }))
 }
 
 pub(crate) async fn summary(

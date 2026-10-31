@@ -103,6 +103,10 @@ pub(crate) fn router() -> Router<Arc<Gateway>> {
             routing::get(super::memory_archive::summary).fallback(super::method_not_allowed),
         )
         .route(
+            "/summaries/{session}/{summary}/children",
+            routing::get(super::memory_archive::children).fallback(super::method_not_allowed),
+        )
+        .route(
             "/conversations/{id}/summaries",
             routing::get(super::memory_archive::conversation_summaries)
                 .fallback(super::method_not_allowed),

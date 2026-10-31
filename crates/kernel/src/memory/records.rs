@@ -209,6 +209,8 @@ pub struct MemorySummaryNode {
     pub vector: VectorState,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub truncated: bool,
+    #[serde(default)]
+    pub children: Option<u64>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, strum::EnumString)]

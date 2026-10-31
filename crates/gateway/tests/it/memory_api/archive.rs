@@ -77,6 +77,7 @@ fn node(
         source_message_ids: vec!["00000000-0000-4000-8000-000000000101".to_owned()],
         vector,
         truncated: false,
+        children: None,
     }
 }
 
@@ -302,4 +303,84 @@ fn export_route_is_guarded_and_needs_a_configured_exporter() {
     let response = get(&gateway.router(false), "/api/memory/export");
     assert_eq!(response.status, 503);
     assert_eq!(error_of(&response).error, "memory export is not configured");
+}
+
+#[test]
+fn a_tree_reads_the_top_a_window_at_a_time_then_each_summary_children() {
+    let (gateway, store) = common::gateway();
+    let branch = "00000000-0000-4000-8000-000000000001";
+    let first = "00000000-0000-4000-8000-000000000002";
+    let loose = "00000000-0000-4000-8000-000000000003";
+    let mut later = node(loose, None, 0, SummaryKind::Leaf, VectorState::Pending);
+    later.earliest_at = Some(at("2026-10-10T13:00:00Z"));
+    let dag = SummaryDag {
+        session_key: Some(SESSION.to_owned()),
+        summaries: vec![
+            later,
+            node(branch, None, 1, SummaryKind::Branch, VectorState::Embedded),
+            node(
+                first,
+                Some(branch),
+                0,
+                SummaryKind::Leaf,
+                VectorState::Pending,
+            ),
+        ],
+        messages: MemoryMessageTally::default(),
+    };
+    block_on(store.script_summary_dag(SummaryOwner::Session(SESSION.to_owned()), dag));
+    let app = gateway.router(false);
+    let response = get(
+        &app,
+        &format!("/api/memory/summaries/{SESSION}?tree=true&limit=1"),
+    );
+    assert_eq!(response.status, 200);
+    let top: MemorySummaryDagResponse = serde_json::from_slice(&response.body).expect("tree top");
+    let shown: Vec<(&str, Option<u64>)> = top
+        .summaries
+        .iter()
+        .map(|node| (node.id.as_str(), node.children))
+        .collect();
+    assert_eq!(shown, [(branch, Some(1))]);
+    assert_eq!(
+        top.counts,
+        Some(wire::gateway::memory::MemorySummaryCounts {
+            leaves: 2,
+            branches: 1,
+            roots: 0,
+            embedded: 1,
+            top: 2,
+        })
+    );
+    let next = get(
+        &app,
+        &format!("/api/memory/summaries/{SESSION}?tree=true&offset=1&limit=1"),
+    );
+    let next: MemorySummaryDagResponse = serde_json::from_slice(&next.body).expect("next window");
+    assert_eq!(
+        next.summaries.first().map(|node| node.id.as_str()),
+        Some(loose)
+    );
+    let response = get(
+        &app,
+        &format!("/api/memory/summaries/{SESSION}/{branch}/children"),
+    );
+    assert_eq!(response.status, 200);
+    let children: wire::gateway::memory::MemorySummaryChildren =
+        serde_json::from_slice(&response.body).expect("children");
+    assert_eq!(children.total, 1);
+    assert_eq!(
+        children.summaries.first().map(|node| node.id.as_str()),
+        Some(first)
+    );
+    assert_eq!(
+        get(
+            &app,
+            &format!(
+                "/api/memory/summaries/{SESSION}/00000000-0000-4000-8000-000000000009/children"
+            )
+        )
+        .status,
+        404
+    );
 }

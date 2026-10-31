@@ -1257,6 +1257,15 @@ name, up to the next `##`), `citations` only those filed in the sub-topic, and `
 responses with gzip or brotli when the request accepts them, except event streams, audio, video, archives, octet streams
 and NDJSON.
 
+(103) Summary tree (Phil, 2026-10-31; monster sessions): `GET /api/memory/summaries/{session}?tree=true` answers the
+session's DAG a level at a time: `summaries` the top-level nodes (no parent in the DAG), earliest first by `earliestAt`
+(else `latestAt`) then id, cut as `outline=true` cuts them, each with `children` (how many nodes roll up into it);
+`offset` and `limit` take a window of them (absent, the first and all). `counts` is the whole DAG's
+`{ leaves, branches, roots, embedded, top }`, `top` the number of top-level nodes, and `messages` the tally as before.
+`GET /api/memory/summaries/{session}/{summary}/children` answers `{ summaries, total }`: that node's children in the
+same order, cut and counted the same way, with the same `offset` and `limit`, `total` all its children, and `404` for a
+summary outside the session's DAG. Without `tree` the route answers as note 102 says.
+
 ## 4. Gaps to close before building the affected slice
 
 - MCP `tools/list` and sample-call recording (B7); CLI golden transcripts (B9); ACP conformance runs against installed

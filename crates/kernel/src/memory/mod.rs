@@ -28,6 +28,7 @@ mod suggest;
 mod summary;
 mod tags;
 mod title;
+mod tree;
 
 pub use capture::{CaptureBatchRequest, CaptureMessage, CaptureResult};
 pub use deletion::DeletedSession;
@@ -99,6 +100,7 @@ pub use title::needs_title;
 pub use title::spoken_title;
 pub use title::summary_title;
 pub use title::weak_title;
+pub use tree::{SummaryCounts, SummaryShape, SummaryTree, TreeCut, TreeWindow, cut};
 
 #[derive(Debug, Error)]
 pub enum MemoryStoreError {
@@ -452,6 +454,15 @@ pub trait MemoryStore: Send + Sync {
 
     async fn summary_outline(&self, owner: &SummaryOwner) -> Result<SummaryDag, MemoryStoreError> {
         Ok(self.summary_dag(owner).await?.outline())
+    }
+
+    async fn summary_tree(
+        &self,
+        owner: &SummaryOwner,
+        parent: Option<&str>,
+        window: TreeWindow,
+    ) -> Result<Option<SummaryTree>, MemoryStoreError> {
+        Ok(self.summary_outline(owner).await?.tree(parent, window))
     }
 
     async fn summary_node(

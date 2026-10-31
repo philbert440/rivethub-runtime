@@ -7,6 +7,7 @@ use kernel::memory::MemoryStore as _;
 use kernel::memory::SummaryDag;
 use kernel::memory::SummaryKind;
 use kernel::memory::SummaryOwner;
+use kernel::memory::TreeWindow;
 use kernel::memory::VectorState;
 use memory_postgres::PostgresMemory;
 use sqlx::PgPool;
@@ -203,6 +204,48 @@ async fn an_outline_previews_each_summary_and_one_summary_reads_whole(pool: PgPo
     assert_eq!(
         memory
             .summary_node(&owner, "00000000-0000-4000-8000-000000000015")
+            .await?,
+        None
+    );
+    Ok(())
+}
+
+#[sqlx::test(migrator = "migrate::POSTGRES")]
+async fn a_tree_reads_one_level_at_a_time_as_the_outline_would(pool: PgPool) -> TestResult {
+    seed(&pool).await?;
+    let memory = PostgresMemory::new(pool);
+    let owner = SummaryOwner::Session("cli:dag".to_owned());
+    let outline = memory.summary_outline(&owner).await?;
+    let window = TreeWindow {
+        offset: 0,
+        limit: 1,
+    };
+    let top = memory.summary_tree(&owner, None, window).await?;
+    assert_eq!(top, outline.clone().tree(None, window));
+    let top = top.expect("the top");
+    assert_eq!(
+        (
+            top.total,
+            top.counts.top,
+            top.counts.leaves,
+            top.counts.embedded
+        ),
+        (1, 1, 2, 1)
+    );
+    let branch = "00000000-0000-4000-8000-000000000014";
+    assert_eq!(
+        memory
+            .summary_tree(&owner, Some(branch), TreeWindow::ALL)
+            .await?,
+        outline.tree(Some(branch), TreeWindow::ALL)
+    );
+    assert_eq!(
+        memory
+            .summary_tree(
+                &owner,
+                Some("00000000-0000-4000-8000-000000000099"),
+                TreeWindow::ALL
+            )
             .await?,
         None
     );
