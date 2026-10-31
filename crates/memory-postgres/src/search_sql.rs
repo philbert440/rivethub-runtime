@@ -266,6 +266,7 @@ pub(crate) struct ArmSqlRow {
     tool_name: Option<String>,
     conversation_id: Option<String>,
     session_id: Option<String>,
+    session_channel: Option<String>,
     created_at: chrono::DateTime<Utc>,
     score: f64,
     semantic: f64,
@@ -296,7 +297,9 @@ impl ArmSqlRow {
             kind,
             tool_name: self.tool_name,
             conversation_id: self.conversation_id,
-            session_id: self.session_id,
+            session_id: self
+                .session_id
+                .map(|key| kernel::filing::session_key(self.session_channel.as_deref(), &key)),
             created_at: self.created_at,
             arm_score: self.score,
             semantic: self.semantic,
@@ -321,6 +324,7 @@ pub(crate) fn push_select_prefix(
             "m.id::text, m.content, m.role AS role_or_kind, m.agent, m.tool_name, \
              m.conversation_id::text AS conversation_id, \
              (SELECT conv.session_key FROM rh_conversations conv WHERE conv.id = m.conversation_id) AS session_id, \
+             (SELECT conv.channel FROM rh_conversations conv WHERE conv.id = m.conversation_id) AS session_channel, \
              m.created_at, ",
         );
     } else {
@@ -328,6 +332,7 @@ pub(crate) fn push_select_prefix(
             "s.id::text, s.content, s.kind AS role_or_kind, NULL AS agent, \
              NULL AS tool_name, s.conversation_id::text AS conversation_id, \
              (SELECT conv.session_key FROM rh_conversations conv WHERE conv.id = s.conversation_id) AS session_id, \
+             (SELECT conv.channel FROM rh_conversations conv WHERE conv.id = s.conversation_id) AS session_channel, \
              s.created_at, ",
         );
     }

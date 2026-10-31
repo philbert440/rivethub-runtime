@@ -12,7 +12,7 @@ use uuid::Uuid;
 use crate::PostgresMemory;
 use crate::error::Error;
 
-const SESSION_SQL: &str = "select id, session_key from rh_conversations where session_key = $1
+const SESSION_SQL: &str = "select id, session_key from rh_conversations where session_key = any($1)
     order by active is not false desc, updated_at desc, id limit 1";
 
 const CONVERSATION_SQL: &str = "select id, session_key from rh_conversations where id = $1";
@@ -82,7 +82,9 @@ impl PostgresMemory {
         owner: &SummaryOwner,
     ) -> Result<SummaryDag, MemoryStoreError> {
         let found: Option<(Uuid, String)> = match owner {
-            SummaryOwner::Session(session) => sqlx::query_as(SESSION_SQL).bind(session),
+            SummaryOwner::Session(session) => {
+                sqlx::query_as(SESSION_SQL).bind(kernel::filing::stored_keys(session))
+            }
             SummaryOwner::Conversation(id) => sqlx::query_as(CONVERSATION_SQL).bind(*id),
         }
         .fetch_optional(&self.pool)
