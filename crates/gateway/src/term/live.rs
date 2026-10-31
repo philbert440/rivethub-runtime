@@ -50,6 +50,14 @@ impl TerminalService {
         self.summaries.read().get(key).cloned()
     }
 
+    pub(crate) fn chat_at_rest(&self, key: &str) -> bool {
+        self.chats.read().contains_key(key)
+            && !self.pty_running(key)
+            && self.summaries.read().get(key).is_none_or(|summary| {
+                summary.blocked != Some(true) && summary.status != HarnessSessionStatus::Active
+            })
+    }
+
     pub(crate) fn is_live(&self, key: &str) -> bool {
         let running = self
             .summaries
@@ -65,7 +73,7 @@ impl TerminalService {
                 .state
                 .borrow()
                 .as_ref()
-                .is_none_or(|state| state.state == wire::gateway::term::PtyState::Running)
+                .is_some_and(|state| state.state == wire::gateway::term::PtyState::Running)
         });
         spawned
             || self.adopted.read().values().any(|(owner, info)| {
