@@ -9,12 +9,14 @@ use kernel::wiki::page::{WikiSlug, WikiSourceKind};
 use sqlx::{Postgres, Transaction};
 
 use super::{gate, lock_slug, query_error};
+use crate::wiki_scope::WikiScope;
 
 pub(super) struct Source<'a> {
     pub(super) summary: &'a WikiSummary,
     pub(super) date: DateTime<Utc>,
     pub(super) topic_page: Option<&'a WikiSlug>,
     pub(super) merged: &'a [MergedPage],
+    pub(super) home: &'a WikiScope,
 }
 
 pub(super) async fn apply(
@@ -28,11 +30,13 @@ pub(super) async fn apply(
         summary,
         date,
         topic_page,
+        home,
         ..
     } = *source;
-    let gated = gate::gate(tx, &patch, topic_page).await?;
+    let gated = gate::gate(tx, &patch, topic_page, home).await?;
     resolved(&patch, &gated);
-    lock_slug(tx, &gated.slug).await?;
+    let key = crate::wiki_scope::page_key(tx, home, &gated.slug).await?;
+    lock_slug(tx, &key).await?;
     let slug = gated.slug;
     let note_entry = (slug != patch.slug.as_ref()).then(|| patch.note(date.date_naive()));
     let citation_note = patch
@@ -77,7 +81,7 @@ pub(super) async fn apply(
         }],
         allow_shrink: false,
     };
-    let merge = merge_base(source.merged, &slug, note_entry.is_some(), &mut page_patch);
+    let merge = merge_base(source.merged, &key, note_entry.is_some(), &mut page_patch);
     if let Some(entry) = note_entry {
         page_patch.title = None;
         page_patch.add_aliases = vec![patch.slug.as_ref().to_owned()];
@@ -92,9 +96,9 @@ pub(super) async fn apply(
         .as_ref()
         .map(|entry| entry.body.clone());
     let applied = repository.apply(page_patch, &summary_id, merge).await?;
-    store_topic(tx, &applied.page, &applied.git_sha, now).await?;
-    provenance(tx, &slug, summary, note, now).await?;
-    Ok((slug, applied.git_sha))
+    store(tx, &applied.page, &key, Some(home), &applied.git_sha, now).await?;
+    provenance(tx, &key, summary, note, now).await?;
+    Ok((key, applied.git_sha))
 }
 
 fn resolved(patch: &WikiPatch, gated: &gate::Gated) {
@@ -131,13 +135,35 @@ pub(super) async fn store_topic(
     git_sha: &str,
     now: DateTime<Utc>,
 ) -> Result<(), WikiStoreError> {
+    store(tx, page, page.meta.slug.as_ref(), None, git_sha, now).await
+}
+
+pub(super) async fn store(
+    tx: &mut Transaction<'_, Postgres>,
+    page: &WikiPage,
+    key: &str,
+    home: Option<&WikiScope>,
+    git_sha: &str,
+    now: DateTime<Utc>,
+) -> Result<(), WikiStoreError> {
     let history_count = i32::try_from(page.history.len())
         .map_err(|error| WikiStoreError::InvalidPatch(error.to_string()))?;
     let search_text = kernel::wiki::page::build_wiki_search_text(page);
+    let owner = home.map(|home| {
+        if home.visibility == "private" {
+            home.owner_user_id.as_str()
+        } else {
+            home.scope.as_str()
+        }
+    });
     sqlx::query(
         "INSERT INTO rh_wiki_topics (slug, title, aliases, tags, entities, current_state, article, related,
-            search_text, history_count, last_verified_at, created_at, updated_at, git_sha)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $12, $13)
+            search_text, history_count, last_verified_at, created_at, updated_at, git_sha,
+            scope, local_slug, owner_user_id, visibility)
+         VALUES ($1, $2, $3, $4, $5, $6, $7,
+            ARRAY(SELECT coalesce((SELECT k.slug FROM rh_wiki_topics k WHERE k.scope = $14 AND k.local_slug = r.slug), r.slug)
+                    FROM unnest($8::text[]) WITH ORDINALITY AS r(slug, n) ORDER BY r.n),
+            $9, $10, $11, $12, $12, $13, $14, $15, $16, coalesce($17, 'private'))
          ON CONFLICT (slug) DO UPDATE SET title = EXCLUDED.title, aliases = EXCLUDED.aliases,
             tags = EXCLUDED.tags, entities = EXCLUDED.entities, current_state = EXCLUDED.current_state,
             article = EXCLUDED.article, related = EXCLUDED.related, search_text = EXCLUDED.search_text,
@@ -145,10 +171,14 @@ pub(super) async fn store_topic(
             updated_at = EXCLUDED.updated_at, git_sha = EXCLUDED.git_sha,
             embedding = NULL, embed_status = NULL, embed_failures = 0, embed_error = NULL",
     )
-    .bind(page.meta.slug.as_ref()).bind(&page.meta.title).bind(&page.meta.aliases)
+    .bind(key).bind(&page.meta.title).bind(&page.meta.aliases)
     .bind(&page.meta.tags).bind(&page.meta.entities).bind(&page.current_state)
     .bind(&page.article).bind(&page.meta.related).bind(search_text).bind(history_count)
     .bind(now).bind(now).bind(git_sha)
+    .bind(home.map(|home| home.scope.as_str()))
+    .bind(home.map(|_| page.meta.slug.as_ref()))
+    .bind(owner)
+    .bind(home.map(|home| home.visibility.as_str()))
     .execute(&mut **tx).await.map_err(query_error)?;
     Ok(())
 }

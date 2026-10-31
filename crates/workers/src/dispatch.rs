@@ -219,8 +219,7 @@ async fn dispatch_wiki<Q: JobQueue>(
         topics,
     };
     if job.name == JobName::Fixed(FixedJob::ExtractWiki) {
-        let scope = crate::scopes::primary_scope(env.scopes.as_ref()).await?;
-        crate::scopes::within(scope, handle_extract_wiki(&wiki_env, &job.payload))
+        handle_extract_wiki(&wiki_env, &job.payload)
             .await
             .map(|_| ())
     } else {

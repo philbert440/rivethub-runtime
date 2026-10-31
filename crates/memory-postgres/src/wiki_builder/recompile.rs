@@ -5,8 +5,10 @@ use kernel::wiki::page::WikiSlug;
 use kernel::wiki::recompile::{RecompileSource, Recompiled, SourceSummary, WikiRecompileStore};
 use uuid::Uuid;
 
+use super::overlays::Placed;
 use super::{lock_slug, query_error, settle, topics};
 use crate::PostgresMemory;
+use crate::wiki_scope::{page_home, scope_named};
 use crate::wiki_writer::{LockedRepository, WikiRepository};
 
 const SUMMARIES: i64 = 400;
@@ -25,11 +27,15 @@ impl WikiRecompileStore for PostgresMemory {
         slug: &WikiSlug,
         since: DateTime<Utc>,
     ) -> Result<Option<RecompileSource>, WikiStoreError> {
-        let repository = WikiRepository::new(self.directory()?);
-        let Some(page) = repository.read_unlocked(slug).await? else {
+        let placed = self.recompile_home(slug).await?;
+        let repository = WikiRepository::new(self.directory_of(&placed)?);
+        let local = WikiSlug::try_from(placed.local.clone())
+            .map_err(|error| WikiStoreError::InvalidPatch(error.to_string()))?;
+        let Some(mut page) = repository.read_unlocked(&local).await? else {
             return Ok(None);
         };
-        let history = repository.history_since(slug, since).await?;
+        let history = repository.history_since(&local, since).await?;
+        page.meta.slug = slug.clone();
         let summaries = sqlx::query_as::<_, SummaryRow>(
             "SELECT p.topic_id, s.created_at, s.content
                FROM rh_wiki_citations w
@@ -64,23 +70,47 @@ impl WikiRecompileStore for PostgresMemory {
         recompiled: Recompiled,
         now: DateTime<Utc>,
     ) -> Result<String, WikiStoreError> {
-        let mut repository = WikiRepository::new(self.directory()?).lock().await?;
-        let stored = self.store_locked(&mut repository, recompiled, now).await;
+        let placed = self.recompile_home(&recompiled.page.meta.slug).await?;
+        let mut repository = WikiRepository::new(self.directory_of(&placed)?)
+            .lock()
+            .await?;
+        let stored = self
+            .store_locked(&mut repository, recompiled, &placed, now)
+            .await;
         settle(stored, repository.release().await)
     }
 }
 
 impl PostgresMemory {
-    fn directory(&self) -> Result<std::path::PathBuf, WikiStoreError> {
-        self.wiki_directory
-            .clone()
-            .ok_or(WikiStoreError::DirectoryMissing)
+    fn directory_of(&self, placed: &Placed) -> Result<std::path::PathBuf, WikiStoreError> {
+        let directory = placed
+            .scope
+            .as_ref()
+            .map_or(String::new(), |scope| scope.directory.clone());
+        self.wiki_home(&directory)
+    }
+
+    async fn recompile_home(&self, slug: &WikiSlug) -> Result<Placed, WikiStoreError> {
+        let mut conn = self.pool.acquire().await.map_err(query_error)?;
+        let home = page_home(&mut conn, slug.as_ref()).await?;
+        let scope = match &home.scope {
+            Some(name) => scope_named(&mut conn, name).await?,
+            None => None,
+        };
+        Ok(Placed {
+            scope,
+            key: slug.as_ref().to_owned(),
+            local: home.local,
+            canonical: true,
+            bind: None,
+        })
     }
 
     async fn store_locked(
         &self,
         repository: &mut LockedRepository,
         recompiled: Recompiled,
+        placed: &Placed,
         now: DateTime<Utc>,
     ) -> Result<String, WikiStoreError> {
         let Recompiled {
@@ -89,18 +119,24 @@ impl PostgresMemory {
             archived,
             message,
         } = recompiled;
-        let slug = page.meta.slug.as_ref().to_owned();
+        let slug = placed.key.clone();
         let mut tx = self.pool.begin().await.map_err(query_error)?;
         lock_slug(&mut tx, &slug).await?;
-        if repository.read(&slug).await?.as_ref() != Some(&base) {
+        let current = repository.read(&placed.local).await?.map(|mut current| {
+            current.meta.slug = page.meta.slug.clone();
+            current
+        });
+        if current.as_ref() != Some(&base) {
             return Err(WikiStoreError::InvalidPatch(format!(
                 "wiki page {slug} changed while it was recompiled"
             )));
         }
+        page.meta.slug = WikiSlug::try_from(placed.local.clone())
+            .map_err(|error| WikiStoreError::InvalidPatch(error.to_string()))?;
         let git_sha = repository
             .recompile(&mut page, archived, &message, now)
             .await?;
-        topics::store_topic(&mut tx, &page, &git_sha, now).await?;
+        topics::store(&mut tx, &page, &slug, placed.scope.as_ref(), &git_sha, now).await?;
         tx.commit().await.map_err(query_error)?;
         Ok(git_sha)
     }
