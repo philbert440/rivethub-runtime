@@ -3,6 +3,7 @@ use crate::common;
 use chrono::DateTime;
 use chrono::Duration;
 use chrono::Utc;
+use kernel::filing::FilingStore as _;
 use kernel::memory::CaptureBatchRequest;
 use kernel::memory::CaptureMessage;
 use kernel::owner::Owner;
@@ -376,5 +377,79 @@ async fn text_search_keeps_its_index_under_row_security(pool: PgPool) -> TestRes
             .any(|line| line.contains("idx_ros_messages_fts")),
         "{plan:?}"
     );
+    Ok(())
+}
+
+#[sqlx::test(migrator = "migrate::POSTGRES")]
+async fn the_filing_listing_reads_each_session_as_the_visibility_store_does(
+    pool: PgPool,
+) -> TestResult {
+    let (store, _) = seed(&pool).await?;
+    let probe = probe(&pool).await?;
+    let alice = viewer("alice")?;
+    let now = Utc::now();
+    let topic = store
+        .create(Topic::create(
+            TopicId::random(),
+            NewTopic {
+                kind: TopicKind::Work,
+                name: TopicName::new("Kitchen")?,
+                aliases: Vec::new(),
+                parent: None,
+                directory: None,
+                owner: Some(alice.principal().clone()),
+            },
+            now,
+        )?)
+        .await?;
+    for session in [FIRST, SECOND, UNCAPTURED] {
+        store
+            .place(Placement {
+                session: SessionId::try_from(session.to_owned())?,
+                topic: topic.id,
+                by: PlacementSource::You,
+                at: now,
+                owner: Some(alice.principal().clone()),
+            })
+            .await?;
+    }
+    let tenancy = PostgresTenancy::new(probe.clone());
+    let owners = Scope::Viewer(alice.clone());
+    let shared = Visibility::Space(household()?);
+    owners
+        .clone()
+        .run(tenancy.mark_topic(&alice, topic.id, Some(&shared)))
+        .await?;
+    owners
+        .clone()
+        .run(tenancy.mark_session(
+            &alice,
+            &SessionId::try_from(FIRST.to_owned())?,
+            Some(&Visibility::Private),
+            now,
+        ))
+        .await?;
+    let listing = PostgresMemory::new(probe);
+    for viewer in [alice, viewer("bob")?] {
+        let scope = Scope::Viewer(viewer.clone());
+        let filed = scope.clone().run(listing.all_filed()).await?;
+        let keys: Vec<SessionId> = filed
+            .sessions
+            .iter()
+            .map(|session| session.placement.session.clone())
+            .collect();
+        let expected = scope
+            .run(tenancy.session_visibility(&viewer, &keys))
+            .await?;
+        assert!(!keys.is_empty(), "{viewer:?} sees a filed session");
+        for session in filed.sessions {
+            assert_eq!(
+                session.visibility.as_ref(),
+                expected.get(&session.placement.session),
+                "{:?} for {viewer:?}",
+                session.placement.session
+            );
+        }
+    }
     Ok(())
 }

@@ -146,6 +146,7 @@ fn session_row(row: FilingRow, topic: String) -> Result<FiledSession, TopicError
         last_active: last_active(row.last_active.as_deref())?,
         node: row.node,
         lineage: None,
+        visibility: None,
     })
 }
 

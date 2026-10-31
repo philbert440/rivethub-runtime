@@ -452,6 +452,7 @@ fn filed_sessions(conn: &Connection, topic: TopicId) -> Result<Vec<FiledSession>
             node: found.iter().find_map(|row| row.node.clone()),
             placement,
             lineage: None,
+            visibility: None,
         });
     }
     sessions.extend(super::inherited::sessions(conn, Some(topic))?);

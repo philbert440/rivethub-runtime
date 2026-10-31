@@ -1,9 +1,11 @@
+use std::cmp::Reverse;
 use std::str::FromStr;
 
 use chrono::DateTime;
 use chrono::Utc;
 use kernel::filing::AllFiled;
 use kernel::filing::ConversationPlacement;
+use kernel::filing::Filed;
 use kernel::filing::FiledConversation;
 use kernel::filing::FiledSession;
 use kernel::filing::bare_session_prefix;
@@ -33,48 +35,74 @@ struct FilingRow {
     last_active: Option<DateTime<Utc>>,
     node: Option<String>,
     owner_user_id: Option<String>,
+    session_owner: Option<String>,
+    mark: Option<String>,
+    effective: Option<String>,
 }
 
-pub(super) async fn all_filed(pool: &PgPool) -> Result<AllFiled, TopicError> {
-    let found = sqlx::query_as!(
+async fn filings(pool: &PgPool, topic: Option<TopicId>) -> Result<AllFiled, TopicError> {
+    sqlx::query_as!(
         FilingRow,
         r#"WITH placed AS (
                SELECT p.session_id, p.topic_id, p.placed_by, p.placed_at, p.owner_user_id,
                       CASE WHEN starts_with(p.session_id, $1)
                            THEN substr(p.session_id, length($1) + 1) END AS bare
                  FROM rh_session_placements p
+                WHERE $2::uuid IS NULL OR p.topic_id = $2
+           ),
+           keyed AS (
+               SELECT session_id, session_id AS key FROM placed
+               UNION ALL
+               SELECT session_id, bare FROM placed WHERE bare IS NOT NULL
+           ),
+           seen AS (
+               SELECT k.session_id, max(c.updated_at) AS last_active,
+                      (array_agg(c.title ORDER BY c.session_key = k.session_id DESC, c.updated_at DESC)
+                         FILTER (WHERE c.title IS NOT NULL))[1] AS title,
+                      (array_agg(c.node ORDER BY c.session_key = k.session_id DESC, c.updated_at DESC)
+                         FILTER (WHERE c.node IS NOT NULL))[1] AS node,
+                      (array_agg(c.owner_user_id ORDER BY c.created_at)
+                         FILTER (WHERE c.session_key = k.session_id))[1] AS owner,
+                      (array_agg(c.visibility ORDER BY c.created_at)
+                         FILTER (WHERE c.session_key = k.session_id))[1] AS visibility
+                 FROM keyed k
+                 JOIN rh_conversations c ON c.session_key = k.key
+                GROUP BY k.session_id
            )
            SELECT p.session_id AS "session_id?", NULL::uuid AS "conversation_id?",
                   p.topic_id AS "topic_id?", p.placed_by AS "placed_by?", p.placed_at AS "at!",
                   seen.title AS "title?", NULL::text AS "channel?",
                   seen.last_active AS "last_active?", seen.node AS "node?",
-                  p.owner_user_id AS "owner_user_id?"
+                  p.owner_user_id AS "owner_user_id?", seen.owner AS "session_owner?",
+                  m.visibility AS "mark?",
+                  coalesce(seen.visibility,
+                           rh_member_visibility(rh_scope_principal(),
+                               coalesce(m.visibility, rh_topic_mark(p.topic_id),
+                                        rh_owner_default(rh_scope_principal(), now())))) AS "effective?"
              FROM placed p
-             LEFT JOIN LATERAL (
-                 SELECT max(c.updated_at) AS last_active,
-                        (array_agg(c.title ORDER BY c.session_key = p.session_id DESC, c.updated_at DESC)
-                           FILTER (WHERE c.title IS NOT NULL))[1] AS title,
-                        (array_agg(c.node ORDER BY c.session_key = p.session_id DESC, c.updated_at DESC)
-                           FILTER (WHERE c.node IS NOT NULL))[1] AS node
-                   FROM rh_conversations c
-                  WHERE c.session_key IN (p.session_id, p.bare)
-             ) seen ON true
+             LEFT JOIN seen ON seen.session_id = p.session_id
+             LEFT JOIN rh_session_marks m
+                    ON m.session_key = p.session_id AND m.owner_user_id = rh_scope_principal()
            UNION ALL
            SELECT NULL, p.conversation_id, p.topic_id, p.placed_by, p.placed_at,
-                  c.title, c.channel, c.updated_at, c.node, p.owner_user_id
+                  c.title, c.channel, c.updated_at, c.node, p.owner_user_id, NULL, NULL, NULL
              FROM rh_conversation_placements p
              JOIN rh_conversations c ON c.id = p.conversation_id
+            WHERE $2::uuid IS NULL OR p.topic_id = $2
            UNION ALL
-           SELECT h.session_id, NULL, NULL, NULL, h.marked_at, NULL, NULL, NULL, NULL, NULL
+           SELECT h.session_id, NULL, NULL, NULL, h.marked_at, NULL, NULL, NULL, NULL, NULL,
+                  NULL, NULL, NULL
              FROM rh_session_history h
+            WHERE $2::uuid IS NULL
            ORDER BY 8 DESC NULLS LAST, 5 DESC, 1, 2"#,
-        bare_session_prefix()
+        bare_session_prefix(),
+        topic.map(TopicId::uuid)
     )
     .fetch_all(pool)
     .await
-    .map_err(failed("all filed"))?;
-    let mut filed = AllFiled::default();
-    for row in found {
+    .map_err(failed("filed sessions"))?
+    .into_iter()
+    .try_fold(AllFiled::default(), |mut filed, row| {
         match (row.topic_id, row.conversation_id) {
             (Some(topic), Some(conversation)) => {
                 filed
@@ -88,11 +116,30 @@ pub(super) async fn all_filed(pool: &PgPool) -> Result<AllFiled, TopicError> {
             }),
             (None, Some(_)) => return Err(missing("topic_id")),
         }
-    }
+        Ok(filed)
+    })
+}
+
+pub(super) async fn all_filed(pool: &PgPool) -> Result<AllFiled, TopicError> {
+    let mut filed = filings(pool, None).await?;
     filed
         .sessions
         .extend(super::inherited::sessions(pool, None).await?);
     Ok(filed)
+}
+
+pub(super) async fn filed(pool: &PgPool, topic: TopicId) -> Result<Filed, TopicError> {
+    let AllFiled {
+        mut sessions,
+        conversations,
+        ..
+    } = filings(pool, Some(topic)).await?;
+    sessions.extend(super::inherited::sessions(pool, Some(topic)).await?);
+    sessions.sort_by_key(|filed| Reverse(filed.last_active));
+    Ok(Filed {
+        sessions,
+        conversations,
+    })
 }
 
 pub(super) async fn suggestions(pool: &PgPool) -> Result<Vec<Suggestion>, TopicError> {
@@ -124,6 +171,11 @@ fn session_row(row: FilingRow, topic: Uuid) -> Result<FiledSession, TopicError> 
         last_active: row.last_active,
         node: row.node,
         lineage: None,
+        visibility: rows::session_visibility(
+            row.session_owner,
+            row.mark.as_deref(),
+            row.effective,
+        )?,
     })
 }
 

@@ -22,6 +22,7 @@ use workers::{
 
 use crate::Exit;
 use crate::service::{StartupError, load, postgres, postgres_url, report};
+use memory_postgres::Pooling;
 
 #[derive(Debug, Error)]
 pub enum RootError {
@@ -133,7 +134,7 @@ async fn run(
     let owned = env.clone();
     let config = tokio::task::spawn_blocking(move || load(&owned)).await??;
     crate::identity::announce_resolved("worker", &config, env).map_err(StartupError::from)?;
-    let memory = Arc::new(postgres(&config, env, &shutdown, activities).await?);
+    let memory = Arc::new(postgres(&config, env, &shutdown, activities, Pooling::OnDemand).await?);
     let result = async {
         let settings = workers::MemoryJobSettings::from_environment(env)?;
         let queue = memory

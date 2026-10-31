@@ -4,6 +4,7 @@ use std::str::FromStr;
 use chrono::DateTime;
 use chrono::Utc;
 use kernel::owner::Owner;
+use kernel::tenancy::SessionVisibility;
 use kernel::tenancy::Visibility;
 use kernel::topics::Alias;
 use kernel::topics::PlacedSession;
@@ -131,6 +132,24 @@ pub(super) fn placement(row: PlacementRow) -> Result<Placement, TopicError> {
 
 pub(super) fn owner(id: String) -> Result<Owner, TopicError> {
     Owner::new(id).map_err(|error| stored("owner_user_id")(Box::new(error)))
+}
+
+pub(super) fn session_visibility(
+    owner: Option<String>,
+    mark: Option<&str>,
+    effective: Option<String>,
+) -> Result<Option<SessionVisibility>, TopicError> {
+    let parse =
+        |text: &str| Visibility::parse(text).map_err(|error| stored("visibility")(Box::new(error)));
+    effective
+        .map(|effective| {
+            Ok(SessionVisibility {
+                owner: owner.map(self::owner).transpose()?,
+                mark: mark.map(parse).transpose()?,
+                effective: parse(&effective)?,
+            })
+        })
+        .transpose()
 }
 
 pub(super) fn suggestion(row: SuggestionRow) -> Result<Suggestion, TopicError> {

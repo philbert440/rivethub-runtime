@@ -233,16 +233,17 @@ pub(super) async fn decorate(
     viewer: &Viewer,
     sessions: &mut [TopicSession],
 ) -> Result<(), ApiError> {
-    if sessions.is_empty() {
+    let keys: Vec<SessionId> = sessions
+        .iter()
+        .filter(|session| session.visibility.is_none())
+        .map(|session| session.placement.session_id.clone())
+        .collect();
+    if keys.is_empty() {
         return Ok(());
     }
     let Some(store) = gateway.tenancy_store.as_ref() else {
         return Ok(());
     };
-    let keys: Vec<SessionId> = sessions
-        .iter()
-        .map(|session| session.placement.session_id.clone())
-        .collect();
     let found = store
         .session_visibility(viewer, &keys)
         .await
