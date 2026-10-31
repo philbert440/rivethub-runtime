@@ -513,9 +513,12 @@ async fn capture_checks_event_ids_through_their_index_under_row_security(
     let plan: Vec<String> = Scope::Viewer(viewer("alice")?)
         .run(async {
             sqlx::query_scalar(
-                "EXPLAIN SELECT m.metadata->>'event_id' FROM rh_messages m
-                  WHERE m.conversation_id = $1
-                    AND m.metadata->>'event_id' IN (SELECT unnest($2::text[]))",
+                "EXPLAIN SELECT seen.event_id FROM unnest($2::text[]) AS wanted(event_id)
+                  CROSS JOIN LATERAL (
+                      SELECT m.metadata->>'event_id' AS event_id FROM rh_messages m
+                       WHERE m.conversation_id = $1 AND m.metadata->>'event_id' = wanted.event_id
+                       LIMIT 1
+                  ) seen",
             )
             .bind(conversation)
             .bind(vec!["a-new-event".to_owned()])
