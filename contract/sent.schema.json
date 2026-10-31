@@ -7648,6 +7648,12 @@
             "null"
           ]
         },
+        "subject": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "payload": {
           "type": "object",
           "additionalProperties": true

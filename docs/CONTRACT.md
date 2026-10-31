@@ -1140,7 +1140,7 @@ reviving dead `compact-conversation` jobs; `run-task` jobs are never flagged (ta
 backfill and `stale-wiki-sweep` skip summaries whose `wiki-ext-` key is flagged, dismissed or not. `GET
 /api/memory/flagged` answers `{ groups: [{ task, cause, count, lastFailedAt, sample }] }`, newest failure first: open
 records grouped by task and cause (the error's first line with uuids as `…` and digit runs as `N`), `sample` the group's
-newest record `{ id, task, key?, payload, error, failures, firstFailedAt?, lastFailedAt, flaggedAt }`. `POST
+newest record `{ id, task, key?, subject?, payload, error, failures, firstFailedAt?, lastFailedAt, flaggedAt }`, `subject` the title of what the job worked on: the conversation its payload's `conversationId` names, or that holds its `messageId` or `ros_messages` target, else the wiki page of a `ros_wiki_topics` target. `POST
 /api/memory/flagged/{id}/retry` deletes the record and its count and enqueues the job again with fresh attempts; `POST
 /api/memory/flagged/{id}/dismiss` hides it (a dismissed key stays flagged for the sweeps that skip it, and a new failure
 shows it again). Both answer `204`, `404` for a record that is not open, and the three routes are the node owner's
