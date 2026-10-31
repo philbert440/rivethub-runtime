@@ -3,6 +3,7 @@ use std::fs::File;
 use std::fs::OpenOptions;
 use std::fs::TryLockError;
 use std::net::TcpListener;
+use std::path::Path;
 
 const FIRST: u16 = 20_000;
 const LAST: u16 = 31_999;
@@ -26,8 +27,8 @@ impl fmt::Display for ClaimedPort {
 }
 
 pub fn claim() -> std::io::Result<ClaimedPort> {
-    let claims = std::env::temp_dir().join("rivethub-test-ports");
-    std::fs::create_dir_all(&claims)?;
+    let claims = Path::new("/tmp/rivethub-test-ports");
+    std::fs::create_dir_all(claims)?;
     for number in FIRST..=LAST {
         let claim = OpenOptions::new()
             .create(true)
