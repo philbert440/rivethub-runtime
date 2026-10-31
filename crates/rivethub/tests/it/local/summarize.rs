@@ -3,9 +3,7 @@ use std::time::Duration;
 
 use rusqlite::OptionalExtension as _;
 
-use super::{
-    DELEGATE_TEXT, TestResult, free_port, model_stub, provider_base, start, stop, write_config,
-};
+use super::{DELEGATE_TEXT, TestResult, model_stub, provider_base, start, stop, write_config};
 
 const CONVERSATION: &str = "0199e2a0-7b3c-7a00-8000-0000000000e1";
 const IMPORTED: &str = "0199e2a07b3c7a0080000000000000e2";
@@ -88,7 +86,7 @@ async fn summarized_within_one_idle_tick(
     conversation: &str,
 ) -> TestResult {
     let stub = model_stub().await?;
-    let port = free_port()?;
+    let port = testkit::ports::claim()?;
     write_config(
         home,
         &provider_base(

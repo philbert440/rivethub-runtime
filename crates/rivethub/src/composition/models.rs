@@ -2,7 +2,6 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 use config::{Config, Environment};
-use gateway::routes::v1::BoundAgent;
 use kernel::agent::TurnRunner;
 use tokio::task::JoinSet;
 use tokio_util::sync::CancellationToken;
@@ -14,20 +13,15 @@ pub(super) struct AgentBinding {
     pub(super) model: String,
 }
 
-pub(super) struct ModelServices {
-    pub(super) service: Arc<gateway::routes::v1::Service>,
-    pub(super) agents: BTreeMap<String, AgentBinding>,
-}
-
 pub(super) async fn build(
     config: &Config,
     env: &Environment,
     factory: &crate::models::ModelFactory,
     cancel: &CancellationToken,
     tasks: &mut JoinSet<Result<(), agent_loop::hooks::HookError>>,
-) -> Result<Option<ModelServices>, ComposeError> {
+) -> Result<BTreeMap<String, AgentBinding>, ComposeError> {
     if config.providers.is_none() {
-        return Ok(None);
+        return Ok(BTreeMap::new());
     }
     let runtime = config
         .runtime
@@ -44,7 +38,6 @@ pub(super) async fn build(
     let state = config::Paths::new(env)?.state_dir();
     let hooks = hooks(workspace, &state, tasks, cancel).await?;
     let mut bindings = BTreeMap::new();
-    let mut roster = BTreeMap::new();
     for (id, agent) in agents {
         let provider_id = agent
             .provider
@@ -56,25 +49,9 @@ pub(super) async fn build(
         let built =
             agent_loop::AgentLoop::new(provider_id.clone(), provider, Vec::new(), hooks.clone())?;
         let runner: Arc<dyn TurnRunner> = Arc::new(built);
-        roster.insert(
-            id.clone(),
-            BoundAgent {
-                runner: Arc::clone(&runner),
-                model: model.clone(),
-            },
-        );
         bindings.insert(id.clone(), AgentBinding { runner, model });
     }
-    let service = gateway::routes::v1::Service::open(
-        &state.join("conversations"),
-        cancel.child_token(),
-        roster,
-    )
-    .await?;
-    Ok(Some(ModelServices {
-        service,
-        agents: bindings,
-    }))
+    Ok(bindings)
 }
 
 async fn hooks(

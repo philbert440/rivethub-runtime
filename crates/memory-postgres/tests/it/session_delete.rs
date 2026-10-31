@@ -25,7 +25,7 @@ async fn seed_related(pool: &PgPool, session: &SessionId) -> Result<Vec<Uuid>, s
     for conversation in conversations(pool, session).await? {
         let summary = Uuid::new_v4();
         sqlx::query(
-            "INSERT INTO rh_summaries (id, conversation_id, content) VALUES ($1, $2, 'summary text')",
+            "INSERT INTO rh_summaries (id, conversation_id, content, owner_user_id) VALUES ($1, $2, 'summary text', 'owner')",
         )
         .bind(summary)
         .bind(conversation)
@@ -145,6 +145,7 @@ async fn place(memory: &PostgresMemory, sessions: &[&SessionId]) -> TestResult {
                 topic: topic.id,
                 by: PlacementSource::You,
                 at: at(3),
+                owner: testkit::owner().ok(),
             })
             .await?;
     }
@@ -210,7 +211,7 @@ async fn a_summary_cited_by_a_wiki_page_marks_the_session_cited(pool: PgPool) ->
     sqlx::query("INSERT INTO rh_wiki_topics (slug, title) VALUES ('release', 'Release')")
         .execute(&pool)
         .await?;
-    sqlx::query("INSERT INTO rh_wiki_citations (topic_slug, summary_id) VALUES ('release', $1)")
+    sqlx::query("INSERT INTO rh_wiki_citations (topic_slug, summary_id, owner_user_id) VALUES ('release', $1, 'owner')")
         .bind(summaries.first().copied().ok_or("a seeded summary")?)
         .execute(&pool)
         .await?;
@@ -237,14 +238,14 @@ async fn the_sweep_removes_rows_written_behind_the_gateway(pool: PgPool) -> Test
         .delete_session(deleted.as_str(), None, at(10))
         .await?;
     let conversation: Uuid = sqlx::query_scalar(
-        "INSERT INTO rh_conversations (session_key, agent) VALUES ($1, 'external') RETURNING id",
+        "INSERT INTO rh_conversations (session_key, agent, owner_user_id) VALUES ($1, 'external', 'owner') RETURNING id",
     )
     .bind(deleted.as_str())
     .fetch_one(&pool)
     .await?;
     sqlx::query(
-        "INSERT INTO rh_messages (conversation_id, agent, channel, role, content, created_at)
-         VALUES ($1, 'external', 'cli', 'user', 'written directly', $2)",
+        "INSERT INTO rh_messages (conversation_id, agent, channel, role, content, created_at, owner_user_id)
+         VALUES ($1, 'external', 'cli', 'user', 'written directly', $2, 'owner')",
     )
     .bind(conversation)
     .bind(at(4))
@@ -257,6 +258,7 @@ async fn the_sweep_removes_rows_written_behind_the_gateway(pool: PgPool) -> Test
             topic: topic.id,
             by: PlacementSource::Categorizer,
             at: at(11),
+            owner: testkit::owner().ok(),
         })
         .await?;
     let purged = memory.purge_tombstoned(100).await?;
@@ -294,14 +296,14 @@ async fn the_sweep_lifts_the_tombstone_when_the_session_was_used_again(pool: PgP
         .delete_session(deleted.as_str(), None, at(10))
         .await?;
     let conversation: Uuid = sqlx::query_scalar(
-        "INSERT INTO rh_conversations (session_key, agent) VALUES ($1, 'external') RETURNING id",
+        "INSERT INTO rh_conversations (session_key, agent, owner_user_id) VALUES ($1, 'external', 'owner') RETURNING id",
     )
     .bind(deleted.as_str())
     .fetch_one(&pool)
     .await?;
     sqlx::query(
-        "INSERT INTO rh_messages (conversation_id, agent, channel, role, content)
-         VALUES ($1, 'external', 'cli', 'user', 'new work written directly')",
+        "INSERT INTO rh_messages (conversation_id, agent, channel, role, content, owner_user_id)
+         VALUES ($1, 'external', 'cli', 'user', 'new work written directly', 'owner')",
     )
     .bind(conversation)
     .execute(&pool)
@@ -324,4 +326,10 @@ async fn the_sweep_lifts_the_tombstone_when_the_session_was_used_again(pool: PgP
 async fn a_deleted_session_used_again_comes_back(pool: PgPool) -> TestResult {
     let memory = PostgresMemory::new(pool);
     session_delete::a_deleted_session_used_again_comes_back(&memory, &memory).await
+}
+
+#[sqlx::test(migrator = "migrate::POSTGRES")]
+async fn a_kept_session_is_remembered_from_its_latest_keep(pool: PgPool) -> TestResult {
+    let memory = PostgresMemory::new(pool);
+    session_delete::a_kept_session_is_remembered_from_its_latest_keep(&memory).await
 }

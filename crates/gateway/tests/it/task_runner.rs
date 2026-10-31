@@ -5,13 +5,19 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::time::Duration;
 
+use async_trait::async_trait;
 use gateway::tasks::LocalAgent;
 use gateway::tasks::Tasks;
 use gateway::term::Delegate;
 use kernel::harness::{PermissionRequest, SessionEvent};
+use kernel::transcript::{
+    ListLimit, SessionLister, SessionRenameError, StoreSession, ToolOutputRead, TranscriptRead,
+    TranscriptReaderError,
+};
 use session_support::harness::Harness;
 use session_support::{Fixture, http, user};
 use testkit::TaskMemory;
+use testkit::wiki_routes::NoParents;
 use tokio_util::sync::CancellationToken;
 use wire::harness::{HarnessId, HarnessSessionCreateRequest, HarnessSessionSummary};
 use wire::task::{
@@ -27,6 +33,10 @@ struct Running {
 }
 
 async fn running() -> Running {
+    running_with(None).await
+}
+
+async fn running_with(lister: Option<Arc<dyn SessionLister>>) -> Running {
     let harness = Arc::new(Harness::default());
     let home = tempfile::tempdir().expect("agent workspace");
     let delegates = BTreeMap::from([(
@@ -52,7 +62,7 @@ async fn running() -> Running {
     let fixture = Fixture::with_delegates(
         Some(harness.clone()),
         gateway::sessions::SessionRegistry::new(Duration::from_secs(1)),
-        None,
+        lister,
         &[],
         delegates,
         Some(Arc::new(tasks)),
@@ -250,6 +260,106 @@ async fn a_result_that_arrives_after_the_wait_comes_back_to_the_parent_as_a_new_
     })
     .await
     .expect("the late result reaches the parent");
+    running.stop.cancel();
+    running.fixture.gateway.close().await;
+}
+
+const TERMINAL_PARENT: &str = "00000000-0000-4000-8000-0000000000a1";
+
+#[derive(Debug)]
+struct PlanMode;
+
+#[async_trait]
+impl SessionLister for PlanMode {
+    async fn list(&self, harnesses: &[HarnessId], limit: ListLimit) -> Vec<StoreSession> {
+        NoParents.list(harnesses, limit).await
+    }
+
+    async fn describe(
+        &self,
+        harness: HarnessId,
+        native: &str,
+        parent: Option<&str>,
+    ) -> Result<Option<StoreSession>, TranscriptReaderError> {
+        NoParents.describe(harness, native, parent).await
+    }
+
+    async fn store_cwd(
+        &self,
+        harness: HarnessId,
+        native: &str,
+    ) -> Result<Option<String>, TranscriptReaderError> {
+        NoParents.store_cwd(harness, native).await
+    }
+
+    async fn permission_mode(
+        &self,
+        harness: HarnessId,
+        native: &str,
+    ) -> Result<Option<String>, TranscriptReaderError> {
+        Ok(
+            (harness == HarnessId::ClaudeCode && native == TERMINAL_PARENT)
+                .then(|| "plan".to_owned()),
+        )
+    }
+
+    async fn transcript(
+        &self,
+        harness: HarnessId,
+        native: &str,
+    ) -> Result<TranscriptRead, TranscriptReaderError> {
+        NoParents.transcript(harness, native).await
+    }
+
+    async fn rename(
+        &self,
+        harness: HarnessId,
+        native: &str,
+        title: &str,
+    ) -> Result<StoreSession, SessionRenameError> {
+        NoParents.rename(harness, native, title).await
+    }
+
+    async fn tool_output(
+        &self,
+        harness: HarnessId,
+        native: &str,
+        tool_call_id: &str,
+    ) -> Result<ToolOutputRead, TranscriptReaderError> {
+        NoParents.tool_output(harness, native, tool_call_id).await
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_terminal_parent_hands_its_child_the_mode_its_harness_records() {
+    let running = running_with(Some(Arc::new(PlanMode))).await;
+    running
+        .fixture
+        .service
+        .spawn(
+            &user("owner"),
+            wire::gateway::term::TermSpawnRequest {
+                session: Some(TERMINAL_PARENT.to_owned()),
+                command: Some("claude".to_owned()),
+                model: None,
+                effort: None,
+                resume: None,
+                agent_id: None,
+                force: None,
+                cols: None,
+                rows: None,
+                topic_id: None,
+            },
+        )
+        .await
+        .expect("terminal parent");
+    let id = submit(&running, Some(&format!("claude-code:{TERMINAL_PARENT}"))).await;
+    running.harness.traced(&first_turn(&id)).await;
+    let trace = running.harness.trace.borrow().clone();
+    assert!(
+        trace.contains(&r#"mode:Mode("plan")"#.to_owned()),
+        "{trace:?}"
+    );
     running.stop.cancel();
     running.fixture.gateway.close().await;
 }

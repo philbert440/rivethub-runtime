@@ -8,12 +8,18 @@ use chrono::Utc;
 use kernel::memory::BrowseFilter;
 use kernel::memory::EmbedModelMismatch;
 use kernel::memory::Limit;
+use kernel::memory::MemoryEntry;
+use kernel::memory::MemoryHitSource;
+use kernel::memory::MemorySearchResult;
+use kernel::memory::MemoryStatsResponse;
 use kernel::memory::MemoryStore;
 use kernel::memory::MemoryStoreError;
+use kernel::memory::PendingTagWire;
 use kernel::memory::SearchQuery;
 use kernel::memory::SummaryDag;
 use kernel::memory::SummaryOwner;
 use kernel::memory::TagAdd;
+use kernel::memory::TagCount;
 use kernel::memory::TagCountsQuery;
 use kernel::memory::TagDecision;
 use kernel::memory::TagEntity;
@@ -21,24 +27,19 @@ use kernel::memory::TagId;
 use kernel::memory::TagJobContext;
 use kernel::memory::TagListQuery;
 use kernel::memory::TagLookup;
+use kernel::memory::TagState;
 use kernel::memory::TagSuggestionStored;
 use kernel::memory::TagSuggestionWrite;
 use kernel::memory::TagTaxonomyDecision;
+use kernel::memory::TagTaxonomyEntry;
+use kernel::memory::TagTaxonomyMerge;
+use kernel::memory::TagTaxonomyMergeResult;
 use kernel::memory::TagTaxonomyQuery;
 use kernel::memory::TagTaxonomyUpsert;
+use kernel::memory::TagWire;
+use kernel::owner::Owner;
 use tokio::sync::Mutex;
 use uuid::Uuid;
-use wire::gateway::memory::MemoryHitSource;
-use wire::gateway::memory::MemoryStatsResponse;
-use wire::gateway::memory::PendingTagWire;
-use wire::gateway::memory::TagCount;
-use wire::gateway::memory::TagState;
-use wire::gateway::memory::TagTaxonomyEntry;
-use wire::gateway::memory::TagTaxonomyMerge;
-use wire::gateway::memory::TagTaxonomyMergeResult;
-use wire::gateway::memory::TagWire;
-use wire::memory::MemoryEntry;
-use wire::memory::MemorySearchResult;
 
 pub use crate::memory_request::MemoryRequest;
 
@@ -47,7 +48,7 @@ pub struct FakeMemoryStore {
     entries: Mutex<Vec<MemoryEntry>>,
     search_outcome: Mutex<Option<kernel::memory::SearchOutcome>>,
     requests: Mutex<Vec<MemoryRequest>>,
-    wiki_pages: Mutex<BTreeMap<String, wire::gateway::wiki::WikiPageResponse>>,
+    wiki_pages: Mutex<BTreeMap<String, kernel::wiki::WikiPageResponse>>,
     wiki_redirects: Mutex<BTreeMap<String, String>>,
     wiki_error: Mutex<Option<MemoryStoreError>>,
     tag_context: Mutex<Option<TagJobContext>>,
@@ -79,7 +80,7 @@ impl FakeMemoryStore {
         *self.search_outcome.lock().await = Some(outcome);
     }
 
-    pub async fn insert_wiki_page(&self, page: wire::gateway::wiki::WikiPageResponse) {
+    pub async fn insert_wiki_page(&self, page: kernel::wiki::WikiPageResponse) {
         self.wiki_pages.lock().await.insert(page.slug.clone(), page);
     }
 
@@ -126,7 +127,7 @@ impl MemoryStore for FakeMemoryStore {
     async fn wiki_topics(
         &self,
         filter: kernel::wiki::WikiFilter,
-    ) -> Result<wire::gateway::wiki::WikiTopicList, MemoryStoreError> {
+    ) -> Result<kernel::wiki::WikiTopicList, MemoryStoreError> {
         self.record(MemoryRequest::WikiTopics(filter.clone())).await;
         let error = self.wiki_error.lock().await.take();
         if let Some(error) = error {
@@ -159,7 +160,7 @@ impl MemoryStore for FakeMemoryStore {
                 .then_with(|| a.slug.cmp(&b.slug))
         });
         let total = topics.len() as u64;
-        Ok(wire::gateway::wiki::WikiTopicList {
+        Ok(kernel::wiki::WikiTopicList {
             total,
             topics: topics
                 .into_iter()
@@ -192,7 +193,7 @@ impl MemoryStore for FakeMemoryStore {
     async fn wiki_gaps(
         &self,
         limit: u32,
-    ) -> Result<wire::gateway::wiki::WikiGapsResponse, MemoryStoreError> {
+    ) -> Result<kernel::wiki::WikiGapsResponse, MemoryStoreError> {
         self.record(MemoryRequest::WikiGaps(limit)).await;
         let limit = limit.clamp(1, 200);
         let redirects: Vec<_> = self.wiki_redirects.lock().await.keys().cloned().collect();
@@ -220,7 +221,7 @@ impl MemoryStore for FakeMemoryStore {
         }
         let mut red_links: Vec<_> = missing
             .into_iter()
-            .map(|(entity, referenced_by)| wire::gateway::wiki::WikiRedLink {
+            .map(|(entity, referenced_by)| kernel::wiki::WikiRedLink {
                 entity,
                 referenced_by,
             })
@@ -247,16 +248,18 @@ impl MemoryStore for FakeMemoryStore {
             .map(wiki_topic)
             .collect();
         drop(pages);
-        Ok(wire::gateway::wiki::WikiGapsResponse { red_links, stalest })
+        Ok(kernel::wiki::WikiGapsResponse { red_links, stalest })
     }
 
     async fn capture(
         &self,
-        batch: wire::capture::CaptureBatchRequest,
+        batch: kernel::memory::CaptureBatchRequest,
+        owner: &Owner,
         _node: Option<&str>,
-    ) -> Result<wire::capture::CaptureResult, MemoryStoreError> {
+    ) -> Result<kernel::memory::CaptureResult, MemoryStoreError> {
         let mut entries = batch.entries();
-        self.record(MemoryRequest::Append(entries.clone())).await;
+        self.record(MemoryRequest::Append(owner.clone(), entries.clone()))
+            .await;
         let now = Utc::now();
         let total = entries.len() as u64;
         let inserted = {
@@ -269,7 +272,7 @@ impl MemoryStore for FakeMemoryStore {
             stored.extend(entries);
             inserted
         };
-        Ok(wire::capture::CaptureResult {
+        Ok(kernel::memory::CaptureResult {
             ok: true,
             conversation_id: batch.session_key,
             inserted,
@@ -277,9 +280,14 @@ impl MemoryStore for FakeMemoryStore {
         })
     }
 
-    async fn append(&self, mut batch: Vec<MemoryEntry>) -> Result<u64, MemoryStoreError> {
+    async fn append(
+        &self,
+        owner: &Owner,
+        mut batch: Vec<MemoryEntry>,
+    ) -> Result<u64, MemoryStoreError> {
         let count = batch.len() as u64;
-        self.record(MemoryRequest::Append(batch.clone())).await;
+        self.record(MemoryRequest::Append(owner.clone(), batch.clone()))
+            .await;
         let now = Utc::now();
         for entry in &mut batch {
             entry.id.get_or_insert_with(|| Uuid::new_v4().to_string());
@@ -589,8 +597,8 @@ impl MemoryStore for FakeMemoryStore {
     }
 }
 
-fn wiki_topic(page: &wire::gateway::wiki::WikiPageResponse) -> wire::gateway::wiki::WikiTopic {
-    wire::gateway::wiki::WikiTopic {
+fn wiki_topic(page: &kernel::wiki::WikiPageResponse) -> kernel::wiki::WikiTopic {
+    kernel::wiki::WikiTopic {
         slug: page.slug.clone(),
         title: page.title.clone(),
         tags: page.tags.clone(),

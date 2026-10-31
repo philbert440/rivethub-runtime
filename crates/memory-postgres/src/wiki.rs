@@ -1,20 +1,24 @@
 use chrono::DateTime;
 use chrono::Utc;
 use kernel::wiki::WikiFilter;
+use kernel::wiki::WikiGapsResponse;
 use kernel::wiki::WikiLookup;
+use kernel::wiki::WikiPageResponse;
+use kernel::wiki::WikiRedLink;
+use kernel::wiki::WikiSource;
+use kernel::wiki::WikiTopic;
+use kernel::wiki::WikiTopicList;
 use kernel::wiki::page::WikiSlug;
+use kernel::wiki::page::archive::{
+    ARCHIVE_DIRECTORY, archive_directory, legacy_archive_path, parse_archive_month,
+};
 use sqlx::Postgres;
 use sqlx::QueryBuilder;
 use uuid::Uuid;
-use wire::gateway::wiki::WikiGapsResponse;
-use wire::gateway::wiki::WikiPageResponse;
-use wire::gateway::wiki::WikiRedLink;
-use wire::gateway::wiki::WikiSource;
-use wire::gateway::wiki::WikiTopic;
-use wire::gateway::wiki::WikiTopicList;
 
 use crate::Error;
 use crate::PostgresMemory;
+use crate::wiki_writer::archive::archive_parts;
 
 #[derive(Debug, sqlx::FromRow)]
 struct TopicRow {
@@ -111,7 +115,8 @@ impl PostgresMemory {
         let (citations, sources) =
             tokio::try_join!(self.read_citations(&row.slug), self.wiki_sources(&row.slug))?;
         let markdown = if let Some(directory) = &self.wiki_directory {
-            read_markdown(directory, slug).await?
+            let home = self.markdown_home(slug).await?;
+            read_markdown(&directory.join(&home.directory), &home.local).await?
         } else if row.article.is_empty() {
             format!("# {}\n\n{}\n", row.title, row.current_state)
         } else {
@@ -141,7 +146,29 @@ impl PostgresMemory {
         })))
     }
 
+    async fn markdown_home(&self, slug: &WikiSlug) -> Result<crate::wiki_scope::PageHome, Error> {
+        let mut connection = self
+            .pool
+            .acquire()
+            .await
+            .map_err(|source| Error::operation("wiki page", source))?;
+        crate::wiki_scope::page_home(&mut connection, slug.as_ref())
+            .await
+            .map_err(Error::WikiScope)
+    }
+
     async fn wiki_redirect(&self, slug: &WikiSlug) -> Result<WikiLookup, Error> {
+        let local = sqlx::query_scalar::<_, String>(
+            "SELECT slug FROM rh_wiki_topics WHERE local_slug = $1
+              ORDER BY (owner_user_id = nullif(current_setting('rh.principal', true), '')) DESC, slug LIMIT 1",
+        )
+        .bind(slug.as_ref())
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|source| Error::operation("wiki redirect", source))?;
+        if let Some(key) = local.filter(|key| key != slug.as_ref()) {
+            return Ok(WikiLookup::Redirect(key));
+        }
         let redirect = sqlx::query!(
             "SELECT r.to_slug FROM rh_wiki_redirects r
              JOIN rh_wiki_topics t ON t.slug = r.to_slug WHERE r.from_slug = $1",
@@ -170,7 +197,7 @@ impl PostgresMemory {
                 Ok(WikiSource {
                     kind: row
                         .source_kind
-                        .parse::<wire::gateway::wiki::WikiSourceKind>()
+                        .parse::<kernel::wiki::page::WikiSourceKind>()
                         .map_err(|source| {
                             Error::operation(
                                 "wiki source kind",
@@ -227,7 +254,59 @@ impl PostgresMemory {
     }
 }
 
-async fn read_markdown(directory: &std::path::Path, slug: &WikiSlug) -> Result<String, Error> {
+impl PostgresMemory {
+    pub(crate) async fn read_wiki_archive(
+        &self,
+        slug: &WikiSlug,
+        month: Option<&str>,
+    ) -> Result<Option<String>, Error> {
+        let Some(directory) = self.wiki_directory.as_ref() else {
+            return Ok(None);
+        };
+        let home = self.markdown_home(slug).await?;
+        let root = tokio::fs::canonicalize(directory.join(&home.directory))
+            .await
+            .map_err(Error::WikiIo)?;
+        let archives = root.join(ARCHIVE_DIRECTORY);
+        let month = match month {
+            Some(month) => match parse_archive_month(month) {
+                Some(month) => Some(month),
+                None => return Ok(None),
+            },
+            None => None,
+        };
+        let mut paths = Vec::new();
+        if month.is_none() {
+            paths.push(root.join(legacy_archive_path(&home.local)));
+        }
+        paths.extend(
+            archive_parts(&root.join(archive_directory(&home.local)))
+                .await
+                .map_err(Error::WikiIo)?
+                .into_iter()
+                .filter(|(part, _)| month.as_ref().is_none_or(|month| part.month == *month))
+                .map(|(_, path)| path),
+        );
+        let mut found: Option<String> = None;
+        for path in paths {
+            let path = match tokio::fs::canonicalize(path).await {
+                Ok(path) => path,
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+                Err(error) => return Err(Error::WikiIo(error)),
+            };
+            if !path.starts_with(&archives) {
+                return Err(Error::WikiContainment);
+            }
+            let text = tokio::fs::read_to_string(path)
+                .await
+                .map_err(Error::WikiIo)?;
+            found.get_or_insert_with(String::new).push_str(&text);
+        }
+        Ok(found)
+    }
+}
+
+async fn read_markdown(directory: &std::path::Path, slug: &str) -> Result<String, Error> {
     let root = tokio::fs::canonicalize(directory)
         .await
         .map_err(Error::WikiIo)?;
@@ -237,7 +316,7 @@ async fn read_markdown(directory: &std::path::Path, slug: &WikiSlug) -> Result<S
     if !topics.starts_with(&root) {
         return Err(Error::WikiContainment);
     }
-    let path = tokio::fs::canonicalize(topics.join(format!("{}.md", slug.as_ref())))
+    let path = tokio::fs::canonicalize(topics.join(format!("{slug}.md")))
         .await
         .map_err(Error::WikiIo)?;
     if !path.starts_with(&topics) {

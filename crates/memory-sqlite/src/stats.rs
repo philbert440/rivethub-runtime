@@ -1,8 +1,8 @@
+use kernel::memory::MemoryStatsResponse;
+use kernel::memory::RecentSession;
+use kernel::memory::TopTool;
 use rusqlite::Connection;
 use rusqlite::params;
-use wire::gateway::memory::MemoryStatsResponse;
-use wire::gateway::memory::RecentSession;
-use wire::gateway::memory::TopTool;
 
 use crate::SqliteStore;
 use crate::error::SqliteError;

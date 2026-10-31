@@ -79,31 +79,41 @@ impl TerminalSettings {
         if let Some(path) = self.local_bin_path(&env) {
             env.insert("PATH".to_owned(), path);
         }
+        for (name, value) in self.rivethub_env(session, roster_key) {
+            env.insert(name, OsString::from(value));
+        }
+        Ok(env)
+    }
+
+    #[must_use]
+    pub fn rivethub_env(
+        &self,
+        session: Option<&SessionKey>,
+        roster_key: &RosterKey,
+    ) -> BTreeMap<String, String> {
+        let mut env = BTreeMap::new();
         if let Some(session) = session {
             env.insert(
                 "RIVETHUB_SESSION_KEY".to_owned(),
-                OsString::from(session.as_str()),
+                session.as_str().to_owned(),
             );
-            env.insert(
-                "RIVETHUB_SESSION".to_owned(),
-                OsString::from(session.as_str()),
-            );
+            env.insert("RIVETHUB_SESSION".to_owned(), session.as_str().to_owned());
         }
         if let Some(url) = &self.url {
-            env.insert("RIVETHUB_URL".to_owned(), OsString::from(url));
+            env.insert("RIVETHUB_URL".to_owned(), url.clone());
         }
         if let Some(token) = &self.token {
-            env.insert("RIVETHUB_TOKEN".to_owned(), OsString::from(token));
+            env.insert("RIVETHUB_TOKEN".to_owned(), token.clone());
         }
         env.insert(
             "RIVETHUB_CA".to_owned(),
-            self.ca_path.as_os_str().to_owned(),
+            self.ca_path.to_string_lossy().into_owned(),
         );
         env.insert(
             "RIVETHUB_NAME".to_owned(),
-            OsString::from(format!("{}:{roster_key}", self.node_name)),
+            format!("{}:{roster_key}", self.node_name),
         );
-        Ok(env)
+        env
     }
 
     fn local_bin_path(&self, env: &BTreeMap<String, OsString>) -> Option<OsString> {

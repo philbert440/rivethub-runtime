@@ -6,13 +6,17 @@ use chrono::Utc;
 use kernel::memory::BrowseFilter;
 use kernel::memory::EmbedModelMismatch;
 use kernel::memory::Limit;
+use kernel::memory::MemoryEntry;
+use kernel::memory::MemoryStatsResponse;
 use kernel::memory::MemoryStore;
 use kernel::memory::MemoryStoreError;
+use kernel::memory::PendingTagWire;
 use kernel::memory::SearchOutcome;
 use kernel::memory::SearchQuery;
 use kernel::memory::SummaryDag;
 use kernel::memory::SummaryOwner;
 use kernel::memory::TagAdd;
+use kernel::memory::TagCount;
 use kernel::memory::TagCountsQuery;
 use kernel::memory::TagDecision;
 use kernel::memory::TagId;
@@ -22,22 +26,19 @@ use kernel::memory::TagLookup;
 use kernel::memory::TagSuggestionStored;
 use kernel::memory::TagSuggestionWrite;
 use kernel::memory::TagTaxonomyDecision;
+use kernel::memory::TagTaxonomyEntry;
+use kernel::memory::TagTaxonomyMerge;
+use kernel::memory::TagTaxonomyMergeResult;
 use kernel::memory::TagTaxonomyQuery;
 use kernel::memory::TagTaxonomyUpsert;
+use kernel::memory::TagWire;
+use kernel::owner::Owner;
 use kernel::wiki::WikiFilter;
+use kernel::wiki::WikiGapsResponse;
 use kernel::wiki::WikiLookup;
+use kernel::wiki::WikiTopicList;
 use kernel::wiki::page::WikiSlug;
 use uuid::Uuid;
-use wire::gateway::memory::MemoryStatsResponse;
-use wire::gateway::memory::PendingTagWire;
-use wire::gateway::memory::TagCount;
-use wire::gateway::memory::TagTaxonomyEntry;
-use wire::gateway::memory::TagTaxonomyMerge;
-use wire::gateway::memory::TagTaxonomyMergeResult;
-use wire::gateway::memory::TagWire;
-use wire::gateway::wiki::WikiGapsResponse;
-use wire::gateway::wiki::WikiTopicList;
-use wire::memory::MemoryEntry;
 
 use crate::SqliteStore;
 use crate::error::SqliteError;
@@ -74,19 +75,24 @@ impl MemoryStore for SqliteStore {
 
     async fn capture(
         &self,
-        batch: wire::capture::CaptureBatchRequest,
+        batch: kernel::memory::CaptureBatchRequest,
+        owner: &Owner,
         node: Option<&str>,
-    ) -> Result<wire::capture::CaptureResult, MemoryStoreError> {
+    ) -> Result<kernel::memory::CaptureResult, MemoryStoreError> {
         let now = self.now();
-        Self::capture(self, batch, node, now)
+        Self::capture(self, batch, owner, node, now)
             .await
             .map_err(MemoryStoreError::from)
     }
 
-    async fn append(&self, batch: Vec<MemoryEntry>) -> Result<u64, MemoryStoreError> {
+    async fn append(
+        &self,
+        owner: &Owner,
+        batch: Vec<MemoryEntry>,
+    ) -> Result<u64, MemoryStoreError> {
         let now = self.now();
         let ids = self
-            .append_entries(batch, now)
+            .append_entries(batch, owner, now)
             .await
             .map_err(MemoryStoreError::from)?;
         u64::try_from(ids.len()).map_err(|error| MemoryStoreError::Query {

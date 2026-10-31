@@ -2,8 +2,8 @@ use crate::capture::CaptureWriter;
 use crate::capture::ConversationEnsure;
 use crate::capture::ConversationRecord;
 use crate::capture::ConversationUpsert;
+use crate::capture::UpsertedConversation;
 use crate::error::Error;
-use uuid::Uuid;
 
 impl CaptureWriter<'_> {
     pub async fn ensure_conversation(
@@ -61,7 +61,7 @@ impl CaptureWriter<'_> {
     pub async fn upsert_conversation(
         &mut self,
         upsert: &ConversationUpsert<'_>,
-    ) -> Result<Uuid, Error> {
+    ) -> Result<UpsertedConversation, Error> {
         let settings = upsert.settings.map(sqlx::types::Json);
         let record = sqlx::query!(
             "insert into rh_conversations (session_key, agent, channel, title, settings,
@@ -74,9 +74,8 @@ impl CaptureWriter<'_> {
                                else rh_conversations.settings end,
                task_id = case when $10 then excluded.task_id
                               else rh_conversations.task_id end,
-               owner_user_id = coalesce(rh_conversations.owner_user_id, excluded.owner_user_id),
                node = coalesce(rh_conversations.node, excluded.node)
-             returning id",
+             returning id, owner_user_id",
             upsert.session_key,
             upsert.agent,
             upsert.channel,
@@ -92,6 +91,9 @@ impl CaptureWriter<'_> {
         .fetch_one(&mut *self.tx)
         .await
         .map_err(|source| Error::operation("conversation upsert", source))?;
-        Ok(record.id)
+        Ok(UpsertedConversation {
+            id: record.id,
+            owner_user_id: record.owner_user_id,
+        })
     }
 }

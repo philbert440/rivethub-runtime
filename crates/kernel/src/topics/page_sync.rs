@@ -1,6 +1,6 @@
 use serde::Deserialize;
 use serde::Serialize;
-use wire::JsonObject;
+use values::JsonObject;
 
 use super::Topic;
 use super::TopicId;

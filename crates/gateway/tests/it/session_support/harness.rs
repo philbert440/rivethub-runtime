@@ -1,12 +1,12 @@
 use std::collections::BTreeMap;
 
 use async_trait::async_trait;
+use kernel::harness::{ApprovalDecision, SteerOutcome};
 use kernel::harness::{
     HarnessAdapter, HarnessAdapterError, SessionEvent, SessionOption, SessionSpec, TurnInput,
 };
 use parking_lot::Mutex;
 use tokio::sync::{Semaphore, mpsc, watch};
-use wire::harness::{ApprovalDecision, SteerOutcome};
 use wire::session_id::SessionId;
 
 #[derive(Debug)]
@@ -18,7 +18,7 @@ struct Session {
 #[derive(Debug)]
 pub(crate) struct Harness {
     sessions: Mutex<BTreeMap<SessionId, Session>>,
-    offered: Mutex<Vec<wire::harness::HarnessOffering>>,
+    offered: Mutex<Vec<kernel::harness::HarnessOffering>>,
     pub(crate) trace: watch::Sender<Vec<String>>,
     pub(crate) finish: Semaphore,
     pub(crate) specs: Mutex<Vec<SessionSpec>>,
@@ -102,7 +102,11 @@ impl HarnessAdapter for Harness {
         Ok(spec.session)
     }
 
-    async fn resume(&self, session: &SessionId) -> Result<(), HarnessAdapterError> {
+    async fn resume(
+        &self,
+        session: &SessionId,
+        _cwd: Option<&std::path::Path>,
+    ) -> Result<(), HarnessAdapterError> {
         self.opened(session.clone());
         self.trace.send_modify(|trace| trace.push("resume".into()));
         Ok(())
@@ -193,8 +197,8 @@ impl HarnessAdapter for Harness {
         Ok(())
     }
 
-    fn switches(&self, _session: &SessionId) -> wire::gateway::sessions::SessionSwitches {
-        wire::gateway::sessions::SessionSwitches {
+    fn switches(&self, _session: &SessionId) -> kernel::harness::SessionSwitches {
+        kernel::harness::SessionSwitches {
             model: true,
             effort: false,
         }
@@ -229,7 +233,9 @@ impl HarnessAdapter for Harness {
             .expect("one consumer"))
     }
 
-    async fn offerings(&self) -> Result<Vec<wire::harness::HarnessOffering>, HarnessAdapterError> {
+    async fn offerings(
+        &self,
+    ) -> Result<Vec<kernel::harness::HarnessOffering>, HarnessAdapterError> {
         Ok(self.offered.lock().clone())
     }
 
@@ -258,11 +264,11 @@ fn described(input: TurnInput) -> String {
     }
 }
 
-fn offered(harness_id: wire::harness::HarnessId) -> wire::harness::HarnessOffering {
-    use wire::harness::{
+fn offered(harness_id: wire::harness::HarnessId) -> kernel::harness::HarnessOffering {
+    use kernel::harness::{
         HarnessCapabilities, HarnessControlCapabilities, HarnessObservationCapabilities,
     };
-    wire::harness::HarnessOffering {
+    kernel::harness::HarnessOffering {
         harness_id,
         chat: true,
         capabilities: HarnessCapabilities {

@@ -3,14 +3,44 @@ use crate::topics::DeliveredVia;
 use async_trait::async_trait;
 use thiserror::Error;
 use tokio::sync::mpsc::Receiver;
-use wire::gateway::sessions::SessionSwitches;
-use wire::harness::ApprovalDecision;
-use wire::harness::HarnessId;
-use wire::harness::PlanStatus;
-use wire::harness::SteerOutcome;
-use wire::json::JsonObject;
-use wire::session_id::SessionId;
-use wire::stream::ThinkingLevel;
+use values::HarnessId;
+use values::JsonObject;
+use values::SessionId;
+use values::ThinkingLevel;
+
+mod offering;
+
+pub use offering::{
+    EffortOption, HarnessCapabilities, HarnessControlCapabilities, HarnessModelOption,
+    HarnessModelsSource, HarnessObservationCapabilities, HarnessOffering,
+};
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct SessionSwitches {
+    pub model: bool,
+    pub effort: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ApprovalDecision {
+    Allow,
+    Deny,
+    AllowSession,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SteerOutcome {
+    Steered,
+    StartedNewTurn,
+    PromptRequired,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PlanStatus {
+    Pending,
+    InProgress,
+    Completed,
+}
 
 #[derive(Debug, Error)]
 pub enum HarnessAdapterError {
@@ -180,7 +210,7 @@ pub enum SessionEvent {
     UserMessageChunk { text: String },
     AgentMessageChunk { text: String },
     AgentThoughtChunk { text: String },
-    Usage { usage: wire::stream::LlmUsage },
+    Usage { usage: values::LlmUsage },
     Context(ContextUsage),
     ToolCall(ToolCallInfo),
     ToolCallUpdate(ToolCallUpdate),
@@ -261,7 +291,11 @@ pub trait HarnessAdapter: Send + Sync {
         SystemPromptSupport::None
     }
 
-    async fn resume(&self, session: &SessionId) -> Result<(), HarnessAdapterError>;
+    async fn resume(
+        &self,
+        session: &SessionId,
+        cwd: Option<&std::path::Path>,
+    ) -> Result<(), HarnessAdapterError>;
 
     async fn prompt(
         &self,
@@ -315,7 +349,7 @@ pub trait HarnessAdapter: Send + Sync {
         session: &SessionId,
     ) -> Result<Receiver<SessionEvent>, HarnessAdapterError>;
 
-    async fn offerings(&self) -> Result<Vec<wire::harness::HarnessOffering>, HarnessAdapterError>;
+    async fn offerings(&self) -> Result<Vec<HarnessOffering>, HarnessAdapterError>;
 
     async fn commands(&self) -> Result<Vec<HarnessCommands>, HarnessAdapterError>;
 }

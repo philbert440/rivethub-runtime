@@ -2,15 +2,15 @@ use super::*;
 use chrono::DateTime;
 use chrono::Utc;
 use kernel::memory::MemoryExport;
+use kernel::memory::MemoryMessageTally;
 use kernel::memory::MemoryStoreError;
+use kernel::memory::MemorySummaryNode;
 use kernel::memory::SummaryDag;
+use kernel::memory::SummaryKind;
 use kernel::memory::SummaryOwner;
+use kernel::memory::VectorState;
 use tokio_util::sync::CancellationToken;
-use wire::gateway::memory::MemoryMessageTally;
 use wire::gateway::memory::MemorySummaryDagResponse;
-use wire::gateway::memory::MemorySummaryNode;
-use wire::gateway::memory::SummaryKind;
-use wire::gateway::memory::VectorState;
 
 const DUMP: &[u8] = &[0x1f, 0x8b, 0x08, 0x00, 0x2d, 0x2d];
 
@@ -124,8 +124,14 @@ fn summaries_route_returns_the_session_dag_root_first() {
     let parsed: MemorySummaryDagResponse =
         serde_json::from_slice(&response.body).expect("summary dag response");
     assert_eq!(parsed.session_id, SESSION);
-    assert_eq!(parsed.summaries, dag.summaries);
-    assert_eq!(parsed.messages, dag.messages);
+    assert_eq!(
+        serde_json::to_string(&parsed.summaries).expect("summaries"),
+        serde_json::to_string(&dag.summaries).expect("summaries")
+    );
+    assert_eq!(
+        serde_json::to_string(&parsed.messages).expect("messages"),
+        serde_json::to_string(&dag.messages).expect("messages")
+    );
     let requests = block_on(store.requests());
     assert!(
         requests.contains(&testkit::MemoryRequest::SummaryDag(SummaryOwner::Session(
@@ -139,7 +145,10 @@ fn summaries_route_returns_the_session_dag_root_first() {
         serde_json::from_slice(&response.body).expect("empty summary dag response");
     assert_eq!(parsed.session_id, "unknown-session");
     assert_eq!(parsed.summaries.len(), 0);
-    assert_eq!(parsed.messages, MemoryMessageTally::default());
+    assert_eq!(
+        parsed.messages,
+        wire::gateway::memory::MemoryMessageTally::default()
+    );
 }
 
 #[test]
@@ -170,7 +179,10 @@ fn a_conversation_answers_its_summary_dag_under_its_own_key() {
         parsed.session_id,
         "discord:00000000-0000-4000-8000-000000000062"
     );
-    assert_eq!(parsed.summaries, dag.summaries);
+    assert_eq!(
+        serde_json::to_string(&parsed.summaries).expect("summaries"),
+        serde_json::to_string(&dag.summaries).expect("summaries")
+    );
     let unknown = get(
         &app,
         "/api/memory/conversations/00000000-0000-4000-8000-000000000064/summaries",

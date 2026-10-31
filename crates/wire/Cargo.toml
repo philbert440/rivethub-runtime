@@ -18,6 +18,7 @@ serde_with = { workspace = true, features = ["chrono"] }
 strum = { workspace = true, features = ["derive"] }
 thiserror = { workspace = true }
 url = { workspace = true, features = ["serde"] }
+values = { workspace = true }
 
 [dev-dependencies]
 testkit = { workspace = true }

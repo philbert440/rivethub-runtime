@@ -1,9 +1,9 @@
+use kernel::model::LlmResponse;
 use kernel::model::ModelProviderError;
 use kernel::model::ModelRequest;
 use wire::message::Message;
 use wire::message::MessageContent;
 use wire::message::Role;
-use wire::stream::LlmResponse;
 
 use super::SummarizeEnv;
 use crate::error::WorkerError;

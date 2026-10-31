@@ -5,7 +5,8 @@ use std::path::{Path, PathBuf};
 use config::Config;
 use harness_acp::AcpHarnessAdapter;
 use kernel::harness::HarnessAdapter;
-use wire::harness::{HarnessId, HarnessModelsSource, HarnessOffering};
+use kernel::harness::{HarnessModelsSource, HarnessOffering};
+use wire::harness::HarnessId;
 
 fn block_on<T>(future: impl std::future::Future<Output = T>) -> T {
     tokio::runtime::Builder::new_current_thread()

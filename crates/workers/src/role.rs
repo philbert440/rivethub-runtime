@@ -77,6 +77,7 @@ pub(crate) fn handler_ready(name: &JobName) -> bool {
                 | FixedJob::ExtractWiki
                 | FixedJob::EnqueueWikiBackfill
                 | FixedJob::ConsolidateWiki
+                | FixedJob::RecompileWiki
                 | FixedJob::EnqueueUnembedded
                 | FixedJob::EnqueueUnchunked
                 | FixedJob::EnqueueStaleWiki

@@ -3,6 +3,9 @@ use std::str::FromStr;
 
 use chrono::DateTime;
 use chrono::Utc;
+use kernel::owner::Owner;
+use kernel::tenancy::SessionVisibility;
+use kernel::tenancy::Visibility;
 use kernel::topics::Alias;
 use kernel::topics::PlacedSession;
 use kernel::topics::Placement;
@@ -34,6 +37,9 @@ pub(super) struct TopicRow {
     pub(super) created_at: DateTime<Utc>,
     pub(super) updated_at: DateTime<Utc>,
     pub(super) closed_at: Option<DateTime<Utc>>,
+    pub(super) owner_user_id: Option<String>,
+    pub(super) visibility: String,
+    pub(super) visibility_mark: Option<String>,
 }
 
 pub(super) struct AliasRow {
@@ -46,6 +52,7 @@ pub(super) struct PlacementRow {
     pub(super) topic_id: Uuid,
     pub(super) placed_by: String,
     pub(super) placed_at: DateTime<Utc>,
+    pub(super) owner_user_id: String,
 }
 
 pub(super) struct SuggestionRow {
@@ -60,6 +67,7 @@ pub(super) struct PlacedRow {
     pub(super) topic_id: Uuid,
     pub(super) placed_by: String,
     pub(super) placed_at: DateTime<Utc>,
+    pub(super) owner_user_id: String,
     pub(super) last_active: Option<DateTime<Utc>>,
 }
 
@@ -100,7 +108,14 @@ pub(super) fn topic(row: TopicRow, aliases: Vec<Alias>) -> Result<Topic, TopicEr
         created_at: row.created_at,
         updated_at: row.updated_at,
         closed_at: row.closed_at,
+        owner: row.owner_user_id.map(owner).transpose()?,
+        visibility: visibility(&row.visibility)?,
+        visibility_mark: row.visibility_mark.as_deref().map(visibility).transpose()?,
     })
+}
+
+pub(super) fn visibility(text: &str) -> Result<Visibility, TopicError> {
+    Visibility::parse(text).map_err(|error| stored("visibility")(Box::new(error)))
 }
 
 pub(super) fn placement(row: PlacementRow) -> Result<Placement, TopicError> {
@@ -111,7 +126,30 @@ pub(super) fn placement(row: PlacementRow) -> Result<Placement, TopicError> {
         by: PlacementSource::from_str(&row.placed_by)
             .map_err(|error| stored("placed_by")(Box::new(error)))?,
         at: row.placed_at,
+        owner: Some(owner(row.owner_user_id)?),
     })
+}
+
+pub(super) fn owner(id: String) -> Result<Owner, TopicError> {
+    Owner::new(id).map_err(|error| stored("owner_user_id")(Box::new(error)))
+}
+
+pub(super) fn session_visibility(
+    owner: Option<String>,
+    mark: Option<&str>,
+    effective: Option<String>,
+) -> Result<Option<SessionVisibility>, TopicError> {
+    let parse =
+        |text: &str| Visibility::parse(text).map_err(|error| stored("visibility")(Box::new(error)));
+    effective
+        .map(|effective| {
+            Ok(SessionVisibility {
+                owner: owner.map(self::owner).transpose()?,
+                mark: mark.map(parse).transpose()?,
+                effective: parse(&effective)?,
+            })
+        })
+        .transpose()
 }
 
 pub(super) fn suggestion(row: SuggestionRow) -> Result<Suggestion, TopicError> {
@@ -132,6 +170,7 @@ pub(super) fn placed(row: PlacedRow) -> Result<PlacedSession, TopicError> {
             topic_id: row.topic_id,
             placed_by: row.placed_by,
             placed_at: row.placed_at,
+            owner_user_id: row.owner_user_id,
         })?,
     })
 }
@@ -162,6 +201,29 @@ pub(super) async fn aliases_of(
     rows.iter().map(|row| Alias::new(&row.alias)).collect()
 }
 
+pub(super) async fn visible(
+    conn: &mut PgConnection,
+    id: TopicId,
+) -> Result<Option<Topic>, TopicError> {
+    let row = sqlx::query_as!(
+        TopicRow,
+        "SELECT id, kind, slug, name, parent_id, directory_kind, directory_node, directory_path,
+                created_at, updated_at, closed_at, owner_user_id, visibility, visibility_mark
+           FROM rh_topics WHERE id = $1",
+        id.uuid()
+    )
+    .fetch_optional(&mut *conn)
+    .await
+    .map_err(failed("topic read"))?;
+    match row {
+        Some(row) => {
+            let aliases = aliases_of(conn, row.id).await?;
+            topic(row, aliases).map(Some)
+        }
+        None => Ok(None),
+    }
+}
+
 pub(super) async fn by_id(
     conn: &mut PgConnection,
     id: TopicId,
@@ -169,7 +231,7 @@ pub(super) async fn by_id(
     let row = sqlx::query_as!(
         TopicRow,
         "SELECT id, kind, slug, name, parent_id, directory_kind, directory_node, directory_path,
-                created_at, updated_at, closed_at
+                created_at, updated_at, closed_at, owner_user_id, visibility, visibility_mark
            FROM rh_topics WHERE id = $1 FOR UPDATE",
         id.uuid()
     )
@@ -193,7 +255,8 @@ pub(super) async fn by_slug(
     let row = sqlx::query_as!(
         TopicRow,
         "SELECT t.id, t.kind, t.slug, t.name, t.parent_id, t.directory_kind, t.directory_node,
-                t.directory_path, t.created_at, t.updated_at, t.closed_at
+                t.directory_path, t.created_at, t.updated_at, t.closed_at, t.owner_user_id,
+                t.visibility, t.visibility_mark
            FROM rh_topics t
           WHERE t.kind = $2
             AND (t.slug = $1
@@ -221,7 +284,7 @@ pub(super) async fn placement_of(
 ) -> Result<Option<Placement>, TopicError> {
     sqlx::query_as!(
         PlacementRow,
-        "SELECT session_id, topic_id, placed_by, placed_at
+        "SELECT session_id, topic_id, placed_by, placed_at, owner_user_id
            FROM rh_session_placements WHERE session_id = $1",
         session.as_str()
     )

@@ -218,6 +218,41 @@ pub async fn a_running_task_is_reaped_only_when_its_liveness_goes_stale(
     Ok(())
 }
 
+pub async fn a_queued_task_times_out_when_no_node_starts_it_by_its_deadline(
+    store: &dyn TaskStore,
+) -> Outcome {
+    let unclaimed = queued("coder", "node-gone", 1);
+    let started = queued("coder", "node-b", 1);
+    let mut open = queued("coder", "node-gone", 1);
+    open.budget.wall_clock = None;
+    for task in [&unclaimed, &started, &open] {
+        store.insert(task).await?;
+    }
+    store.begin(started.id, "node-b", at(2)).await?;
+    same("early", store.expire(at(4)).await?, Vec::<Uuid>::new())?;
+    same("due", store.expire(at(5)).await?, vec![unclaimed.id])?;
+    let expired = store.load(unclaimed.id).await?;
+    same("status", expired.status, TaskStatus::Timeout)?;
+    same(
+        "reason",
+        expired.error.as_deref(),
+        Some(kernel::tasks::UNCLAIMED_PAST_DEADLINE),
+    )?;
+    same("completed", expired.completed_at, Some(at(5)))?;
+    same(
+        "running",
+        store.load(started.id).await?.status,
+        TaskStatus::Running,
+    )?;
+    same(
+        "no deadline",
+        store.load(open.id).await?.status,
+        TaskStatus::Queued,
+    )?;
+    same("once", store.expire(at(9)).await?, Vec::<Uuid>::new())?;
+    Ok(())
+}
+
 pub async fn a_delegated_child_is_filed_under_its_parents_topic(
     tasks: &dyn TaskStore,
     topics: &dyn TopicStore,
@@ -232,6 +267,7 @@ pub async fn a_delegated_child_is_filed_under_its_parents_topic(
             topic: home.id,
             by: PlacementSource::You,
             at: at(1),
+            owner: Some(crate::owner()?),
         })
         .await?;
     let chain = [
@@ -255,6 +291,7 @@ pub async fn a_delegated_child_is_filed_under_its_parents_topic(
             topic: elsewhere.id,
             by: PlacementSource::You,
             at: at(9),
+            owner: Some(crate::owner()?),
         })
         .await?;
     listed_in(filing, home.id).await?;

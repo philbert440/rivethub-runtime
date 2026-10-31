@@ -23,7 +23,7 @@ const SUFFIXES: [&str; 9] = [
     "Id", "Kind", "Status", "Role", "Phase", "Mode", "State", "Source", "Activity",
 ];
 
-const WORKSPACE_CRATES: [&str; 4] = ["wire", "config", "kernel", "testkit"];
+const WORKSPACE_CRATES: [&str; 5] = ["values", "wire", "config", "kernel", "testkit"];
 
 impl<'tcx> LateLintPass<'tcx> for Stringly {
     fn check_item(&mut self, cx: &LateContext<'tcx>, item: &'tcx rustc_hir::Item<'tcx>) {

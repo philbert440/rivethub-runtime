@@ -39,7 +39,14 @@ fn seed_summary(path: &Path, id: Uuid) -> TestResult {
     let conn = rusqlite::Connection::open(path)?;
     let now = Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
     conn.execute(
-        "INSERT INTO ros_summaries (id, content, created_at) VALUES (?1, ?2, ?3)",
+        "INSERT OR IGNORE INTO ros_conversations
+             (id, session_key, agent, created_at, updated_at, owner_user_id)
+         VALUES ('00000000-0000-4000-8000-0000000000c1', 'cli:local', 'rivet', ?1, ?1, 'owner')",
+        [&now],
+    )?;
+    conn.execute(
+        "INSERT INTO ros_summaries (id, conversation_id, content, created_at)
+         VALUES (?1, '00000000-0000-4000-8000-0000000000c1', ?2, ?3)",
         (id.to_string(), "AcmeKit deploys on Fridays.", now),
     )?;
     Ok(())
@@ -193,6 +200,13 @@ async fn a_task_runs_once_on_its_node_and_only_a_kill_ends_it_early() -> TestRes
 async fn a_running_task_is_reaped_only_when_its_liveness_goes_stale() -> TestResult {
     let fixture = fixture()?;
     testkit::tasks::a_running_task_is_reaped_only_when_its_liveness_goes_stale(&fixture.store).await
+}
+
+#[tokio::test]
+async fn a_queued_task_times_out_when_no_node_starts_it_by_its_deadline() -> TestResult {
+    let fixture = fixture()?;
+    testkit::tasks::a_queued_task_times_out_when_no_node_starts_it_by_its_deadline(&fixture.store)
+        .await
 }
 
 #[tokio::test]

@@ -35,7 +35,6 @@ use wire::gateway::memory::TagLookupResult;
 use wire::gateway::memory::TagState;
 use wire::gateway::memory::TagTaxonomyDecideRequest;
 use wire::gateway::memory::TagTaxonomyListResult;
-use wire::gateway::memory::TagTaxonomyMerge;
 use wire::gateway::memory::TagTaxonomyMergeRequest;
 use wire::gateway::memory::TagTaxonomyMergeResult;
 use wire::gateway::memory::TagTaxonomyUpsertRequest;
@@ -50,6 +49,7 @@ use crate::extract::Query;
 use crate::extract::RawLimit;
 use crate::extract::StateFilter;
 use crate::extract::StateParam;
+use crate::memory_body;
 
 const DECIDE_IDS_MAX: usize = 1000;
 const LOOKUP_KEYS_MAX: usize = 500;
@@ -133,11 +133,19 @@ async fn list(
     Query(params): Query<ListParams>,
 ) -> Result<Json<TagListResult>, ApiError> {
     let query = TagListQuery {
-        entity_type: params.entity_type.map(EntityTypeParam::get),
+        entity_type: params
+            .entity_type
+            .map(|entity| memory_body::tag_entity_type(entity.get())),
         entity_id: params.entity_id.map(EntityIdParam::get),
         key: params.key,
         value: params.value,
-        states: params.state.map_or_else(Vec::new, StateFilter::into_vec),
+        states: params.state.map_or_else(Vec::new, |states| {
+            states
+                .into_vec()
+                .into_iter()
+                .map(memory_body::tag_state)
+                .collect()
+        }),
         limit: Limit::clamped(
             params.limit.map(RawLimit::get),
             LIST_LIMIT_DEFAULT,
@@ -145,7 +153,9 @@ async fn list(
         ),
     };
     match gateway.store().list_tags(query).await {
-        Ok(tags) => Ok(Json(TagListResult { tags })),
+        Ok(tags) => Ok(Json(TagListResult {
+            tags: tags.into_iter().map(memory_body::tag_wire_body).collect(),
+        })),
         Err(MemoryStoreError::TagTablesMissing) => Ok(Json(TagListResult { tags: Vec::new() })),
         Err(error) => Err(error.into()),
     }
@@ -161,7 +171,12 @@ async fn pending(
         1..=TAGS_LIMIT_MAX,
     );
     match gateway.store().pending_tags(limit).await {
-        Ok(tags) => Ok(Json(PendingTagListResult { tags })),
+        Ok(tags) => Ok(Json(PendingTagListResult {
+            tags: tags
+                .into_iter()
+                .map(memory_body::pending_tag_wire_body)
+                .collect(),
+        })),
         Err(MemoryStoreError::TagTablesMissing) => {
             Ok(Json(PendingTagListResult { tags: Vec::new() }))
         }
@@ -182,7 +197,12 @@ async fn counts(
         ),
     };
     match gateway.store().tag_counts(query).await {
-        Ok(counts) => Ok(Json(TagCountsResult { counts })),
+        Ok(counts) => Ok(Json(TagCountsResult {
+            counts: counts
+                .into_iter()
+                .map(memory_body::tag_count_body)
+                .collect(),
+        })),
         Err(MemoryStoreError::TagTablesMissing) => Ok(Json(TagCountsResult { counts: Vec::new() })),
         Err(error) => Err(error.into()),
     }
@@ -194,7 +214,9 @@ async fn taxonomy_list(
 ) -> Result<Json<TagTaxonomyListResult>, ApiError> {
     let query = TagTaxonomyQuery {
         key: params.key,
-        state: params.state.map(StateParam::get),
+        state: params
+            .state
+            .map(|state| memory_body::tag_state(state.get())),
         limit: Limit::clamped(
             params.limit.map(RawLimit::get),
             TAXONOMY_LIMIT_DEFAULT,
@@ -202,7 +224,12 @@ async fn taxonomy_list(
         ),
     };
     match gateway.store().list_tag_taxonomy(query).await {
-        Ok(entries) => Ok(Json(TagTaxonomyListResult { entries })),
+        Ok(entries) => Ok(Json(TagTaxonomyListResult {
+            entries: entries
+                .into_iter()
+                .map(memory_body::tag_taxonomy_entry_body)
+                .collect(),
+        })),
         Err(MemoryStoreError::TagTablesMissing) => Ok(Json(TagTaxonomyListResult {
             entries: Vec::new(),
         })),
@@ -263,7 +290,7 @@ async fn add(
     let entity = entity_of(&body)?;
     let tag = literal_of(&body)?;
     let add = TagAdd {
-        entity_type,
+        entity_type: memory_body::tag_entity_type(entity_type),
         entity,
         agent: body.agent,
         tag,
@@ -274,7 +301,9 @@ async fn add(
             .map(|value| value.trim().chars().take(DECIDER_MAX_CHARS).collect()),
     };
     match gateway.store().add_tag(add).await {
-        Ok(tag) => Ok(Json(TagAddResult { tag })),
+        Ok(tag) => Ok(Json(TagAddResult {
+            tag: memory_body::tag_wire_body(tag),
+        })),
         Err(error) => Err(error.into()),
     }
 }
@@ -325,7 +354,10 @@ async fn lookup(
     let mut states = Vec::new();
     if let Some(raw_states) = &body.states {
         for raw in raw_states {
-            states.push(enum_value::<TagState>(raw, "bad state")?);
+            states.push(memory_body::tag_state(enum_value::<TagState>(
+                raw,
+                "bad state",
+            )?));
         }
     }
     let lookup = TagLookup {
@@ -333,7 +365,17 @@ async fn lookup(
         states,
     };
     match gateway.store().lookup_tags(lookup).await {
-        Ok(sessions) => Ok(Json(TagLookupResult { sessions })),
+        Ok(sessions) => Ok(Json(TagLookupResult {
+            sessions: sessions
+                .into_iter()
+                .map(|(key, tags)| {
+                    (
+                        key,
+                        tags.into_iter().map(memory_body::tag_wire_body).collect(),
+                    )
+                })
+                .collect(),
+        })),
         Err(MemoryStoreError::TagTablesMissing) => Ok(Json(TagLookupResult {
             sessions: BTreeMap::new(),
         })),
@@ -365,7 +407,9 @@ async fn taxonomy_upsert(
         reason: body.reason.clone(),
     };
     match gateway.store().upsert_tag_taxonomy(upsert).await {
-        Ok(entry) => Ok(Json(TagTaxonomyUpsertResult { entry })),
+        Ok(entry) => Ok(Json(TagTaxonomyUpsertResult {
+            entry: memory_body::tag_taxonomy_entry_body(entry),
+        })),
         Err(error) => Err(error.into()),
     }
 }
@@ -390,7 +434,10 @@ async fn taxonomy_decide(
     let changed = gateway
         .store()
         .decide_tag_taxonomy(TagTaxonomyDecision {
-            entries,
+            entries: entries
+                .into_iter()
+                .map(memory_body::tag_entry_pair)
+                .collect(),
             decision,
             decided_by: body
                 .decided_by
@@ -416,13 +463,13 @@ async fn taxonomy_merge(
     };
     let result = gateway
         .store()
-        .merge_tag_taxonomy(TagTaxonomyMerge {
+        .merge_tag_taxonomy(kernel::memory::TagTaxonomyMerge {
             key: key.to_owned(),
             from: from.to_owned(),
             into: into.to_owned(),
         })
         .await?;
-    Ok(Json(result))
+    Ok(Json(memory_body::tag_taxonomy_merge_result_body(result)))
 }
 
 fn present(value: &str) -> bool {

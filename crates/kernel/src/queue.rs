@@ -7,7 +7,7 @@ use serde::Serialize;
 use std::fmt;
 use std::str::FromStr;
 use thiserror::Error;
-use wire::JsonObject;
+use values::JsonObject;
 
 #[derive(Debug, Error)]
 pub enum JobQueueError {
@@ -247,11 +247,7 @@ pub trait JobQueue: std::fmt::Debug + Send + Sync {
 
     async fn release(&self, id: JobId) -> Result<(), JobQueueError>;
 
-    async fn revive_dead(
-        &self,
-        name: &JobName,
-        dead_before: DateTime<Utc>,
-    ) -> Result<u64, JobQueueError>;
+    async fn flag_stuck(&self) -> Result<u64, JobQueueError>;
 
     async fn read(&self, id: JobId) -> Result<Option<StoredJob>, JobQueueError>;
 }
@@ -296,6 +292,7 @@ impl WorkerRole {
                 JobName::Fixed(FixedJob::ExtractWiki),
                 JobName::Fixed(FixedJob::EnqueueWikiBackfill),
                 JobName::Fixed(FixedJob::ConsolidateWiki),
+                JobName::Fixed(FixedJob::RecompileWiki),
                 JobName::Fixed(FixedJob::EnqueueStaleWiki),
             ],
         }

@@ -173,16 +173,15 @@ impl HerdrClient {
         }
         .encode()?;
         let handshake = async {
-            let stream = self.open().await?;
-            let (reader, mut writer) = stream.into_split();
-            write_frame(&mut writer, &encoded).await?;
-            let mut reader = BufReader::new(reader);
+            let mut stream = BufReader::new(self.open().await?);
+            stream.get_mut().write_all(&encoded).await?;
+            stream.get_mut().flush().await?;
             let ack = self
-                .first_ack(RpcMethod::EventsSubscribe, &id, &mut reader)
+                .first_ack(RpcMethod::EventsSubscribe, &id, &mut stream)
                 .await?;
-            Ok::<_, Error>((reader, ack))
+            Ok::<_, Error>((stream, ack))
         };
-        let (reader, ack) = tokio::time::timeout(CTL_TIMEOUT, handshake)
+        let (stream, ack) = tokio::time::timeout(CTL_TIMEOUT, handshake)
             .await
             .map_err(|_| Error::RpcTimeout {
                 method: RpcMethod::EventsSubscribe,
@@ -198,7 +197,7 @@ impl HerdrClient {
         self.lifetime.tasks.spawn(async move {
             let result = tokio::select! {
                 () = shutdown.cancelled() => return,
-                result = event_pump(&events, reader) => result,
+                result = event_pump(&events, stream) => result,
             };
             if let Err(error) = result {
                 drop(events.send(Err(Arc::new(error))));
@@ -229,7 +228,7 @@ impl HerdrClient {
         &self,
         method: RpcMethod,
         id: &str,
-        reader: &mut BufReader<tokio::net::unix::OwnedReadHalf>,
+        reader: &mut (impl tokio::io::AsyncBufRead + Unpin),
     ) -> Result<AckFrame, Error> {
         let mut line = Vec::new();
         loop {
@@ -275,7 +274,7 @@ async fn write_frame(
 
 async fn event_pump(
     events: &broadcast::Sender<Result<EventFrame, Arc<Error>>>,
-    mut reader: BufReader<tokio::net::unix::OwnedReadHalf>,
+    mut reader: BufReader<UnixStream>,
 ) -> Result<(), Error> {
     let mut line = Vec::new();
     loop {

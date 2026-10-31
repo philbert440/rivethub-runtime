@@ -1,15 +1,20 @@
+mod coalesce;
 mod consolidate;
 mod gate;
 mod held;
+mod overlays;
+mod recompile;
 mod topic_pages;
 mod topics;
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
+use kernel::owner::Owner;
 use kernel::topics::Slug;
 use kernel::wiki::builder::{
-    DeferredWiki, ExtractWiki, HeldEntity, WIKI_PIPELINE_VERSION, WikiBuilderStore, WikiRouting,
-    WikiStoreError, WikiSummary, WikiWork, WikiWriteError,
+    BACKFILL_PRIORITY, BackfillBudget, DeferredWiki, ExtractWiki, HeldEntity,
+    WIKI_PIPELINE_VERSION, WikiBuilderStore, WikiRouting, WikiStoreError, WikiSummary, WikiWork,
+    WikiWriteError,
 };
 use kernel::wiki::page::WikiPatch;
 use kernel::wiki::page::WikiSlug;
@@ -25,6 +30,8 @@ struct SummaryRow {
     conversation_id: Option<Uuid>,
     content: String,
     session_key: Option<String>,
+    owner_user_id: String,
+    created_at: DateTime<Utc>,
 }
 
 #[derive(Debug, sqlx::FromRow)]
@@ -49,16 +56,34 @@ impl WikiBuilderStore for PostgresMemory {
         Ok(WikiWork::Pending(summary))
     }
 
-    async fn wiki_backfill(&self, limit: u32) -> Result<Vec<ExtractWiki>, WikiStoreError> {
+    async fn wiki_backfill(
+        &self,
+        budget: BackfillBudget,
+    ) -> Result<Vec<ExtractWiki>, WikiStoreError> {
         let rows = sqlx::query_as::<_, BackfillRow>(
             "SELECT s.id, s.conversation_id FROM rh_summaries s
+             LEFT JOIN rh_conversations c ON c.id = s.conversation_id
              LEFT JOIN rh_wiki_extractions e ON e.summary_id = s.id
-             WHERE e.summary_id IS NULL OR e.status = 'failed'
-                OR (e.status = 'done' AND (e.pipeline_version < $1 OR (cardinality(e.topics_touched) > 0 AND e.git_sha IS NULL)))
-             ORDER BY s.created_at, s.id LIMIT $2",
+             WHERE s.kind = 'leaf'
+               AND (c.id IS NULL OR c.session_key NOT LIKE 'heartbeat:%')
+               AND (e.summary_id IS NULL OR e.status = 'failed'
+                    OR (e.status = 'done' AND cardinality(e.topics_touched) > 0 AND e.git_sha IS NULL))
+               AND NOT EXISTS (SELECT 1 FROM rh_flagged_jobs f WHERE f.job_key = 'wiki-ext-' || s.id::text)
+               AND NOT EXISTS (SELECT 1 FROM graphile_worker._private_jobs j WHERE j.key = 'wiki-ext-' || s.id::text)
+             ORDER BY s.created_at DESC, s.id
+             LIMIT greatest(0, (SELECT CASE WHEN EXISTS (
+                         SELECT 1 FROM graphile_worker._private_jobs n
+                         JOIN graphile_worker._private_tasks t ON t.id = n.task_id
+                         WHERE n.is_available AND n.run_at <= now()
+                           AND ((t.identifier = 'extract-wiki' AND n.priority < $3)
+                             OR (t.identifier = 'compact-conversation' AND n.priority < 0)))
+                       THEN $2 ELSE $1 END)
+                     - (SELECT count(*) FROM graphile_worker._private_jobs q
+                         WHERE q.key LIKE 'wiki-ext-%' AND q.priority = $3))",
         )
-        .bind(WIKI_PIPELINE_VERSION)
-        .bind(i64::from(limit))
+        .bind(i64::from(budget.idle))
+        .bind(i64::from(budget.busy))
+        .bind(BACKFILL_PRIORITY)
         .fetch_all(&self.pool)
         .await
         .map_err(query_error)?;
@@ -78,16 +103,27 @@ impl WikiBuilderStore for PostgresMemory {
         routing: &WikiRouting,
         now: DateTime<Utc>,
     ) -> Result<Vec<String>, WikiStoreError> {
-        let directory = self
-            .wiki_directory
-            .as_ref()
-            .ok_or(WikiStoreError::DirectoryMissing)?;
+        let home = {
+            let mut connection = self.pool.acquire().await.map_err(query_error)?;
+            crate::wiki_scope::summary_scope(&mut connection, job.summary_id, self.wiki_primary())
+                .await?
+        };
+        let directory = self.wiki_home(&home.directory)?;
         let (applied, released) = {
-            let mut repository = crate::wiki_writer::WikiRepository::new(directory.clone())
+            let mut repository = crate::wiki_writer::WikiRepository::new(directory)
                 .lock()
                 .await?;
             let applied = self
-                .apply_pages(&mut repository, job, patches, routing, now)
+                .apply_pages(
+                    &mut repository,
+                    Work {
+                        job,
+                        routing,
+                        home: &home,
+                    },
+                    patches,
+                    now,
+                )
                 .await;
             (applied, repository.release().await)
         };
@@ -101,8 +137,8 @@ impl WikiBuilderStore for PostgresMemory {
         now: DateTime<Utc>,
     ) -> Result<(), WikiStoreError> {
         sqlx::query(
-            "INSERT INTO rh_wiki_extractions (summary_id, status, pipeline_version, error, extracted_at)
-             VALUES ($1, 'failed', $2, $3, $4)
+            "INSERT INTO rh_wiki_extractions (summary_id, status, pipeline_version, error, extracted_at, owner_user_id)
+             VALUES ($1, 'failed', $2, $3, $4, (SELECT owner_user_id FROM rh_summaries WHERE id = $1))
              ON CONFLICT (summary_id) DO UPDATE SET status = 'failed', pipeline_version = EXCLUDED.pipeline_version,
                 error = EXCLUDED.error, extracted_at = EXCLUDED.extracted_at
              WHERE rh_wiki_extractions.status = 'failed' OR rh_wiki_extractions.pipeline_version < $2
@@ -139,23 +175,44 @@ impl WikiBuilderStore for PostgresMemory {
         slug: &WikiSlug,
         now: DateTime<Utc>,
     ) -> Result<(), WikiStoreError> {
-        held::cite(&self.pool, summary_id, slug, now).await
+        let placed = self.place_note_page(slug, None).await?;
+        let cited = WikiSlug::try_from(placed.key)
+            .map_err(|error| WikiStoreError::InvalidPatch(error.to_string()))?;
+        held::cite(&self.pool, summary_id, &cited, now).await
+    }
+
+    async fn coalescable(
+        &self,
+        lead: Uuid,
+        topic: kernel::topics::TopicId,
+        limit: u32,
+    ) -> Result<Vec<kernel::wiki::builder::Coalescable>, WikiStoreError> {
+        coalesce::candidates(&self.pool, lead, topic, limit).await
     }
 
     async fn uncite_wiki(&self, summary_id: Uuid, slug: &WikiSlug) -> Result<(), WikiStoreError> {
-        held::uncite(&self.pool, summary_id, slug).await
+        let placed = self.place_note_page(slug, None).await?;
+        let cited = WikiSlug::try_from(placed.key)
+            .map_err(|error| WikiStoreError::InvalidPatch(error.to_string()))?;
+        held::uncite(&self.pool, summary_id, &cited).await
     }
+}
+
+struct Work<'a> {
+    job: &'a ExtractWiki,
+    routing: &'a WikiRouting,
+    home: &'a crate::wiki_scope::WikiScope,
 }
 
 impl PostgresMemory {
     async fn apply_pages(
         &self,
         repository: &mut crate::wiki_writer::LockedRepository,
-        job: &ExtractWiki,
+        work: Work<'_>,
         mut patches: Vec<WikiPatch>,
-        routing: &WikiRouting,
         now: DateTime<Utc>,
     ) -> Result<Vec<String>, WikiStoreError> {
+        let Work { job, routing, home } = work;
         for patch in &mut patches {
             if patch.title.trim().is_empty() || patch.summary.trim().is_empty() {
                 return Err(WikiStoreError::InvalidPatch(
@@ -172,6 +229,21 @@ impl PostgresMemory {
             return Ok(topics);
         }
         lock_slugs(&mut tx, &patches, &routing.cited).await?;
+        let mut cited = Vec::new();
+        for slug in &routing.cited {
+            if within(&mut tx, slug.as_ref(), home).await? {
+                cited.push(slug.clone());
+            } else if let Some(key) = overlaid(&mut tx, slug.as_ref(), home).await? {
+                cited.push(
+                    WikiSlug::try_from(key)
+                        .map_err(|error| WikiStoreError::InvalidPatch(error.to_string()))?,
+                );
+            }
+        }
+        let topic_page = match &routing.topic_page {
+            Some(page) if within(&mut tx, page.as_ref(), home).await? => Some(page),
+            Some(_) | None => None,
+        };
         let date: DateTime<Utc> =
             sqlx::query_scalar("SELECT created_at FROM rh_summaries WHERE id = $1")
                 .bind(job.summary_id)
@@ -181,7 +253,10 @@ impl PostgresMemory {
         let source = topics::Source {
             summary: &summary,
             date,
-            topic_page: routing.topic_page.as_ref(),
+            topic_page,
+            merged: &routing.merged,
+            home,
+            also: &routing.also,
         };
         let mut touched = Vec::new();
         let mut last_sha = None;
@@ -190,19 +265,16 @@ impl PostgresMemory {
             touched.push(slug);
             last_sha = Some(sha);
         }
-        for slug in &routing.cited {
-            topics::cite(&mut tx, slug.as_ref(), &summary, now).await?;
+        for slug in &cited {
+            for cited_by in std::iter::once(&summary).chain(&routing.also) {
+                topics::cite(&mut tx, slug.as_ref(), cited_by, now).await?;
+            }
         }
         touched.sort();
         touched.dedup();
-        sqlx::query(
-            "INSERT INTO rh_wiki_extractions (summary_id, status, pipeline_version, topics_touched, extracted_at, git_sha)
-             VALUES ($1, 'done', $2, $3, $4, $5)
-             ON CONFLICT (summary_id) DO UPDATE SET status = 'done', pipeline_version = EXCLUDED.pipeline_version,
-                topics_touched = EXCLUDED.topics_touched, error = NULL, extracted_at = EXCLUDED.extracted_at, git_sha = EXCLUDED.git_sha",
-        )
-        .bind(job.summary_id).bind(WIKI_PIPELINE_VERSION).bind(&touched).bind(now).bind(last_sha)
-        .execute(&mut *tx).await.map_err(query_error)?;
+        let mut summaries = vec![&summary];
+        summaries.extend(&routing.also);
+        coalesce::record(&mut tx, &summaries, &touched, last_sha.as_ref(), now).await?;
         tx.commit().await.map_err(query_error)?;
         Ok(touched)
     }
@@ -229,7 +301,7 @@ async fn load_summary(
     lock: bool,
 ) -> Result<WikiSummary, WikiStoreError> {
     let mut query = sqlx::QueryBuilder::<Postgres>::new(
-        "SELECT s.id, s.conversation_id, s.content, c.session_key FROM rh_summaries s
+        "SELECT s.id, s.conversation_id, s.content, c.session_key, s.owner_user_id, s.created_at FROM rh_summaries s
          LEFT JOIN rh_conversations c ON c.id = s.conversation_id WHERE s.id = ",
     );
     query.push_bind(job.summary_id);
@@ -253,6 +325,11 @@ async fn load_summary(
         conversation_id: row.conversation_id,
         content: row.content,
         session_key: row.session_key,
+        owner: Some(
+            Owner::new(row.owner_user_id)
+                .map_err(|error| WikiStoreError::Query(Box::new(error)))?,
+        ),
+        created_at: Some(row.created_at),
     })
 }
 
@@ -300,6 +377,27 @@ async fn lock_slug(tx: &mut Transaction<'_, Postgres>, slug: &str) -> Result<(),
         .await
         .map_err(query_error)?;
     Ok(())
+}
+
+async fn within(
+    tx: &mut Transaction<'_, Postgres>,
+    key: &str,
+    home: &crate::wiki_scope::WikiScope,
+) -> Result<bool, WikiStoreError> {
+    let found = crate::wiki_scope::page_home(tx, key).await?;
+    Ok(match found.scope {
+        Some(scope) => scope == home.scope,
+        None => home.primary(),
+    })
+}
+
+async fn overlaid(
+    tx: &mut Transaction<'_, Postgres>,
+    key: &str,
+    home: &crate::wiki_scope::WikiScope,
+) -> Result<Option<String>, WikiStoreError> {
+    let found = crate::wiki_scope::page_home(tx, key).await?;
+    crate::wiki_scope::overlay(tx, home, &found.local).await
 }
 
 fn query_error(error: sqlx::Error) -> WikiStoreError {

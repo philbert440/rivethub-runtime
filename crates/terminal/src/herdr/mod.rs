@@ -2,6 +2,7 @@ pub mod client;
 pub mod codec;
 pub mod namespace;
 pub mod paths;
+pub mod turns;
 pub mod ui;
 
 use serde::Deserialize;
@@ -69,6 +70,13 @@ pub enum AgentKind {
     Qodercli,
     Qwen,
     Maki,
+}
+
+impl AgentKind {
+    #[must_use]
+    pub const fn reports_turns(self) -> bool {
+        matches!(self, Self::Codex | Self::Opencode | Self::Claude)
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -244,12 +252,20 @@ impl HerdrSession {
         };
         let socket = paths::session_socket(&setup.config_home, &name)?;
         tokio::fs::create_dir_all(&setup.config_home).await?;
+        let mut server = None;
         if !tokio::fs::try_exists(&socket).await? {
-            server_command(&cli.binary, &setup.config_home, cli.server())
+            let said = paths::server_errors(&socket);
+            if let Some(dir) = said.parent() {
+                tokio::fs::create_dir_all(dir).await?;
+            }
+            let stderr = std::fs::File::create(&said)?;
+            let child = server_command(&cli.binary, &setup.config_home, cli.server())
+                .stderr(stderr)
                 .spawn()
                 .map_err(Error::Io)?;
+            server = Some(paths::Starting { child, said });
         }
-        paths::wait_for_socket(&socket, SERVER_OPEN_TIMEOUT, &name).await?;
+        paths::wait_for_socket(&socket, SERVER_OPEN_TIMEOUT, &name, server.as_mut()).await?;
         let client = HerdrClient::new(&socket);
         client
             .workspace_create(codec::WorkspaceCreateParams {
@@ -272,20 +288,6 @@ impl HerdrSession {
                         timeout_ms: PANE_READY_TIMEOUT_MS,
                     })
                     .await?;
-                client
-                    .events_subscribe(codec::EventsSubscribeParams {
-                        subscriptions: vec![
-                            codec::SubscriptionParams {
-                                event: HerdrEventKind::PaneAgentStatusChanged,
-                                pane_id: DEFAULT_PANE.to_owned(),
-                            },
-                            codec::SubscriptionParams {
-                                event: HerdrEventKind::PaneAgentDetected,
-                                pane_id: DEFAULT_PANE.to_owned(),
-                            },
-                        ],
-                    })
-                    .await?;
             }
             PaneKind::Plain => {
                 client
@@ -296,6 +298,20 @@ impl HerdrSession {
                     .await?;
             }
         }
+        client
+            .events_subscribe(codec::EventsSubscribeParams {
+                subscriptions: vec![
+                    codec::SubscriptionParams {
+                        event: HerdrEventKind::PaneAgentStatusChanged,
+                        pane_id: DEFAULT_PANE.to_owned(),
+                    },
+                    codec::SubscriptionParams {
+                        event: HerdrEventKind::PaneAgentDetected,
+                        pane_id: DEFAULT_PANE.to_owned(),
+                    },
+                ],
+            })
+            .await?;
         Ok(Self {
             cli,
             config_home: setup.config_home.clone(),

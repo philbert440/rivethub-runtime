@@ -3,9 +3,11 @@ pub mod auth;
 pub mod error;
 pub mod extract;
 mod history;
+mod memory_body;
 pub mod mesh;
 pub mod plugins;
 pub mod routes;
+mod scope;
 pub mod server;
 pub mod sessions;
 pub mod tasks;
@@ -29,12 +31,10 @@ use tower::util::MapRequestLayer;
 use wire::harness::HarnessId;
 
 use crate::auth::DenialLog;
-use crate::routes::audio::AudioBridge;
-use crate::routes::audio::VoiceProxy;
+use crate::routes::voice::VoiceProxy;
 
-pub use crate::routes::audio::AudioConfig;
-pub use crate::routes::audio::VoiceConfigError;
-pub use crate::routes::audio::VoiceSettings;
+pub use crate::routes::voice::VoiceConfigError;
+pub use crate::routes::voice::VoiceSettings;
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 pub const REVISION: Option<&str> = option_env!("RIVETHUB_BUILD_REVISION");
@@ -245,21 +245,22 @@ pub struct Gateway {
     history: history::History,
     uploads: Option<uploads::UploadService>,
     presets: routes::agents::AgentRegistry,
-    hub_state: Arc<dyn kernel::hub_state::HubStateStore>,
+    hub_state: Arc<dyn kernel::hub_state::HubStateStore<wire::gateway::hub_state::HubState>>,
     certificate_authority: Option<Arc<dyn kernel::ca::CertificateAuthority>>,
     devices: routes::devices::DeviceRuntime,
     mesh_cache: routes::MeshCache,
-    audio: Option<AudioBridge>,
     voice: VoiceProxy,
     tasks: Option<Arc<tasks::Tasks>>,
     providers: Vec<kernel::model::ProviderHealth>,
     memory_export: Option<Arc<dyn kernel::memory::MemoryExport>>,
     topics: Option<Arc<dyn kernel::topics::TopicStore>>,
+    tenancy_store: Option<Arc<dyn kernel::tenancy::TenancyStore>>,
     filing: Option<Arc<dyn kernel::filing::FilingStore>>,
     decisions: Option<Arc<dyn kernel::topics::DecisionStore>>,
     startup: Option<StartupMemory>,
     tidy: Option<Arc<dyn kernel::tidy::TidyStore>>,
     upkeep: Option<Arc<dyn kernel::tidy::UpkeepStore>>,
+    flagged: Option<Arc<dyn kernel::flagged::FlaggedJobs>>,
     plugins: Option<Arc<plugins::PluginHost>>,
     summaries: Option<Arc<dyn kernel::memory::SummaryWatch>>,
     deletions: Option<Arc<dyn kernel::memory::SessionDeletion>>,
@@ -301,17 +302,18 @@ impl Gateway {
             certificate_authority: None,
             devices: routes::devices::DeviceRuntime::unconfigured(),
             mesh_cache: routes::MeshCache::default(),
-            audio: None,
             voice: VoiceProxy::unconfigured(),
             tasks: None,
             providers: Vec::new(),
             memory_export: None,
             topics: None,
+            tenancy_store: None,
             filing: None,
             decisions: None,
             startup: None,
             tidy: None,
             upkeep: None,
+            flagged: None,
             plugins: None,
             summaries: None,
             deletions: None,
@@ -328,12 +330,17 @@ impl Gateway {
     }
 
     #[must_use]
-    pub fn with_hub_state(mut self, store: Arc<dyn kernel::hub_state::HubStateStore>) -> Self {
+    pub fn with_hub_state(
+        mut self,
+        store: Arc<dyn kernel::hub_state::HubStateStore<wire::gateway::hub_state::HubState>>,
+    ) -> Self {
         self.hub_state = store;
         self
     }
 
-    pub(crate) fn hub_state(&self) -> &dyn kernel::hub_state::HubStateStore {
+    pub(crate) fn hub_state(
+        &self,
+    ) -> &dyn kernel::hub_state::HubStateStore<wire::gateway::hub_state::HubState> {
         self.hub_state.as_ref()
     }
 
@@ -422,12 +429,6 @@ impl Gateway {
         self
     }
 
-    #[must_use]
-    pub fn with_audio(mut self, config: AudioConfig) -> Self {
-        self.audio = Some(AudioBridge::start(config));
-        self
-    }
-
     pub fn with_voice(mut self, settings: VoiceSettings) -> Result<Self, VoiceConfigError> {
         self.voice = VoiceProxy::from_settings(settings)?;
         Ok(self)
@@ -492,9 +493,6 @@ impl Gateway {
         if let Some(host) = &self.plugins {
             host.close().await;
         }
-        if let Some(audio) = &self.audio {
-            audio.shutdown().await;
-        }
         if let Some(terminal) = &self.terminal {
             terminal.close().await;
         }
@@ -502,10 +500,6 @@ impl Gateway {
             uploads.close().await;
         }
         self.sessions.close().await;
-    }
-
-    pub(crate) fn audio(&self) -> Option<&AudioBridge> {
-        self.audio.as_ref()
     }
 
     pub(crate) fn voice(&self) -> &VoiceProxy {
@@ -579,6 +573,10 @@ impl Gateway {
         }
         served
             .fallback_service(rewritten)
+            .layer(middleware::from_fn_with_state(
+                Arc::clone(self),
+                scope::scope_request,
+            ))
             .layer(middleware::from_fn_with_state(guard_state, auth::guard))
     }
 }

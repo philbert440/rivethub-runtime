@@ -72,6 +72,7 @@ pub(crate) async fn claim_job(
         .bind(&names)
         .bind(selector.only_id.map(i64::from))
         .bind(locked_by)
+        .bind(None::<i16>)
         .fetch_optional(&mut *conn)
         .await
         .map_err(|source| map_queue("claim", source))?;

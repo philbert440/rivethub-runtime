@@ -7,12 +7,13 @@ use kernel::topics::DeliveredVia;
 use tokio::sync::{mpsc, oneshot, watch};
 use wire::events::{AgentEvent, AgentEventKind, ProtocolVersion};
 use wire::gateway::term::{PtyInfo, PtyState, TermSpawnResponse};
+use wire::session_id::SessionId;
 
 use super::{Launch, Spawned, TerminalService};
 use crate::error::ApiError;
 use crate::tenancy::UserId;
 
-type Reply<T> = oneshot::Sender<Result<T, ApiError>>;
+pub(super) type Reply<T> = oneshot::Sender<Result<T, ApiError>>;
 
 #[derive(Debug)]
 pub(super) enum Command {
@@ -64,8 +65,25 @@ impl Handle {
         self.commands
             .send(command)
             .await
-            .map_err(|_| ApiError::Unavailable("terminal actor closed".into()))
+            .map_err(|_| actor_closed())
     }
+
+    pub(super) async fn ask<T>(
+        &self,
+        command: impl FnOnce(Reply<T>) -> Command,
+    ) -> Result<T, ApiError> {
+        let (reply, answer) = oneshot::channel();
+        self.send(command(reply)).await?;
+        tokio::select! {
+            biased;
+            answer = answer => answer.map_err(|_| actor_closed())?,
+            () = self.commands.closed() => Err(actor_closed()),
+        }
+    }
+}
+
+fn actor_closed() -> ApiError {
+    ApiError::Unavailable("terminal actor closed".into())
 }
 
 pub(super) struct TerminalActor {
@@ -168,6 +186,16 @@ impl TerminalActor {
         Ok(())
     }
 
+    async fn follow_turns(&self, id: &TerminalId, session: &SessionId) {
+        match self.service.mux.turn_ends(id).await {
+            Ok(ends) => self
+                .service
+                .follow_turn_ends(self.session.clone(), session.clone(), ends),
+            Err(kernel::terminal::TerminalMuxError::Unsupported(_)) => {}
+            Err(error) => tracing::debug!(%error, "the terminal's turn ends are not followed"),
+        }
+    }
+
     async fn spawn(
         &mut self,
         launch: Launch,
@@ -236,6 +264,7 @@ impl TerminalActor {
         self.status.send_replace(Some(state));
         self.permit = Some(permit);
         self.register(&launch.command, &id)?;
+        self.follow_turns(&id, &port_session).await;
         let mux = self.service.mux.clone();
         exits.spawn(async move {
             let code = mux.wait(&id).await?;

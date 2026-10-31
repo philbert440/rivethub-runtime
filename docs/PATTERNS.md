@@ -94,14 +94,14 @@ Anti-pattern: `serde_json::Value` / `Map<String, Value>` in structs, helpers or 
 accessors and deserialize helpers that return a raw map — or a `serde_json::json!(…)` invocation building request bodies and
 RPC frames. Pattern: a serde struct or enum per payload (or the crate's own protocol types; a value the contract defines as
 arbitrary is built through the format crate's own type or a typed struct serialized with `serde_json::to_value`, never
-`json!`). Two named types in `crates/wire/src/json.rs` are the only holders of free-form JSON: `wire::Extra` for unknown
-fields the contract preserves (`#[serde(flatten, default)] pub extra: Extra`), and `wire::JsonObject` for values the
+`json!`). Two named types in `crates/values/src/json.rs` are the only holders of free-form JSON: `values::Extra` for unknown
+fields the contract preserves (`#[serde(flatten, default)] pub extra: Extra`), and `values::JsonObject` for values the
 contract defines as arbitrary JSON (MCP tool-call arguments, tool input schemas). Nothing else names
 `serde_json::Value` or `Map`. The same holds for `serde_yaml::Value`/`Mapping`/`Number`: only `crates/config/src/load.rs`
 and `resolve.rs` touch the raw document (parse, `${VAR}` substitution over string leaves, `serde_yaml::from_value`).
 Check: dylint `untyped` (serde_json and serde_yaml, the `json!` macro call site read through the expansion —
 `ExpnKind::Macro` with the `serde_json::json` def path — and `IgnoredAny`, none of which clippy's `disallowed-types` can
-carry, with the exemptions clippy cannot express: the per-file production exemptions `wire/src/json.rs` and config
+carry, with the exemptions clippy cannot express: the per-file production exemptions `values/src/json.rs` and config
 `load.rs`/`resolve.rs`; test code in `wire` and `testkit` only — the crates whose job is structural JSON
 comparison, attributed to the package by file path so a test target compiled under its own crate name is not mistaken for a
 third crate — and `testkit` wholesale, where every other production rule still applies to `testkit/src`).
@@ -180,7 +180,7 @@ Check: dylint `customserde` and `untyped` (the wrapper needs both).
 Anti-pattern: an empty struct (`pub struct OpaqueSection {}`) that accepts a section and throws its contents away, so the
 setting never reaches the code that needs it. Pattern: type the section from the inventory; a removed key is not a field
 at all (`serde_ignored` reports it, and the error text comes from an enum of removed paths); a value the contract defines
-as arbitrary uses the sanctioned holder (`wire::JsonObject`). Check: dylint `opaque`.
+as arbitrary uses the sanctioned holder (`values::JsonObject`). Check: dylint `opaque`.
 
 ## TYPEMACRO
 Anti-pattern: `macro_rules!` that stamps out structs, enums or their impls (`closed!(Effort { Low, High })`,
@@ -285,8 +285,8 @@ gate exactly as it fails CI, and `cargo sqlx prepare --workspace --check` runs w
 Anti-pattern: the same enum defined in several modules (`Role`, `CaptureRole`, `stream::Role`). Pattern: one definition,
 imported where needed; a wire payload that genuinely differs gets a type that differs. Check: dylint `duptype` (same
 variant set and the same final name word, e.g. `Role`/`CaptureRole`, across the crate and its dependencies — renaming
-must not hide it). A kernel enum that mirrors a `wire` contract enum is the one sanctioned twin: it carries an
-expectation whose reason cites `KERNELWIRE`.
+must not hide it). A kernel enum that mirrors a `wire` contract enum is the one sanctioned twin; the kernel does not
+depend on `wire` (see KERNELWIRE), so the lint never sees the pair.
 
 ## DUPFIXTURE
 Anti-pattern: the same recording vendored by more than one crate (`capture/writer/*` under `crates/wire/tests/golden/`
@@ -402,11 +402,12 @@ The PORTS metadata check rejects normal and build dependencies on testkit, inclu
 Anti-pattern: a kernel type, port or rule that imports `wire`: a contract DTO in a port signature, a domain enum defined
 in `wire::gateway` and re-exported by the kernel, a kernel function that builds a response body. The published contract
 then dictates the domain, and a contract change ripples through every adapter. Pattern: the kernel owns its domain types
-(topic kinds, Tidy proposals, plug-in manifests, wiki pages and patches); the gateway's routes and the adapters translate
-between them and `wire` at the edge. A kernel enum that mirrors a contract enum carries a `duptype` expectation whose
-reason cites `KERNELWIRE`. Check: xtask `KERNELWIRE` parses every file under `crates/kernel/` with syn and counts its
-`use wire::…` items and `wire::…` paths. `xtask/baseline.toml` holds each file's count; a file over its count fails and
-lists its references, so the total of files and references can only fall.
+(topic kinds, Tidy proposals, plug-in manifests, wiki pages and patches, memory records, transcript turns, harness
+offerings); the gateway's routes and the adapters translate between them and `wire` at the edge. The value types both
+sides share unchanged (session and harness ids, the free-form JSON holders, the `Millis` time format, a conversation's
+messages, plug-in names) live in the `values` crate, which depends on neither, and `wire` re-exports them. Check: the
+cargo-deny ban on `wire` in `deny.toml` leaves `kernel` out of its wrappers, so a `wire` dependency in the kernel's
+manifest fails the gate and a `wire::…` path in the kernel does not compile.
 
 ## BASELINE
 Anti-pattern: a scan whose existing hits are waived wholesale (a free allow-list) or whose history is rewritten (line

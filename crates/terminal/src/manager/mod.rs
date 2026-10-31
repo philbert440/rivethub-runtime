@@ -182,6 +182,14 @@ impl kernel::terminal::TerminalMux for TerminalManager {
         })
     }
 
+    async fn turn_ends(
+        &self,
+        id: &TerminalId,
+    ) -> Result<mpsc::Receiver<kernel::terminal::PaneTurn>, kernel::terminal::TerminalMuxError>
+    {
+        self.port_turn_ends(id)
+    }
+
     async fn wait(&self, id: &TerminalId) -> Result<i32, kernel::terminal::TerminalMuxError> {
         let record = self.wait_exited(id).await?;
         port_details(&record)?.exit_code.ok_or_else(|| {

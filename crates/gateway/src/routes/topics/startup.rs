@@ -86,6 +86,7 @@ pub(crate) async fn begin(
             topic: topic.id,
             by: PlacementSource::You,
             at: Utc::now(),
+            owner: Some(user.owner().clone()),
         })
         .await;
     if let Err(error) = placed {

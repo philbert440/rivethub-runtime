@@ -4,7 +4,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 use axum::extract::{Path, State};
-use axum::routing::{delete, get, post};
+use axum::routing::{delete, get, post, put};
 use axum::{Json, Router};
 use chrono::{DateTime, Utc};
 use kernel::memory::{DeletedSession, SessionActivity, SessionDeletion};
@@ -37,6 +37,10 @@ pub(crate) fn router() -> Router<Arc<Gateway>> {
         .route(
             "/api/sessions/{session}",
             delete(delete_one).fallback(super::method_not_allowed),
+        )
+        .route(
+            "/api/sessions/{session}/keep",
+            put(trash::keep).fallback(super::method_not_allowed),
         )
 }
 
@@ -113,6 +117,20 @@ fn live(gateway: &Gateway, session: &SessionId) -> bool {
         .is_some_and(|terminal| terminal.is_live(session.native()))
 }
 
+async fn ended_at_rest(
+    gateway: &Gateway,
+    user: &UserId,
+    session: &SessionId,
+) -> Result<bool, ApiError> {
+    match gateway.terminal() {
+        Some(terminal) if terminal.chat_at_rest(session.native()) => {
+            terminal.remove_session(user, session.as_str()).await?;
+            Ok(!live(gateway, session))
+        }
+        _ => Ok(false),
+    }
+}
+
 async fn visible(gateway: &Gateway, user: &UserId, session: &SessionId) -> Result<bool, ApiError> {
     match authorize(gateway, user, &resolved(session)).await {
         Ok(()) => Ok(true),
@@ -150,7 +168,7 @@ async fn erase(
     if !visible(gateway, user, session).await? {
         return Ok(Err(Refusal::NotFound));
     }
-    if live(gateway, session) {
+    if live(gateway, session) && !ended_at_rest(gateway, user, session).await? {
         return Ok(Err(Refusal::Live));
     }
     if !known(gateway, deletions, session).await? {

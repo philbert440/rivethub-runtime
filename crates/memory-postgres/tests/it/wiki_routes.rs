@@ -59,7 +59,7 @@ async fn summarized(pool: &PgPool, key: &str) -> TestResult<ExtractWiki> {
         .execute(&mut *tx)
         .await?;
     sqlx::query(
-        "INSERT INTO rh_conversations (id, session_key, agent, title) VALUES ($1, $2, 'rivet', $3)",
+        "INSERT INTO rh_conversations (id, session_key, agent, title, owner_user_id) VALUES ($1, $2, 'rivet', $3, 'owner')",
     )
     .bind(conversation)
     .bind(key)
@@ -67,7 +67,7 @@ async fn summarized(pool: &PgPool, key: &str) -> TestResult<ExtractWiki> {
     .execute(&mut *tx)
     .await?;
     sqlx::query(
-        "INSERT INTO rh_summaries (id, conversation_id, content, kind) VALUES ($1, $2, 'AcmeKit notes.', 'leaf')",
+        "INSERT INTO rh_summaries (id, conversation_id, content, kind, owner_user_id) VALUES ($1, $2, 'AcmeKit notes.', 'leaf', 'owner')",
     )
     .bind(summary)
     .bind(conversation)
@@ -190,4 +190,72 @@ async fn a_deleted_entity_is_not_recreated(pool: PgPool) -> TestResult {
 async fn a_sub_topic_summary_lands_in_its_section(pool: PgPool) -> TestResult {
     let seeded = Seeded::new(pool).await?;
     wiki_routes::a_sub_topic_summary_lands_in_its_section(seeded.stores(), &seeded.job).await
+}
+
+#[sqlx::test(migrator = "migrate::POSTGRES")]
+async fn a_sub_topic_rewrite_replaces_its_section(pool: PgPool) -> TestResult {
+    let seeded = Seeded::new(pool.clone()).await?;
+    let second = another(&pool, &seeded.job).await?;
+    testkit::wiki_bounded::a_sub_topic_rewrite_replaces_its_section(
+        seeded.stores(),
+        &seeded.job,
+        &second,
+    )
+    .await
+}
+
+#[sqlx::test(migrator = "migrate::POSTGRES")]
+async fn concurrent_rewrites_of_one_page_keep_both(pool: PgPool) -> TestResult {
+    let seeded = Seeded::new(pool.clone()).await?;
+    let second = another(&pool, &seeded.job).await?;
+    testkit::wiki_bounded::concurrent_rewrites_of_one_page_keep_both(
+        seeded.stores(),
+        &seeded.job,
+        &second,
+    )
+    .await
+}
+
+#[sqlx::test(migrator = "migrate::POSTGRES")]
+async fn an_entity_mention_is_merged_into_its_page(pool: PgPool) -> TestResult {
+    let second = summarized(&pool, testkit::wiki_mentions::EARLIER_KEY).await?;
+    let seeded = Seeded::new(pool).await?;
+    testkit::wiki_bounded::an_entity_mention_is_merged_into_its_page(
+        seeded.stores(),
+        &seeded.job,
+        &second,
+    )
+    .await
+}
+
+async fn another(pool: &PgPool, job: &ExtractWiki) -> TestResult<ExtractWiki> {
+    let summary = Uuid::new_v4();
+    let mut tx = pool.begin().await?;
+    sqlx::query("SET LOCAL rivet.defer_embed_enqueue = 'on'")
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query(
+        "INSERT INTO rh_summaries (id, conversation_id, content, kind, owner_user_id) VALUES ($1, $2, 'More AcmeKit notes.', 'leaf', 'owner')",
+    )
+    .bind(summary)
+    .bind(job.conversation_id)
+    .execute(&mut *tx)
+    .await?;
+    tx.commit().await?;
+    Ok(ExtractWiki {
+        summary_id: summary,
+        conversation_id: job.conversation_id,
+    })
+}
+
+#[sqlx::test(migrator = "migrate::POSTGRES")]
+async fn updates_keep_the_lead_and_replace_only_the_currently_sentence(pool: PgPool) -> TestResult {
+    let seeded = Seeded::new(pool.clone()).await?;
+    let second = another(&pool, &seeded.job).await?;
+    let third = another(&pool, &seeded.job).await?;
+    testkit::wiki_bounded::updates_keep_the_lead_and_replace_only_the_currently_sentence(
+        seeded.stores(),
+        [&seeded.job, &second, &third],
+    )
+    .await
 }

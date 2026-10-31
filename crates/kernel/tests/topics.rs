@@ -27,7 +27,7 @@ use kernel::topics::check_parent;
 use kernel::topics::rank;
 use std::str::FromStr;
 
-use wire::session_id::SessionId;
+use values::SessionId;
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 
@@ -49,6 +49,7 @@ fn topic(name: &str, aliases: &[&str]) -> Result<Topic, TopicError> {
                 .collect::<Result<_, _>>()?,
             parent: None,
             directory: None,
+            owner: testkit::owner().ok(),
         },
         at(0),
     )
@@ -64,6 +65,7 @@ fn placement(
         topic,
         by,
         at: at(minute),
+        owner: testkit::owner().ok(),
     })
 }
 
@@ -364,6 +366,7 @@ fn kinded(kind: TopicKind, name: &str, parent: Option<&Topic>) -> Result<Topic, 
             aliases: Vec::new(),
             parent: parent.map(|parent| parent.id),
             directory: None,
+            owner: testkit::owner().ok(),
         },
         at(0),
     )

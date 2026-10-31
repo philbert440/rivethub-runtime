@@ -1,9 +1,14 @@
+pub(crate) mod archive;
+mod history;
 mod lock;
 
 use std::path::{Component, Path, PathBuf};
 
+use chrono::{DateTime, Utc};
 use kernel::wiki::builder::WikiWriteError;
 use kernel::wiki::page::WikiSlug;
+use kernel::wiki::page::bound::{Archived, MergeBase, rebase};
+use kernel::wiki::page::lead::stable_summary;
 use kernel::wiki::page::{
     PagePatch, WikiPage, apply_patch, normalize_slug, parse_wiki_page, serialize_wiki_page,
 };
@@ -32,6 +37,15 @@ impl WikiRepository {
         read_page(&root, slug).await
     }
 
+    pub async fn history_since(
+        &self,
+        slug: &WikiSlug,
+        since: DateTime<Utc>,
+    ) -> Result<Vec<kernel::wiki::page::WikiHistoryEntry>, WikiWriteError> {
+        let root = tokio::fs::canonicalize(&self.root).await?;
+        history::since(&root, slug, since).await
+    }
+
     pub async fn lock(&self) -> Result<LockedRepository, WikiWriteError> {
         let root = prepare_root(&self.root).await?;
         let lock = WriterLock::acquire(&root).await?;
@@ -50,8 +64,9 @@ impl LockedRepository {
         &mut self,
         patch: PagePatch,
         provenance: &str,
+        merge: Option<&MergeBase>,
     ) -> Result<AppliedPage, WikiWriteError> {
-        apply_locked(&self.root, patch, provenance).await
+        apply_locked(&self.root, patch, provenance, merge).await
     }
 
     pub async fn read(&self, slug: &str) -> Result<Option<WikiPage>, WikiWriteError> {
@@ -62,11 +77,22 @@ impl LockedRepository {
 
     pub async fn fold(
         &mut self,
-        page: &WikiPage,
+        page: &mut WikiPage,
         removed: &[String],
         message: &str,
+        now: DateTime<Utc>,
     ) -> Result<String, WikiWriteError> {
-        fold_locked(&self.root, page, removed, message).await
+        fold_locked(&self.root, page, removed, message, now).await
+    }
+
+    pub async fn recompile(
+        &mut self,
+        page: &mut WikiPage,
+        archived: Vec<Archived>,
+        message: &str,
+        now: DateTime<Utc>,
+    ) -> Result<String, WikiWriteError> {
+        fold_archived(&self.root, page, &[], message, now, archived).await
     }
 
     pub async fn remove(
@@ -95,7 +121,7 @@ async fn prepare_root(root: &Path) -> Result<PathBuf, WikiWriteError> {
     Ok(tokio::fs::canonicalize(root).await?)
 }
 
-async fn reject_symlink(path: &Path) -> Result<(), WikiWriteError> {
+pub(super) async fn reject_symlink(path: &Path) -> Result<(), WikiWriteError> {
     match tokio::fs::symlink_metadata(path).await {
         Ok(metadata) if metadata.file_type().is_symlink() => {
             Err(WikiWriteError::Containment(path.to_path_buf()))
@@ -140,32 +166,58 @@ async fn ensure_repo(root: &Path) -> Result<(), WikiWriteError> {
 
 async fn apply_locked(
     root: &Path,
-    patch: PagePatch,
+    mut patch: PagePatch,
     provenance: &str,
+    merge: Option<&MergeBase>,
 ) -> Result<AppliedPage, WikiWriteError> {
     let slug = WikiSlug::try_from(normalize_slug(&patch.slug))?;
     sync(root).await?;
-    let page = read_page(root, &slug).await?;
+    let previous = read_page(root, &slug).await?;
+    if let (Some(base), Some(current)) = (merge, previous.as_ref()) {
+        patch.current_state = patch
+            .current_state
+            .map(|state| stable_summary(&current.current_state, &state));
+        patch.article = patch
+            .article
+            .map(|article| rebase(&base.article, &article, &current.article));
+    }
+    let at = patch.verified_at;
     let prefix: String = provenance.chars().take(8).collect();
     let message = format!(
         "wiki({}): {} from summary {prefix}\n\nProvenance: summary {provenance}\nPipeline: wiki-v7",
         slug.as_ref(),
         patch.action
     );
-    let page = apply_patch(page, patch)?;
-    let relative = store_page(root, &page).await?;
-    let git_sha = commit(root, &[relative], &message).await?;
+    let mut page = apply_patch(previous.clone(), patch)?;
+    let mut paths = archive::bound(root, previous.as_ref(), &mut page, at, Vec::new()).await?;
+    paths.insert(0, store_page(root, &page).await?);
+    let git_sha = commit(root, &paths, &message).await?;
     Ok(AppliedPage { page, git_sha })
 }
 
 async fn fold_locked(
     root: &Path,
-    page: &WikiPage,
+    page: &mut WikiPage,
     removed: &[String],
     message: &str,
+    now: DateTime<Utc>,
+) -> Result<String, WikiWriteError> {
+    fold_archived(root, page, removed, message, now, Vec::new()).await
+}
+
+async fn fold_archived(
+    root: &Path,
+    page: &mut WikiPage,
+    removed: &[String],
+    message: &str,
+    now: DateTime<Utc>,
+    extra: Vec<Archived>,
 ) -> Result<String, WikiWriteError> {
     sync(root).await?;
+    let previous = read_page(root, &page.meta.slug).await?;
+    let archived = archive::bound(root, previous.as_ref(), page, now, extra).await?;
     let mut paths = vec![store_page(root, page).await?];
+    paths.extend(archived);
     paths.extend(remove_files(root, removed).await?);
     commit(root, &paths, message).await
 }
@@ -231,7 +283,7 @@ async fn tracks_upstream(root: &Path) -> Result<bool, WikiWriteError> {
         .any(|remote| !remote.is_empty() && remote != "."))
 }
 
-fn topic_path(slug: &WikiSlug) -> String {
+pub(super) fn topic_path(slug: &WikiSlug) -> String {
     format!("topics/{}.md", slug.as_ref())
 }
 
@@ -308,9 +360,10 @@ async fn write_page(temporary: &Path, path: &Path, markdown: &[u8]) -> Result<()
     Ok(())
 }
 
-async fn git(root: &Path, args: &[&str]) -> Result<String, WikiWriteError> {
+pub(super) async fn git(root: &Path, args: &[&str]) -> Result<String, WikiWriteError> {
     let output = Command::new("git")
         .current_dir(root)
+        .args(["-c", "gc.auto=0", "-c", "maintenance.auto=false"])
         .arg("--literal-pathspecs")
         .args(args)
         .env_remove("GIT_AUTHOR_NAME")

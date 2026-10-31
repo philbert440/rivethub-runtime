@@ -22,6 +22,5 @@ mod term_transcripts;
 mod tls_fallback;
 mod topics;
 mod users_registry;
-mod v1_agents;
 mod wiki;
 mod worker_wiki_guard;

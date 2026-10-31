@@ -15,6 +15,8 @@ use async_trait::async_trait;
 use config::provider::OpenaiProvider;
 use config::provider::ProviderType;
 use kernel::model::Embedding;
+use kernel::model::LlmResponse;
+use kernel::model::LlmResponseKind;
 use kernel::model::ModelChunk;
 use kernel::model::ModelProvider;
 use kernel::model::ModelProviderError;
@@ -24,8 +26,6 @@ use kernel::shutdown::Activities;
 use tokio::sync::mpsc::Receiver;
 use tokio_util::sync::CancellationToken;
 use wire::message::ToolCall;
-use wire::stream::LlmResponse;
-use wire::stream::LlmResponseKind;
 use wire::stream::LlmUsage;
 
 pub use crate::error::BuildError;

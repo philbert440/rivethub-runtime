@@ -1,7 +1,10 @@
 use async_trait::async_trait;
 use chrono::DateTime;
 use chrono::Utc;
+use kernel::owner::Owner;
 use kernel::topics::Slug;
+use kernel::wiki::builder::BACKFILL_PRIORITY;
+use kernel::wiki::builder::BackfillBudget;
 use kernel::wiki::builder::DeferredWiki;
 use kernel::wiki::builder::ExtractWiki;
 use kernel::wiki::builder::HeldEntity;
@@ -35,8 +38,11 @@ impl WikiBuilderStore for SqliteStore {
         .await
     }
 
-    async fn wiki_backfill(&self, limit: u32) -> Result<Vec<ExtractWiki>, WikiStoreError> {
-        blocking(self, move |conn| backfill(conn, limit)).await
+    async fn wiki_backfill(
+        &self,
+        budget: BackfillBudget,
+    ) -> Result<Vec<ExtractWiki>, WikiStoreError> {
+        blocking(self, move |conn| backfill(conn, budget)).await
     }
 
     async fn apply_wiki(
@@ -140,8 +146,11 @@ fn apply_all(
     }
     patches.sort_by(|left, right| left.slug.as_ref().cmp(right.slug.as_ref()));
     let mut touched = Vec::new();
-    for patch in patches {
+    for mut patch in patches {
         let page = routing.topic_page.as_ref();
+        if let Some(merged) = routing.merged(patch.slug.as_ref()) {
+            crate::wiki_topics::rebase_merged(&tx, &mut patch, &merged.base)?;
+        }
         if let Some(slug) = crate::wiki_topics::apply(&tx, &summary, &patch, page, now)? {
             touched.push(slug);
         }
@@ -170,20 +179,36 @@ fn reject_empty(patches: &[WikiPatch]) -> Result<(), WikiStoreError> {
     Ok(())
 }
 
-fn backfill(conn: &Connection, limit: u32) -> Result<Vec<ExtractWiki>, WikiStoreError> {
+fn backfill(conn: &Connection, budget: BackfillBudget) -> Result<Vec<ExtractWiki>, WikiStoreError> {
     let mut statement = conn
         .prepare(
             "SELECT s.id, s.conversation_id FROM ros_summaries s
+             LEFT JOIN ros_conversations c ON c.id = s.conversation_id
              LEFT JOIN ros_wiki_extractions e ON e.summary_id = s.id
-             WHERE e.summary_id IS NULL OR e.status = 'failed'
-                OR (e.status = 'done' AND e.pipeline_version < ?1)
-             ORDER BY s.created_at, s.id LIMIT ?2",
+             WHERE s.kind = 'leaf'
+               AND (c.id IS NULL OR c.session_key NOT LIKE 'heartbeat:%')
+               AND (e.summary_id IS NULL OR e.status = 'failed')
+               AND NOT EXISTS (SELECT 1 FROM ros_jobs j WHERE j.job_key = 'wiki-ext-' || s.id)
+             ORDER BY s.created_at DESC, s.id
+             LIMIT max(0, (SELECT CASE WHEN EXISTS (
+                         SELECT 1 FROM ros_jobs n LEFT JOIN rh_job_priorities p ON p.job_id = n.id
+                          WHERE n.state = 'queued'
+                            AND ((n.task = 'extract-wiki' AND coalesce(p.priority, 0) < ?3)
+                              OR (n.task = 'compact-conversation' AND coalesce(p.priority, 0) < 0)))
+                       THEN ?2 ELSE ?1 END)
+                     - (SELECT count(*) FROM ros_jobs q JOIN rh_job_priorities p ON p.job_id = q.id
+                         WHERE q.job_key LIKE 'wiki-ext-%' AND q.state <> 'dead' AND p.priority = ?3))",
         )
         .map_err(query)?;
     let rows = statement
-        .query_map(params![WIKI_PIPELINE_VERSION, i64::from(limit)], |row| {
-            Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?))
-        })
+        .query_map(
+            params![
+                i64::from(budget.idle),
+                i64::from(budget.busy),
+                BACKFILL_PRIORITY
+            ],
+            |row| Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?)),
+        )
         .map_err(query)?;
     let mut jobs = Vec::new();
     for row in rows {
@@ -255,7 +280,8 @@ pub(crate) fn load_summary(
 ) -> Result<WikiSummary, WikiStoreError> {
     let row = conn
         .query_row(
-            "SELECT s.id, s.conversation_id, s.content, c.session_key FROM ros_summaries s
+            "SELECT s.id, s.conversation_id, s.content, c.session_key, c.owner_user_id
+               FROM ros_summaries s
                LEFT JOIN ros_conversations c ON c.id = s.conversation_id WHERE s.id = ?1",
             params![job.summary_id.to_string()],
             |row| {
@@ -264,6 +290,7 @@ pub(crate) fn load_summary(
                     row.get::<_, Option<String>>(1)?,
                     row.get::<_, String>(2)?,
                     row.get::<_, Option<String>>(3)?,
+                    row.get::<_, Option<String>>(4)?,
                 ))
             },
         )
@@ -283,6 +310,12 @@ pub(crate) fn load_summary(
         conversation_id,
         content: row.2,
         session_key: row.3,
+        owner: row
+            .4
+            .map(Owner::new)
+            .transpose()
+            .map_err(|error| WikiStoreError::Query(Box::new(error)))?,
+        created_at: None,
     })
 }
 

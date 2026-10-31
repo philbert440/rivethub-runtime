@@ -1,9 +1,10 @@
 use chrono::DateTime;
 use chrono::Utc;
+use kernel::memory::MemoryEntry;
+use kernel::owner::Owner;
 use rusqlite::Transaction;
 use rusqlite::params;
 use uuid::Uuid;
-use wire::memory::MemoryEntry;
 
 use crate::SqliteStore;
 use crate::capture::encode;
@@ -21,9 +22,10 @@ impl SqliteStore {
     pub async fn append_entries(
         &self,
         entries: Vec<MemoryEntry>,
+        owner: &Owner,
         now: DateTime<Utc>,
     ) -> Result<Vec<String>, SqliteError> {
-        let owner = self.owner.clone();
+        let owner = owner.clone();
         self.with_conn(move |conn| {
             let tx = conn
                 .transaction()
@@ -49,7 +51,7 @@ impl SqliteStore {
                     );
                     continue;
                 }
-                ids.push(append_one(&tx, entry, owner.as_deref(), now)?);
+                ids.push(append_one(&tx, entry, owner.as_str(), now)?);
             }
             tx.commit().map_err(SqliteError::query("append commit"))?;
             Ok(ids)
@@ -61,7 +63,7 @@ impl SqliteStore {
 fn append_one(
     tx: &Transaction<'_>,
     entry: &MemoryEntry,
-    owner: Option<&str>,
+    owner: &str,
     now: DateTime<Utc>,
 ) -> Result<String, SqliteError> {
     let key = ConversationKey {
@@ -120,7 +122,7 @@ fn append_one(
         tool_result: entry.tool_result.as_deref(),
         metadata: metadata.as_deref(),
         created_at: Stamp::from(entry.created_at).at(now),
-        owner,
+        owner: conversation.owner.as_deref().unwrap_or(owner),
     };
     match &entry.id {
         Some(id) => message.insert_as(tx, id.clone()),

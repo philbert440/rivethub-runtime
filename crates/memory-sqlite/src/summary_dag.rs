@@ -1,6 +1,10 @@
+use kernel::memory::MemoryMessageTally;
 use kernel::memory::MemoryStoreError;
+use kernel::memory::MemorySummaryNode;
 use kernel::memory::SummaryDag;
+use kernel::memory::SummaryKind;
 use kernel::memory::SummaryOwner;
+use kernel::memory::VectorState;
 use rusqlite::Connection;
 use rusqlite::OptionalExtension as _;
 use rusqlite::Row;
@@ -8,16 +12,13 @@ use rusqlite::Statement;
 use rusqlite::params_from_iter;
 use rusqlite::types::Type;
 use rusqlite::types::Value;
-use wire::gateway::memory::MemoryMessageTally;
-use wire::gateway::memory::MemorySummaryNode;
-use wire::gateway::memory::SummaryKind;
-use wire::gateway::memory::VectorState;
 
 use crate::SqliteStore;
 use crate::error::SqliteError;
 use crate::time;
 
-const SESSION_SQL: &str = "SELECT id, session_key FROM ros_conversations WHERE session_key = ?1 \
+const SESSION_SQL: &str = "SELECT id, session_key FROM ros_conversations \
+     WHERE session_key IN (SELECT value FROM json_each(?1)) \
      ORDER BY (active IS NOT 0) DESC, updated_at DESC, id LIMIT 1";
 
 const CONVERSATION_SQL: &str = "SELECT id, session_key FROM ros_conversations WHERE id = ?1";
@@ -79,7 +80,15 @@ impl SqliteStore {
 
 fn summary_dag(conn: &Connection, owner: SummaryOwner) -> Result<SummaryDag, SqliteError> {
     let (sql, key) = match owner {
-        SummaryOwner::Session(session) => (SESSION_SQL, session),
+        SummaryOwner::Session(session) => (
+            SESSION_SQL,
+            serde_json::to_string(&kernel::filing::stored_keys(&session)).map_err(|source| {
+                SqliteError::Encode {
+                    column: "session_key",
+                    source,
+                }
+            })?,
+        ),
         SummaryOwner::Conversation(id) => (CONVERSATION_SQL, id.to_string()),
     };
     let found = conn

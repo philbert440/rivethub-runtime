@@ -6,8 +6,8 @@ use kernel::memory::TagDecision;
 use kernel::memory::TagId;
 use kernel::memory::TagLiteral;
 use kernel::memory::TagLiteralError;
+use kernel::memory::TagState;
 use uuid::Uuid;
-use wire::gateway::memory::TagState;
 
 #[test]
 fn tag_id_parses_and_displays_uuids() {

@@ -4,16 +4,37 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use uuid::Uuid;
 
+use super::merge::MergedPage;
 use super::page::WikiPageError;
 use super::page::WikiPatch;
 use super::page::WikiSlug;
 use super::page::WikiSlugError;
 use crate::BoxError;
 use crate::filing::Target;
+use crate::owner::Owner;
+use crate::queue::JobId;
 use crate::topics::Slug;
 use crate::topics::TopicId;
 
 pub const WIKI_PIPELINE_VERSION: i32 = 4;
+
+pub const BACKFILL_PRIORITY: i16 = 50;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BackfillBudget {
+    pub idle: u32,
+    pub busy: u32,
+}
+
+impl BackfillBudget {
+    #[must_use]
+    pub const fn flat(jobs: u32) -> Self {
+        Self {
+            idle: jobs,
+            busy: jobs,
+        }
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -48,12 +69,31 @@ pub struct WikiSummary {
     pub content: String,
     #[serde(skip)]
     pub session_key: Option<String>,
+    #[serde(skip)]
+    pub owner: Option<Owner>,
+    #[serde(skip)]
+    pub created_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct WikiRouting {
     pub topic_page: Option<WikiSlug>,
     pub cited: Vec<WikiSlug>,
+    pub merged: Vec<MergedPage>,
+    pub also: Vec<WikiSummary>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Coalescable {
+    pub job: JobId,
+    pub extract: ExtractWiki,
+}
+
+impl WikiRouting {
+    #[must_use]
+    pub fn merged(&self, slug: &str) -> Option<&MergedPage> {
+        self.merged.iter().find(|page| page.slug.as_ref() == slug)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -104,7 +144,10 @@ pub enum WikiStoreError {
 pub trait WikiBuilderStore: Send + Sync {
     async fn wiki_work(&self, job: &ExtractWiki) -> Result<WikiWork, WikiStoreError>;
 
-    async fn wiki_backfill(&self, limit: u32) -> Result<Vec<ExtractWiki>, WikiStoreError>;
+    async fn wiki_backfill(
+        &self,
+        budget: BackfillBudget,
+    ) -> Result<Vec<ExtractWiki>, WikiStoreError>;
 
     async fn apply_wiki(
         &self,
@@ -139,6 +182,16 @@ pub trait WikiBuilderStore: Send + Sync {
     ) -> Result<(), WikiStoreError>;
 
     async fn uncite_wiki(&self, summary_id: Uuid, slug: &WikiSlug) -> Result<(), WikiStoreError>;
+
+    async fn coalescable(
+        &self,
+        lead: Uuid,
+        topic: TopicId,
+        limit: u32,
+    ) -> Result<Vec<Coalescable>, WikiStoreError> {
+        let _: (Uuid, TopicId, u32) = (lead, topic, limit);
+        Ok(Vec::new())
+    }
 }
 
 #[derive(Debug, Error)]

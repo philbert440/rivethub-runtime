@@ -261,7 +261,7 @@ async fn a_plugin_writes_memory_only_under_its_own_session_keys() -> TestResult 
         .await
         .into_iter()
         .flat_map(|request| {
-            if let testkit::MemoryRequest::Append(entries) = request {
+            if let testkit::MemoryRequest::Append(_, entries) = request {
                 entries
             } else {
                 Vec::new()

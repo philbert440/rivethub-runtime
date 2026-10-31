@@ -3,12 +3,13 @@ use std::time::Duration;
 
 use config::provider::{CliProvider, ProviderType};
 use kernel::harness::SessionEvent;
-use kernel::model::{ModelChunk, ModelProvider};
-use tokio_util::sync::CancellationToken;
-use wire::harness::{
-    HarnessCapabilities, HarnessControlCapabilities, HarnessId, HarnessModelOption,
+use kernel::harness::{
+    HarnessCapabilities, HarnessControlCapabilities, HarnessModelOption,
     HarnessObservationCapabilities, HarnessOffering,
 };
+use kernel::model::{ModelChunk, ModelProvider};
+use tokio_util::sync::CancellationToken;
+use wire::harness::HarnessId;
 
 use crate::cli_support::{
     Fault, Harness, Plan, TestResult, action, embedder, items, provider, request,

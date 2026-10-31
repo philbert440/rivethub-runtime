@@ -180,6 +180,31 @@ pub(super) fn article(page: &WikiPageResponse) -> Result<String, WikiError> {
     Ok(output)
 }
 
+pub(super) fn archive(slug: &str, markdown: &str) -> Result<String, WikiError> {
+    let mut output = document(&format!("Archive: {slug}"));
+    output.push_str("<p>Back to ");
+    link(&mut output, slug, slug)?;
+    output.push_str("</p><pre>");
+    for line in markdown.lines() {
+        match anchor(line) {
+            Some(id) => write!(output, "</pre><span id=\"{id}\"></span><pre>")?,
+            None => writeln!(output, "{}", Escaped(line))?,
+        }
+    }
+    output.push_str("</pre></main></body></html>");
+    Ok(output)
+}
+
+fn anchor(line: &str) -> Option<&str> {
+    let id = line
+        .trim()
+        .strip_prefix("<a id=\"")?
+        .strip_suffix("\"></a>")?;
+    id.chars()
+        .all(|ch| ch.is_ascii_alphanumeric() || ch == '-')
+        .then_some(id)
+}
+
 pub(super) fn missing(body: &WikiMissBody) -> Result<String, WikiError> {
     let mut output = document("Wiki page not found");
     output.push_str("<p>Try searching for another title.</p><ul>");

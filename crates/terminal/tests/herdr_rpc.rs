@@ -376,11 +376,62 @@ async fn send_text_carries_the_shell_joined_line() -> Result<(), Failed> {
     Ok(())
 }
 
+async fn a_subscription_stays_open_while_the_client_listens() -> Result<(), Failed> {
+    let dir = tempfile::tempdir()?;
+    let socket = dir.path().join("herdr.sock");
+    let listener = UnixListener::bind(&socket)?;
+    let server = tokio::spawn(async move {
+        let (stream, _) = listener.accept().await?;
+        let (reader, mut writer) = stream.into_split();
+        let mut reader = BufReader::new(reader);
+        let mut line = Vec::new();
+        reader.read_until(b'\n', &mut line).await?;
+        let frame = serde_json::from_slice::<codec::RequestFrame>(&line)?;
+        for ack in ACK_SUBSCRIPTION {
+            writer
+                .write_all(ack.replace("{ID}", &frame.id).as_bytes())
+                .await?;
+        }
+        line.clear();
+        let hung_up = tokio::time::timeout(
+            Duration::from_millis(300),
+            reader.read_until(b'\n', &mut line),
+        )
+        .await
+        .is_ok_and(|read| read.is_ok_and(|read| read == 0));
+        if !hung_up {
+            writer
+                .write_all(
+                    b"{\"event\":\"pane.agent_status_changed\",\"data\":{\"pane_id\":\"w1:p1\"}}\n",
+                )
+                .await?;
+        }
+        Ok::<_, Failed>(())
+    });
+    let client = HerdrClient::new(&socket);
+    let mut events = client.subscribe_events();
+    client
+        .events_subscribe(codec::EventsSubscribeParams {
+            subscriptions: vec![codec::SubscriptionParams {
+                event: HerdrEventKind::PaneAgentStatusChanged,
+                pane_id: "w1:p1".to_owned(),
+            }],
+        })
+        .await?;
+    let event = tokio::time::timeout(Duration::from_secs(5), events.recv())
+        .await??
+        .map_err(|error| error.to_string())?;
+    assert_eq!(event.event, HerdrEventKind::PaneAgentStatusChanged);
+    tokio::time::timeout(Duration::from_secs(5), server).await???;
+    Ok(())
+}
+
 #[test]
 fn the_herdr_rpc_client_behaviours() -> Result<(), Failed> {
     let runtime = tokio::runtime::Runtime::new()?;
     runtime.block_on(the_client_speaks_the_recorded_frames_and_maps_the_acks())?;
     runtime.block_on(event_frames_flow_to_subscribers_through_both_aliases())?;
+    runtime.block_on(a_subscription_stays_open_while_the_client_listens())?;
     runtime.block_on(error_acks_become_typed_rpc_errors())?;
     runtime.block_on(a_silent_server_times_out_with_the_recorded_ctl_window())?;
     runtime.block_on(agent_start_retries_while_the_pane_is_busy())?;

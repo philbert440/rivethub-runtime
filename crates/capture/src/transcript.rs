@@ -62,6 +62,10 @@ pub enum Block {
         tool_use_id: Option<String>,
         content: LineContent,
     },
+    Thinking {
+        thinking: Option<String>,
+        text: Option<String>,
+    },
     #[serde(other)]
     Other,
 }
@@ -134,7 +138,9 @@ impl Line {
                     (!text.is_empty()).then_some(text)
                 }
             },
-            Block::Text { .. } | Block::ToolUse { .. } | Block::Other => None,
+            Block::Text { .. } | Block::ToolUse { .. } | Block::Thinking { .. } | Block::Other => {
+                None
+            }
         })
     }
 
@@ -147,7 +153,10 @@ impl Line {
             .iter()
             .filter_map(|block| match block {
                 Block::ToolUse { id, name, input } => Some(ToolUse { id, name, input }),
-                Block::Text { .. } | Block::ToolResult { .. } | Block::Other => None,
+                Block::Text { .. }
+                | Block::ToolResult { .. }
+                | Block::Thinking { .. }
+                | Block::Other => None,
             })
             .collect()
     }
@@ -173,7 +182,10 @@ impl Line {
                         text,
                     })
                 }
-                Block::Text { .. } | Block::ToolUse { .. } | Block::Other => None,
+                Block::Text { .. }
+                | Block::ToolUse { .. }
+                | Block::Thinking { .. }
+                | Block::Other => None,
             })
             .collect()
     }
@@ -240,6 +252,13 @@ pub fn read_capped(path: &Path) -> Result<String, TranscriptReaderError> {
 
 pub(crate) fn read_uncapped(path: &Path) -> Result<String, TranscriptReaderError> {
     let bytes = std::fs::read(path).map_err(|error| read_error(path, error))?;
+    Ok(String::from_utf8_lossy(&bytes).into_owned())
+}
+
+pub(crate) async fn read_uncapped_async(path: &Path) -> Result<String, TranscriptReaderError> {
+    let bytes = tokio::fs::read(path)
+        .await
+        .map_err(|error| read_error(path, error))?;
     Ok(String::from_utf8_lossy(&bytes).into_owned())
 }
 

@@ -1,13 +1,13 @@
 use std::path::Path;
 
-use super::{TestResult, free_port, provider, start, stop, write_config};
+use super::{TestResult, provider, start, stop, write_config};
 
 const STAMP: &str = "2026-10-01T00:00:00.000Z";
 
 #[tokio::test]
 async fn local_folds_a_session_variant_topic_into_its_parent_and_redirects() -> TestResult {
     let home = tempfile::tempdir()?;
-    let port = free_port()?;
+    let port = testkit::ports::claim()?;
     let database = home.path().join(".rivethub").join("memory.sqlite");
     let wiki = home.path().join("wiki");
     std::fs::create_dir_all(&wiki)?;

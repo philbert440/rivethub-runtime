@@ -15,12 +15,13 @@ use common::message;
 use common::object;
 use kernel::memory::BrowseFilter;
 use kernel::memory::Limit;
+use kernel::memory::MemoryBrowseOrder;
+use kernel::memory::MemoryEntry;
+use kernel::memory::MemoryStatsResponse;
 use memory_sqlite::SqliteStore;
 use serde::Deserialize;
 use testkit::Json;
 use wire::gateway::memory::MemoryBrowseToolArgs;
-use wire::gateway::memory::MemoryStatsResponse;
-use wire::memory::MemoryEntry;
 use wire::message::Role;
 
 const SKIPPED_STATS_SCENARIOS: [(&str, &str); 2] = [
@@ -79,7 +80,7 @@ const SKIPPED_TOOL_LABELS: [(&str, &str); 6] = [
     ),
 ];
 
-fn helper_batch() -> TestResult<wire::capture::CaptureBatchRequest> {
+fn helper_batch() -> TestResult<kernel::memory::CaptureBatchRequest> {
     let mut helper = batch("cli:sess-2", "helper", "cli");
     helper.title = Some("Helper session".to_owned());
     let mut read_call = message("h1", Role::Assistant, "reading the deploy notes");
@@ -114,18 +115,23 @@ async fn stats_replay_the_recorded_scenarios() -> TestResult {
             eprintln!("skipped scenario {name}: {reason}");
             continue;
         }
-        let fresh = fresh_store(None)?;
+        let fresh = fresh_store()?;
         let seeded_at = instant(common::RECORDED_START)?;
         match scenario.name.as_str() {
             "empty store" => {}
             "captured, no embedding endpoint" => {
                 fresh
                     .store
-                    .capture(deploy_batch("cli:sess-1", "rivet")?, None, seeded_at)
+                    .capture(
+                        deploy_batch("cli:sess-1", "rivet")?,
+                        &testkit::owner()?,
+                        None,
+                        seeded_at,
+                    )
                     .await?;
                 fresh
                     .store
-                    .capture(helper_batch()?, None, seeded_at)
+                    .capture(helper_batch()?, &testkit::owner()?, None, seeded_at)
                     .await?;
             }
             other => return Err(format!("no seed for stats scenario {other:?}").into()),
@@ -174,7 +180,12 @@ const LEAF: &str = "The team decided to deploy the AcmeKit service with a blue-g
 
 async fn seed_tools_store(store: &SqliteStore, now: DateTime<Utc>) -> TestResult<String> {
     let captured = store
-        .capture(deploy_batch("cli:sess-1", "rivet")?, None, now)
+        .capture(
+            deploy_batch("cli:sess-1", "rivet")?,
+            &testkit::owner()?,
+            None,
+            now,
+        )
         .await?;
     let conversation = captured.conversation_id;
     common::execute(
@@ -286,11 +297,17 @@ fn browse_filter(args: &Json) -> TestResult<BrowseFilter> {
         role: None,
         tool_name: None,
         tag: None,
-        window: args.window,
+        window: args
+            .window
+            .map(|window| window.to_string().parse())
+            .transpose()?,
         since: None,
         before: None,
         include_tools: args.include_tools == Some(true),
-        order: args.order.unwrap_or_default(),
+        order: match args.order.unwrap_or_default() {
+            wire::gateway::memory::MemoryBrowseOrder::Asc => MemoryBrowseOrder::Asc,
+            wire::gateway::memory::MemoryBrowseOrder::Desc => MemoryBrowseOrder::Desc,
+        },
         limit: Limit::clamped(args.limit, 50, 1..=200),
     })
 }
@@ -440,11 +457,16 @@ async fn replay_read_call(
 #[tokio::test]
 async fn read_tools_replay_browse_get_full_and_stats() -> TestResult {
     let recording: ToolsRecording = common::recording("tools.json")?;
-    let fresh = fresh_store(None)?;
+    let fresh = fresh_store()?;
     let now = instant(common::RECORDED_START)?;
     seed_tools_store(&fresh.store, now).await?;
     let mut ids = Ids::default();
-    let (conversations, messages) = seeded_rows(&recording)?;
+    let (mut conversations, mut messages) = seeded_rows(&recording)?;
+    for rows in [&mut conversations, &mut messages] {
+        if let Json::Array(rows) = rows {
+            common::owned_by_the_caller(rows);
+        }
+    }
     ids.same(
         &conversations,
         &Json::Array(common::table(&fresh.store, "ros_conversations").await?),

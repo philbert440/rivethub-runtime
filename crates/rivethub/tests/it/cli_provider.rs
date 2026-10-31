@@ -13,11 +13,11 @@ use std::time::Duration;
 
 use config::provider::ProviderType;
 use kernel::harness::SessionEvent;
+use kernel::model::ModelRequest;
 use rivethub::composition::Composition;
 use rivethub::models::ModelFactory;
 use serde::Deserialize;
 use tokio_util::sync::CancellationToken;
-use wire::gateway::v1::{ChatRequest, Completion};
 
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
@@ -121,34 +121,12 @@ async fn each_cli_provider_starts_gateway_and_replays_a_chat_turn() -> TestResul
             &factory,
         )
         .await?;
-        let server = testkit::stub_server(composition.router(false).layer(axum::Extension(
-            axum::extract::ConnectInfo(std::net::SocketAddr::from(([127, 0, 0, 1], 12345))),
-        )))
-        .await?;
-        let client = reqwest::Client::builder()
-            .timeout(Duration::from_secs(5))
-            .build()?;
-        let request = chat_request();
-        let reply: Completion = client
-            .post(format!("http://{}/v1/chat/completions", server.addr))
-            .json(&request)
-            .send()
-            .await?
-            .error_for_status()?
-            .json()
+        let reply = factory
+            .build(&config, "p", Some("agent-model"), &cancel)?
+            .provider
+            .chat(turn("agent-model"))
             .await?;
-        assert_eq!(reply.model, "main");
-        assert_eq!(
-            reply
-                .choices
-                .first()
-                .ok_or("completion choice")?
-                .message
-                .content
-                .as_deref(),
-            Some(expected.as_str()),
-            "{kind}"
-        );
+        assert_eq!(reply.content.as_deref(), Some(expected.as_str()), "{kind}");
         let requests = harness.requests.lock().await;
         assert_eq!(requests.len(), 1);
         for request in requests.iter() {
@@ -162,24 +140,18 @@ async fn each_cli_provider_starts_gateway_and_replays_a_chat_turn() -> TestResul
             *harness.options.lock().await,
             vec![kernel::harness::SessionOption::Mode("plan".into())]
         );
-        server.close().await?;
         tokio::time::timeout(Duration::from_secs(5), composition.close()).await??;
     }
     Ok(())
 }
 
-fn chat_request() -> ChatRequest {
-    ChatRequest {
-        model: "main".into(),
-        messages: vec![wire::stream::openai::Message {
-            role: wire::message::Role::User,
-            content: Some("Say hi.".into()),
-            reasoning_content: None,
-            tool_calls: None,
-            tool_call_id: None,
-        }],
-        stream: None,
+fn turn(model: &str) -> ModelRequest {
+    ModelRequest {
+        model: model.into(),
+        messages: Vec::new(),
+        tools: Vec::new(),
+        thinking: None,
         max_tokens: None,
-        stream_options: None,
+        options: kernel::model::ModelOptions::default(),
     }
 }

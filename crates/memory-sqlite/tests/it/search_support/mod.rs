@@ -1,6 +1,7 @@
 pub(crate) mod superseded;
 
 use chrono::{DateTime, Utc};
+use kernel::memory::MemoryScope;
 use kernel::memory::{Limit, SearchMode, SearchQuery};
 use memory_sqlite::{QueryEmbed, SqliteStore};
 use serde::Deserialize;
@@ -8,7 +9,6 @@ use std::sync::Arc;
 use std::time::Duration;
 use testkit::fakes::FakeProvider;
 use tokio_util::sync::CancellationToken;
-use wire::gateway::memory::MemoryScope;
 
 pub(crate) type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
 
@@ -95,7 +95,7 @@ pub(crate) struct Hit {
     #[serde(alias = "score")]
     pub(crate) relevance_score: f64,
     #[serde(alias = "layer")]
-    pub(crate) source: wire::gateway::memory::MemoryHitSource,
+    pub(crate) source: kernel::memory::MemoryHitSource,
     pub(crate) role: HitRole,
 }
 

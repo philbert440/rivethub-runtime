@@ -16,6 +16,8 @@ pub enum Error {
     PostgresMigrate(#[source] sqlx::migrate::MigrateError),
     #[error("reading the applied postgres schema version failed")]
     PostgresVersion(#[source] sqlx::Error),
+    #[error("backfilling the postgres memory counts failed")]
+    PostgresBackfill(#[source] sqlx::Error),
     #[error("missing _rivetos_migrations rows: {missing}")]
     TrackingMissing { missing: String },
     #[error("the postgres migration set is empty")]

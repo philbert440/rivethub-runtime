@@ -76,7 +76,7 @@ async fn answer(gateway: &Gateway, topic: Topic) -> Result<Json<TopicPage>, ApiE
     };
     Ok(Json(TopicPage {
         topic: map::record(topic),
-        page,
+        page: page.map(crate::memory_body::wiki_page_response_body),
         mentions,
     }))
 }

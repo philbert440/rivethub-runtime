@@ -12,6 +12,8 @@ use kernel::filing::Rule;
 use kernel::filing::Step;
 use kernel::filing::Target;
 use kernel::filing::conversation_keys;
+use kernel::filing::session_key;
+use kernel::filing::stored_keys;
 use kernel::memory::ConversationHead;
 use kernel::topics::Alias;
 use kernel::topics::NewTopic;
@@ -26,7 +28,7 @@ use kernel::topics::TopicKind;
 use kernel::topics::TopicListing;
 use kernel::topics::TopicName;
 use uuid::Uuid;
-use wire::session_id::SessionId;
+use values::SessionId;
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 
@@ -64,6 +66,7 @@ fn topic(name: &str, aliases: &[&str], directory: Option<&str>) -> Result<Topic,
             directory: directory.map(|path| Root::Shared {
                 path: path.to_owned(),
             }),
+            owner: testkit::owner().ok(),
         },
         at(0),
     )
@@ -125,6 +128,12 @@ fn keys_sort_into_sessions_tasks_conversations_and_skips() -> TestResult {
         assert_eq!(Filable::of(&head(key, channel)), Filable::Never, "{key}");
     }
     assert_eq!(conversation_keys(&claude), [claude.as_str(), bare]);
+    assert_eq!(session_key(Some("claude-code"), bare), claude.as_str());
+    assert_eq!(session_key(Some("gateway"), bare), bare);
+    assert_eq!(session_key(None, bare), bare);
+    assert_eq!(session_key(Some("dsh"), "dsh:7f3a"), "dsh:7f3a");
+    assert_eq!(stored_keys(claude.as_str()), [claude.as_str(), bare]);
+    assert_eq!(stored_keys("dsh:7f3a"), ["dsh:7f3a"]);
     Ok(())
 }
 

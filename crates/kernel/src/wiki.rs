@@ -1,10 +1,17 @@
 pub mod builder;
 pub mod consolidate;
 pub mod entity;
+pub mod merge;
+pub mod origin;
 pub mod page;
+pub mod recompile;
 pub mod route;
+mod view;
 
-use wire::gateway::wiki::WikiPageResponse;
+pub use view::{
+    WikiCitation, WikiGapsResponse, WikiPageResponse, WikiRedLink, WikiSource, WikiSourceSpan,
+    WikiTopic, WikiTopicList,
+};
 
 pub const WIKI_LIMIT_MAX: u32 = 500;
 

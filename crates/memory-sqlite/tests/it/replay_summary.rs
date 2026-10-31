@@ -57,7 +57,7 @@ async fn recorded_leaf_round_trips_through_the_store() -> TestResult {
         .iter()
         .find(|scenario| scenario.name == LEAF)
         .ok_or("missing leaf scenario")?;
-    let fresh = fresh_store(None)?;
+    let fresh = fresh_store()?;
     let summary = recorded_summary(scenario)?;
     seed_messages(&fresh.store, scenario).await?;
     seed_pending(&fresh.store).await?;
@@ -90,7 +90,7 @@ async fn recorded_leaf_round_trips_through_the_store() -> TestResult {
 
 #[tokio::test]
 async fn pending_lists_the_most_recent_activity_first() -> TestResult {
-    let fresh = fresh_store(None)?;
+    let fresh = fresh_store()?;
     let seeded = [
         (
             "20000000-0000-4000-8000-000000000001",
@@ -138,7 +138,7 @@ async fn pending_lists_the_most_recent_activity_first() -> TestResult {
 
 #[tokio::test]
 async fn a_missing_summary_child_is_rejected() -> TestResult {
-    let fresh = fresh_store(None)?;
+    let fresh = fresh_store()?;
     let conversation = Uuid::new_v4();
     let summary = Uuid::new_v4();
     seed_conversation(

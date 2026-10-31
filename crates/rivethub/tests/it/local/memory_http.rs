@@ -5,7 +5,7 @@ use wire::capture::{CaptureBatchRequest, CaptureMessage};
 use wire::gateway::memory::{MemorySummaryDagResponse, SummaryKind};
 use wire::message::Role;
 
-use super::{TestResult, free_port, start, stop};
+use super::{TestResult, start, stop};
 
 const SESSION: &str = "memory-http";
 const BRANCH: &str = "00000000-0000-4000-8000-0000000000b1";
@@ -113,7 +113,7 @@ async fn exchange(
 #[tokio::test]
 async fn local_serves_the_summary_dag_and_a_gzip_export_over_http() -> TestResult {
     let home = tempfile::tempdir()?;
-    let port = free_port()?;
+    let port = testkit::ports::claim()?;
     let port_text = port.to_string();
     let started = start(
         home.path(),
@@ -122,7 +122,7 @@ async fn local_serves_the_summary_dag_and_a_gzip_export_over_http() -> TestResul
     )
     .await?;
     let database = home.path().join(".rivethub").join("memory.sqlite");
-    let outcome = exchange(port, &database).await;
+    let outcome = exchange(port.number(), &database).await;
     stop(started).await?;
     let (dag, media, dump) = outcome?;
     assert_eq!(dag.session_id, SESSION);

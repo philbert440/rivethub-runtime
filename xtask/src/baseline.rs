@@ -47,7 +47,7 @@ impl Baseline {
     pub fn known_check(&self, check: &str) -> bool {
         matches!(
             check,
-            "FALLBACK" | "JSMODEL" | "JSONBYTES" | "UTF16" | "PORTS" | "KERNELWIRE"
+            "FALLBACK" | "JSMODEL" | "JSONBYTES" | "UTF16" | "PORTS"
         )
     }
 
@@ -180,11 +180,6 @@ pub fn write(root: &Path) -> Result<()> {
         crate::fallback::collect(root)?
             .into_iter()
             .map(|hit| ("FALLBACK", hit)),
-    );
-    hits.extend(
-        crate::kernelwire::collect(root)?
-            .into_iter()
-            .map(|reference| (crate::kernelwire::CHECK, reference.hit())),
     );
     write_hits(root, hits)
 }

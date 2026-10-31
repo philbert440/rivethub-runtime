@@ -2,6 +2,8 @@ use kernel::filing::ConversationPlacement;
 use kernel::filing::Correction;
 use kernel::filing::FilingStore;
 use kernel::filing::Target;
+use kernel::memory::CaptureBatchRequest;
+use kernel::memory::CaptureMessage;
 use kernel::memory::MemoryStore;
 use kernel::topics::Placement;
 use kernel::topics::PlacementSource;
@@ -9,8 +11,6 @@ use kernel::topics::TopicId;
 use kernel::topics::TopicName;
 use kernel::topics::TopicStore;
 use uuid::Uuid;
-use wire::capture::CaptureBatchRequest;
-use wire::capture::CaptureMessage;
 use wire::message::Role;
 
 use crate::topics::Outcome;
@@ -50,6 +50,7 @@ where
                 topic: desktop.id,
                 by: PlacementSource::Categorizer,
                 at: at(1),
+                owner: Some(crate::owner()?),
             })
             .await?;
     }
@@ -231,6 +232,7 @@ async fn record<S: MemoryStore>(
                 updated_at: created,
                 messages: vec![message],
             },
+            &crate::owner()?,
             None,
         )
         .await?;
@@ -267,6 +269,7 @@ pub async fn capture<S: MemoryStore>(
                     created_at: Some(at(0)),
                 }],
             },
+            &crate::owner()?,
             node,
         )
         .await?;

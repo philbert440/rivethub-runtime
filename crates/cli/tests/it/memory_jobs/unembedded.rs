@@ -33,7 +33,7 @@ async fn unembedded_heals_only_transient_poison_and_enqueues_typed_jobs(
         (6, None, None, "long enough for embedding"),
         (7, Some("unembeddable"), None, "long enough for embedding"),
     ] {
-        sqlx::query("INSERT INTO rh_summaries (id, content, embed_status, embed_error, embed_failures) VALUES ($1,$2,$3,$4,3)")
+        sqlx::query("INSERT INTO rh_summaries (id, content, embed_status, embed_error, embed_failures, owner_user_id) VALUES ($1,$2,$3,$4,3, 'owner')")
             .bind(uuid::Uuid::from_u128(id)).bind(content).bind(status).bind(error).execute(&pool).await?;
     }
     sqlx::query("DELETE FROM graphile_worker._private_jobs")
@@ -85,7 +85,7 @@ async fn unembedded_preserves_scheduled_run_at_and_selects_newest_per_table(
     let store = seed(&pool).await;
     let queue = RecordingQueue::new(&pool).await;
     for (id, date) in [(3, "2026-10-01"), (4, "2026-10-02")] {
-        sqlx::query("INSERT INTO rh_summaries (id, content, created_at) VALUES ($1, repeat('x',21), $2::text::timestamptz)").bind(uuid::Uuid::from_u128(id)).bind(date).execute(&pool).await?;
+        sqlx::query("INSERT INTO rh_summaries (id, content, created_at, owner_user_id) VALUES ($1, repeat('x',21), $2::text::timestamptz, 'owner')").bind(uuid::Uuid::from_u128(id)).bind(date).execute(&pool).await?;
     }
     sqlx::query("DELETE FROM graphile_worker._private_jobs")
         .execute(&pool)
@@ -162,7 +162,7 @@ async fn unembedded_heals_wiki_but_never_heals_chunks(pool: PgPool) -> TestResul
         (1, "  ", None),
         (2, "failed chunk", Some("failed")),
     ] {
-        sqlx::query("INSERT INTO rh_message_chunks (id,message_id,idx,char_start,char_end,content,embed_status,embed_error,embed_failures) VALUES ($1,$2,$3,0,20,$4,$5,'Embedding returned null',2)")
+        sqlx::query("INSERT INTO rh_message_chunks (id,message_id,idx,char_start,char_end,content,embed_status,embed_error,embed_failures, owner_user_id) VALUES ($1,$2,$3,0,20,$4,$5,'Embedding returned null',2, 'owner')")
             .bind(uuid::Uuid::from_u128(u128::try_from(index + 10)?)).bind(message_id()).bind(index).bind(content).bind(status).execute(&pool).await?;
     }
     sqlx::query("DELETE FROM graphile_worker._private_jobs")

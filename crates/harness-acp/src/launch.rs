@@ -194,6 +194,38 @@ pub(crate) fn startup_meta(harness: HarnessId, text: &str) -> Result<Option<acp:
     serde_json::from_str(&encoded).map_err(|source| AcpError::StartupMeta { source })
 }
 
+#[derive(Serialize)]
+struct ClaudeCodeMeta {
+    options: UnsavedOptions,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct UnsavedOptions {
+    persist_session: bool,
+}
+
+pub(crate) fn unsaved(
+    harness: HarnessId,
+    meta: Option<acp::Meta>,
+) -> Result<Option<acp::Meta>, AcpError> {
+    if harness != HarnessId::ClaudeCode {
+        return Ok(meta);
+    }
+    let mut meta = match meta {
+        Some(meta) => meta,
+        None => acp::Meta::new(),
+    };
+    let claude_code = serde_json::to_value(ClaudeCodeMeta {
+        options: UnsavedOptions {
+            persist_session: false,
+        },
+    })
+    .map_err(|source| AcpError::StartupMeta { source })?;
+    meta.insert("claudeCode".to_owned(), claude_code);
+    Ok(Some(meta))
+}
+
 fn sheet_chat(harness: HarnessId) -> bool {
     matches!(
         harness,

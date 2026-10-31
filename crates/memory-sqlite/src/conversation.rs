@@ -20,6 +20,7 @@ pub(crate) struct StoredConversation {
     pub(crate) id: String,
     pub(crate) channel: String,
     pub(crate) updated_at: DateTime<Utc>,
+    pub(crate) owner: Option<String>,
 }
 
 impl ConversationKey {
@@ -29,7 +30,7 @@ impl ConversationKey {
     ) -> Result<Option<StoredConversation>, SqliteError> {
         let found = tx
             .query_row(
-                "SELECT id, channel, updated_at FROM ros_conversations
+                "SELECT id, channel, updated_at, owner_user_id FROM ros_conversations
                   WHERE session_key = ?1 AND agent = ?2",
                 params![self.session_key, self.agent],
                 |row| {
@@ -37,17 +38,19 @@ impl ConversationKey {
                         row.get::<_, String>(0)?,
                         row.get::<_, String>(1)?,
                         row.get::<_, String>(2)?,
+                        row.get::<_, Option<String>>(3)?,
                     ))
                 },
             )
             .optional()
             .map_err(SqliteError::query("conversation lookup"))?;
         found
-            .map(|(id, channel, updated_at)| {
+            .map(|(id, channel, updated_at, owner)| {
                 Ok(StoredConversation {
                     id,
                     channel,
                     updated_at: time::stored(&updated_at, "updated_at")?,
+                    owner,
                 })
             })
             .transpose()
@@ -61,7 +64,7 @@ pub(crate) struct NewConversation<'a> {
     pub(crate) title: Option<&'a str>,
     pub(crate) settings: Option<&'a str>,
     pub(crate) task_id: Option<&'a str>,
-    pub(crate) owner: Option<&'a str>,
+    pub(crate) owner: &'a str,
     pub(crate) created_at: DateTime<Utc>,
     pub(crate) updated_at: DateTime<Utc>,
 }
@@ -94,6 +97,7 @@ impl NewConversation<'_> {
             id,
             channel,
             updated_at: self.updated_at,
+            owner: Some(self.owner.to_owned()),
         })
     }
 }

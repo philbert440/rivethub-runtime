@@ -43,6 +43,8 @@ const TITLE_CHARS: usize = 120;
 const AGENT_CHARS: usize = 64;
 const MODEL_CHARS: usize = 80;
 const NAMING_MARKER: &str = "-title\"";
+const MODE_MARKER: &str = "\"permissionMode\"";
+const MODE_WINDOW: u64 = 8 * 1024 * 1024;
 
 #[derive(Debug, Clone)]
 struct Transcript {
@@ -431,6 +433,37 @@ pub(crate) fn store_cwd(root: &Path, id: &str) -> Result<Option<String>, Transcr
         Some(file) => first_cwd(&file.path),
         None => Ok(None),
     }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ModeLine {
+    permission_mode: Option<String>,
+}
+
+pub(crate) fn permission_mode(
+    root: &Path,
+    id: &str,
+) -> Result<Option<String>, TranscriptReaderError> {
+    if !is_uuid(id) {
+        return Ok(None);
+    }
+    let Some(store) = projects(root)? else {
+        return Ok(None);
+    };
+    Ok(top_level_file(&store, id).and_then(|file| latest_mode(&file.path)))
+}
+
+fn latest_mode(path: &Path) -> Option<String> {
+    tail(path, MODE_WINDOW)?
+        .lines()
+        .rev()
+        .filter(|line| line.contains(MODE_MARKER))
+        .find_map(|line| {
+            object_line::<ModeLine>(line)?
+                .permission_mode
+                .filter(|mode| !mode.trim().is_empty())
+        })
 }
 
 pub(crate) fn describe(

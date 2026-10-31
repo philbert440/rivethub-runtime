@@ -1,4 +1,4 @@
-use crate::events::{Activity, ProtocolVersion};
+use crate::events::Activity;
 use crate::task::TaskStatus;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -33,46 +33,6 @@ pub struct MeshOverviewNode {
 pub struct MeshLatest {
     pub activity: Activity,
     pub title: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct NodeCapabilities {
-    pub subsystems: Subsystems,
-    pub harnesses: Vec<HarnessCapability>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct Subsystems {
-    #[serde(rename = "den")]
-    pub gateway: bool,
-    pub devices: bool,
-    pub mesh: bool,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct HarnessCapability {
-    pub harness_id: crate::harness::HarnessId,
-    #[serde(flatten)]
-    pub inspect: HarnessInspectCapability,
-    #[serde(flatten)]
-    pub drive: HarnessDriveCapability,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct HarnessInspectCapability {
-    pub list: bool,
-    pub read: bool,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct HarnessDriveCapability {
-    pub drive: bool,
-    pub resume: bool,
 }
 
 #[serde_as]
@@ -307,93 +267,6 @@ pub enum Notification {
         #[serde_as(as = "serde_with::TimestampMilliSeconds")]
         ts: DateTime<Utc>,
     },
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
-#[serde(rename_all = "kebab-case")]
-pub enum AudioBackend {
-    FifoShim,
-    None,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
-#[serde(rename_all = "camelCase")]
-pub enum AudioMicErrorCode {
-    Busy,
-    Disabled,
-    BadHello,
-    NoRuntime,
-}
-
-#[serde_with::skip_serializing_none]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
-#[serde(tag = "type", rename_all = "camelCase")]
-pub enum AudioMicServerFrame {
-    #[serde(rename_all = "camelCase")]
-    Ready {
-        device: String,
-        sample_rate: u32,
-        format: AudioFormat,
-        backend: AudioBackend,
-    },
-    #[serde(rename_all = "camelCase")]
-    Error {
-        code: AudioMicErrorCode,
-        message: String,
-    },
-    Stopped,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
-#[serde(rename_all = "lowercase")]
-pub enum AudioFormat {
-    S16Le,
-}
-
-#[serde_with::skip_serializing_none]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
-#[serde(tag = "type", rename_all = "camelCase")]
-pub enum AudioMicClientFrame {
-    #[serde(rename_all = "camelCase")]
-    Hello {
-        v: ProtocolVersion,
-        sample_rate: Option<u32>,
-        channels: Option<u32>,
-        format: Option<AudioFormat>,
-    },
-    Start,
-    Stop,
-}
-
-#[serde_as]
-#[serde_with::skip_serializing_none]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct AudioStatus {
-    pub enabled: bool,
-    pub backend: AudioBackend,
-    pub device: String,
-    pub sample_rate: u32,
-    pub channels: u32,
-    pub format: AudioFormat,
-    pub fifo_path: String,
-    pub armed: bool,
-    pub publisher_id: Option<String>,
-    #[serde(default)]
-    #[serde_as(as = "Option<serde_with::TimestampMilliSeconds>")]
-    pub armed_at: Option<DateTime<Utc>>,
-    pub bytes_written: u64,
-    pub runtime_ready: bool,
-}
-
-#[serde_with::skip_serializing_none]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct AudioHealth {
-    pub ok: bool,
-    pub runtime_ready: bool,
-    pub fifo_path: String,
-    pub message: Option<String>,
 }
 
 #[serde_with::skip_serializing_none]

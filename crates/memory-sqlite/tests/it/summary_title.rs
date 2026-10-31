@@ -18,7 +18,7 @@ const SECOND_LEAF: &str = "A second leaf about weekend gardening plans.";
 
 #[tokio::test]
 async fn the_first_leaf_titles_an_untitled_conversation_once() -> TestResult {
-    let fresh = fresh_store(None)?;
+    let fresh = fresh_store()?;
     let conversation = Uuid::new_v4();
     seed_conversation(&fresh.store, conversation, None).await?;
     let first = fresh
@@ -44,7 +44,7 @@ async fn the_first_leaf_titles_an_untitled_conversation_once() -> TestResult {
 
 #[tokio::test]
 async fn a_harness_title_is_never_replaced_by_a_summary() -> TestResult {
-    let fresh = fresh_store(None)?;
+    let fresh = fresh_store()?;
     let conversation = Uuid::new_v4();
     seed_conversation(&fresh.store, conversation, Some("Named by the hook")).await?;
     fresh
@@ -60,7 +60,7 @@ async fn a_harness_title_is_never_replaced_by_a_summary() -> TestResult {
 
 #[tokio::test]
 async fn a_markup_only_leaf_leaves_the_title_for_a_later_leaf() -> TestResult {
-    let fresh = fresh_store(None)?;
+    let fresh = fresh_store()?;
     let conversation = Uuid::new_v4();
     seed_conversation(&fresh.store, conversation, Some("  ")).await?;
     fresh
@@ -84,7 +84,7 @@ async fn a_markup_only_leaf_leaves_the_title_for_a_later_leaf() -> TestResult {
 
 #[tokio::test]
 async fn the_backfill_titles_summarized_conversations_from_their_earliest_leaf() -> TestResult {
-    let fresh = fresh_store(None)?;
+    let fresh = fresh_store()?;
     let untitled = Uuid::new_v4();
     let named = Uuid::new_v4();
     let bare = Uuid::new_v4();
