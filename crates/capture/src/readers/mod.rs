@@ -2,6 +2,7 @@ mod claude;
 pub(crate) mod codex;
 mod cowork;
 mod cursor;
+pub(crate) mod dsh;
 pub(crate) mod grok;
 pub(crate) mod harness_db;
 mod hermes;

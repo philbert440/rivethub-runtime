@@ -410,3 +410,109 @@ async fn a_codex_turn_end_posts_rollout_items_under_the_kits_ids() -> TestResult
     assert_eq!(at(&end, "/finalize"), true);
     Ok(())
 }
+
+const DSH_SESSION: &str = "session-09517129-cb94-487b-a8da-10a015a7d984";
+
+const DSH_LOG: &str = r#"{"type":"session","version":4,"id":"session-09517129-cb94-487b-a8da-10a015a7d984","cwd":"/work/dsh"}
+{"type":"user/message","seq":1,"time":1793018984235,"data":{"content":[{"type":"text","text":" list the files "}],"source":{"kind":"user"},"role":"user","id":"u-1"}}
+{"type":"user/message","seq":2,"data":{"content":"a plugin snapshot","source":{"kind":"plugin"},"id":"u-2"}}
+{"type":"session/title","seq":3,"data":{"title":"List the files"}}
+{"type":"assistant/message","seq":4,"data":{"turn":1,"message":{"role":"assistant","content":[{"type":"reasoning","text":"Look first."},{"type":"text","text":"Listing."},{"type":"tool-call","id":"call_1","name":"ls"}],"id":"a-1"}}}
+{"type":"tool/call","seq":5,"data":{"callId":"call_1","name":"ls","arguments":"{\"path\":\".\"}"}}
+{"type":"tool/result","seq":6,"data":{"message":{"role":"tool","source":{"kind":"tool","callId":"call_1"},"content":[{"type":"text","text":"a.txt"}],"id":"r-1"}}}
+{"type":"tool/result","seq":7,"data":{"message":{"role":"tool","source":{"kind":"tool","callId":"call_9"},"content":[{"type":"text","text":"boom","isError":true}],"id":"r-9"}}}
+{"type":"assistant/message","seq":8,"data":{"message":{"role":"assistant","content":[{"type":"tool-call","id":"call_2","name":"ls"}],"id":"a-2"}}}
+{"type":"turn/end","seq":9,"data":{"turn":1,"reason":{"kind":"completed"}}}
+"#;
+
+fn dsh_hook(
+    home: &Path,
+    transport: &FakeTransport,
+) -> Result<StoreHook<FakeTransport>, Box<dyn std::error::Error>> {
+    let folder = home.join(".dsh/sessions/--work-dsh--").join(DSH_SESSION);
+    std::fs::create_dir_all(&folder)?;
+    let mut log = zstd::encode_all(DSH_LOG.as_bytes(), 0)?;
+    let writing = zstd::encode_all(&br#"{"type":"turn/end","seq":10,"data":{}}"#[..], 0)?;
+    log.extend(writing.iter().take(writing.len() / 2));
+    std::fs::write(folder.join("session.v4.jsonl.zstd"), log)?;
+    let env = config::Environment::from_vars([("HOME".to_owned(), home.display().to_string())]);
+    let writer = CaptureWriter::new(
+        transport.clone(),
+        CaptureSpool::new(home.join("spool")),
+        None,
+        None,
+    );
+    StoreHook::new(
+        StoreHarness::Dsh,
+        writer,
+        &store_roots(&env),
+        &config::Paths::new(&env)?,
+    )
+    .ok_or_else(|| "dsh store".into())
+}
+
+#[tokio::test]
+async fn a_dsh_turn_end_posts_the_transcript_under_the_kits_ids() -> TestResult {
+    let home = tempfile::tempdir()?;
+    let transport = FakeTransport::default();
+    let hook = dsh_hook(home.path(), &transport)?;
+    let now: DateTime<Utc> = NOW_TEXT.parse()?;
+    for event in ["user/message", "turn/end"] {
+        let payload = format!(
+            r#"{{"session_id":"{DSH_SESSION}","hook_event_name":"{event}","cwd":"/work/dsh"}}"#
+        );
+        assert_eq!(hook.run(&payload, now).await.stderr, "");
+    }
+    let posts = transport.posts.lock().clone();
+    let [body] = posts.as_slice() else {
+        return Err(format!("expected one post, got {}", posts.len()).into());
+    };
+    let batch: Json = serde_json::from_str(body)?;
+    assert_eq!(
+        at(&batch, "/session_key").as_str(),
+        Some(format!("dsh:{DSH_SESSION}").as_str())
+    );
+    assert_eq!(at(&batch, "/agent"), "rivet-deepseek");
+    assert_eq!(at(&batch, "/channel"), "dsh");
+    assert_eq!(at(&batch, "/title"), "List the files");
+    assert_eq!(at(&batch, "/finalize"), true);
+    let rows: Vec<(&str, &str, &str)> = at(&batch, "/messages")
+        .as_array()
+        .ok_or("messages")?
+        .iter()
+        .filter_map(|message| {
+            Some((
+                at(message, "/event_id").as_str()?,
+                at(message, "/role").as_str()?,
+                at(message, "/content").as_str()?,
+            ))
+        })
+        .collect();
+    let id = |suffix: &str| format!("dsh:{DSH_SESSION}:{suffix}");
+    let ids = ["u-1", "seq:3", "a-1", "call_1", "r-9", "seq:9"].map(id);
+    assert_eq!(
+        rows,
+        [
+            (ids[0].as_str(), "user", "list the files"),
+            (
+                ids[1].as_str(),
+                "system",
+                "[dsh.session/title] List the files"
+            ),
+            (
+                ids[2].as_str(),
+                "assistant",
+                "[thinking] Look first.\nListing."
+            ),
+            (ids[3].as_str(), "tool", "[tool] ls"),
+            (ids[4].as_str(), "tool", "[tool-failure] unknown"),
+            (ids[5].as_str(), "system", "[dsh.turn/end] completed"),
+        ]
+    );
+    let messages = at(&batch, "/messages");
+    assert_eq!(at(messages, "/3/tool_args/path"), ".");
+    assert_eq!(at(messages, "/3/tool_result"), "a.txt");
+    assert_eq!(at(messages, "/4/tool_result"), "boom");
+    assert_eq!(at(messages, "/0/metadata/session_jsonl_line"), 1);
+    Ok(())
+}
