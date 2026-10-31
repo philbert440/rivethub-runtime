@@ -174,3 +174,37 @@ async fn a_conversation_reads_its_own_summary_dag_by_id(pool: PgPool) -> TestRes
     );
     Ok(())
 }
+
+#[sqlx::test(migrator = "migrate::POSTGRES")]
+async fn an_outline_previews_each_summary_and_one_summary_reads_whole(pool: PgPool) -> TestResult {
+    seed(&pool).await?;
+    let long = format!("{}abcdé{}", "word ".repeat(63), " tail".repeat(40));
+    sqlx::query(
+        "update rh_summaries set content = $1 where id = '00000000-0000-4000-8000-000000000011'",
+    )
+    .bind(&long)
+    .execute(&pool)
+    .await?;
+    let memory = PostgresMemory::new(pool);
+    let owner = SummaryOwner::Session("cli:dag".to_owned());
+    let full = memory.summary_dag(&owner).await?;
+    let outline = memory.summary_outline(&owner).await?;
+    assert_eq!(outline, full.clone().outline());
+    let first = outline.summaries.get(1).expect("first leaf");
+    assert!(
+        first.truncated && long.starts_with(&first.content) && first.content.len() < long.len()
+    );
+    assert_eq!(first.source_message_ids, Vec::<String>::new());
+    let whole = memory
+        .summary_node(&owner, "00000000-0000-4000-8000-000000000011")
+        .await?
+        .expect("first leaf");
+    assert_eq!(Some(&whole), full.summaries.get(1));
+    assert_eq!(
+        memory
+            .summary_node(&owner, "00000000-0000-4000-8000-000000000015")
+            .await?,
+        None
+    );
+    Ok(())
+}
