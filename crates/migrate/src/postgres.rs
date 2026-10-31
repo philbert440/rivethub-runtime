@@ -25,7 +25,48 @@ pub async fn postgres(url: &str) -> Result<Status, Error> {
 pub async fn postgres_pool(pool: &PgPool) -> Result<Status, Error> {
     POSTGRES.run(pool).await.map_err(Error::PostgresMigrate)?;
     require_tracked(pool).await?;
+    backfill(pool).await?;
     postgres_status_pool(pool).await
+}
+
+const COUNT_BUDGET: i32 = 20_000;
+const SAID_BATCH: i32 = 5_000;
+
+async fn backfill(pool: &PgPool) -> Result<(), Error> {
+    let present: bool = sqlx::query_scalar(
+        "SELECT to_regprocedure('rh_backfill_message_counts(integer)') IS NOT NULL",
+    )
+    .fetch_one(pool)
+    .await
+    .map_err(Error::PostgresBackfill)?;
+    if !present {
+        return Ok(());
+    }
+    loop {
+        let left: i64 = sqlx::query_scalar("SELECT rh_backfill_message_counts($1)")
+            .bind(COUNT_BUDGET)
+            .fetch_one(pool)
+            .await
+            .map_err(Error::PostgresBackfill)?;
+        if left == 0 {
+            break;
+        }
+    }
+    let mut after: Option<sqlx::types::Uuid> = None;
+    loop {
+        let last: Option<sqlx::types::Uuid> =
+            sqlx::query_scalar("SELECT rh_backfill_chunk_said($1, $2)")
+                .bind(after)
+                .bind(SAID_BATCH)
+                .fetch_one(pool)
+                .await
+                .map_err(Error::PostgresBackfill)?;
+        if last.is_none() {
+            break;
+        }
+        after = last;
+    }
+    Ok(())
 }
 
 pub async fn postgres_status(url: &str) -> Result<Status, Error> {

@@ -18,7 +18,7 @@ use chrono::Utc;
 use kernel::terminal::{TermSize, TerminalId, TerminalMux};
 use kernel::topics::DeliveredVia;
 use parking_lot::RwLock;
-use tokio::sync::{mpsc, oneshot, watch};
+use tokio::sync::{mpsc, watch};
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
 use wire::gateway::term::{
     Mux, PtyInfo, PtyState, TermCommand, TermConfig, TermSpawnRequest, TermSpawnResponse,
@@ -371,11 +371,7 @@ impl TerminalService {
                 })
                 .clone()
         };
-        let (reply, result) = oneshot::channel();
-        handle.send(Command::Spawn { launch, reply }).await?;
-        result
-            .await
-            .map_err(|_| ApiError::Unavailable("terminal actor closed".into()))?
+        handle.ask(|reply| Command::Spawn { launch, reply }).await
     }
 
     pub(crate) fn find(
@@ -473,13 +469,7 @@ impl TerminalService {
 
     pub async fn kill(&self, user: &UserId, id: &str) -> Result<(), ApiError> {
         match self.find(user, Some(id), None) {
-            Ok((_, handle)) => {
-                let (reply, result) = oneshot::channel();
-                handle.send(Command::Kill { reply }).await?;
-                result
-                    .await
-                    .map_err(|_| ApiError::Unavailable("terminal actor closed".into()))?
-            }
+            Ok((_, handle)) => handle.ask(|reply| Command::Kill { reply }).await,
             Err(ApiError::NotFound(_)) => self.kill_remembered(user, id).await,
             Err(error) => Err(error),
         }

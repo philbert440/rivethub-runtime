@@ -9,10 +9,7 @@ use kernel::memory::MemoryBrowseOrder;
 use kernel::memory::MemoryEntry;
 use kernel::memory::MemoryHitSource;
 use kernel::memory::MemoryScope;
-use kernel::memory::MemoryStatsResponse;
-use kernel::memory::RecentSession;
 use kernel::memory::SearchMode;
-use kernel::memory::TopTool;
 use kernel::memory::budget::push_within_budget;
 use kernel::memory::budget::relative_when;
 use kernel::memory_core::TimeRange;
@@ -112,30 +109,6 @@ fn stored_json(raw: Option<String>, column: &'static str) -> Result<Option<JsonO
     serde_json::from_str(&text)
         .map(Some)
         .map_err(|source| Error::stored(column, source))
-}
-
-const TOP_TOOLS: usize = 12;
-
-#[derive(Default, sqlx::FromRow)]
-struct ToolGroup {
-    tool_name: Option<String>,
-    total: i64,
-    tool_calls: i64,
-    embedded: i64,
-    queued: i64,
-    failed: i64,
-}
-
-#[derive(sqlx::FromRow)]
-struct OtherTotals {
-    conversations: i64,
-    summaries: i64,
-    queued: i64,
-    failed: i64,
-}
-
-fn count(value: i64) -> Result<u64, Error> {
-    u64::try_from(value).map_err(|source| Error::protocol(source.to_string()))
 }
 
 fn filter_bounds(filter: &BrowseFilter) -> Result<TimeRange, Error> {
@@ -239,79 +212,6 @@ impl crate::PostgresMemory {
         .map(MemoryEntry::try_from)
         .transpose()?;
         Ok(record)
-    }
-
-    pub async fn memory_stats(&self) -> Result<MemoryStatsResponse, Error> {
-        let groups = sqlx::query_as::<_, ToolGroup>(
-            "select tool_name, count(*) as total,
-                    count(*) filter (where role = 'tool' or tool_name is not null) as tool_calls,
-                    count(embedding) as embedded,
-                    count(*) filter (where embedding is null and embed_status is distinct from 'unembeddable'
-                        and embed_status is distinct from 'failed'
-                        and (content <> '' or tool_result <> '')) as queued,
-                    count(*) filter (where embed_status = 'failed') as failed
-               from rh_messages group by tool_name",
-        )
-        .fetch_all(&self.pool);
-        let others = sqlx::query_as::<_, OtherTotals>(
-            "select (select count(*) from rh_conversations) as conversations,
-                    count(*) as summaries,
-                    count(*) filter (where embedding is null and embed_status is distinct from 'unembeddable'
-                        and embed_status is distinct from 'failed') as queued,
-                    count(*) filter (where embed_status = 'failed') as failed
-               from rh_summaries",
-        )
-        .fetch_one(&self.pool);
-        let recent = sqlx::query!(
-            "select c.id::text as \"session_id!\", c.title, c.agent, c.updated_at,
-                    (select count(*) from rh_messages m where m.conversation_id = c.id)
-                      as \"messages!\"
-               from rh_conversations c order by c.updated_at desc limit 12"
-        )
-        .fetch_all(&self.pool);
-        let (groups, others, session_rows) = futures::future::try_join3(groups, others, recent)
-            .await
-            .map_err(|source| Error::operation("stats", source))?;
-        let mut messages = ToolGroup::default();
-        let mut top_tools = Vec::new();
-        for group in groups {
-            messages.total += group.total;
-            messages.tool_calls += group.tool_calls;
-            messages.embedded += group.embedded;
-            messages.queued += group.queued;
-            messages.failed += group.failed;
-            if let Some(tool) = group.tool_name {
-                top_tools.push(TopTool {
-                    tool,
-                    count: count(group.total)?,
-                });
-            }
-        }
-        top_tools.sort_by(|a, b| b.count.cmp(&a.count).then_with(|| a.tool.cmp(&b.tool)));
-        top_tools.truncate(TOP_TOOLS);
-        let recent_sessions: Vec<RecentSession> = session_rows
-            .into_iter()
-            .map(|row| -> Result<RecentSession, Error> {
-                Ok(RecentSession {
-                    session_id: row.session_id,
-                    title: row.title,
-                    agent: row.agent,
-                    last_active: row.updated_at,
-                    messages: count(row.messages)?,
-                })
-            })
-            .collect::<Result<_, _>>()?;
-        Ok(MemoryStatsResponse {
-            conversations: count(others.conversations)?,
-            messages: count(messages.total)?,
-            tool_calls: count(messages.tool_calls)?,
-            summaries: count(others.summaries)?,
-            embed_queue_depth: count(messages.queued + others.queued)?,
-            embedded_messages: count(messages.embedded)?,
-            failed_embeddings: count(messages.failed + others.failed)?,
-            top_tools,
-            recent_sessions,
-        })
     }
 
     #[expect(clippy::too_many_lines, reason = "three sections built in order")]

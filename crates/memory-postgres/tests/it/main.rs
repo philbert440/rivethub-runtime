@@ -2,6 +2,7 @@ mod common;
 
 mod agent_presets;
 mod capture_pg;
+mod counts;
 mod embedding_store;
 mod final_fix;
 mod flagged;

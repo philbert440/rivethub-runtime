@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "insert into rh_message_access (message_id, access_count, last_accessed_at)\n             select m.id, m.access_count + 1, now() from rh_messages m where m.id = any($1)\n             on conflict (message_id) do update\n                set access_count = rh_message_access.access_count + 1, last_accessed_at = now()",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "UuidArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "783ba5113c57bda662f51a209430e4ab3e0b2bcd356cd8bc4ff93efaf61a122c"
+}
