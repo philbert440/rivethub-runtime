@@ -140,15 +140,15 @@ impl PostgresMemory {
     }
 
     pub async fn connect(url: &str) -> Result<Self, Error> {
-        let pool = open_pool(url, POOL_CONNECTIONS, Some(Duration::from_secs(30)))
+        let pool = open_pool(url, POOL_CONNECTIONS, Some(Pooling::OnDemand.idle()))
             .await
             .map_err(Error::Connection)?;
         Self::prepare(&pool).await?;
         Ok(Self::new(pool))
     }
 
-    pub async fn connect_deferred(url: &str) -> Result<Self, Error> {
-        let options = pool_options(POOL_CONNECTIONS, Some(Duration::from_secs(30)));
+    pub async fn connect_deferred(url: &str, pooling: Pooling) -> Result<Self, Error> {
+        let options = pool_options(POOL_CONNECTIONS, Some(pooling.idle()));
         match options.connect(url).await {
             Ok(pool) => {
                 Self::prepare(&pool).await?;
@@ -159,7 +159,7 @@ impl PostgresMemory {
                     %error,
                     "the memory database is unreachable; memory stays unavailable until it answers"
                 );
-                let pool = lazy_pool(url, POOL_CONNECTIONS, Some(Duration::from_secs(30)))
+                let pool = lazy_pool(url, POOL_CONNECTIONS, Some(pooling.idle()))
                     .map_err(Error::Connection)?;
                 tokio::spawn(check_when_reachable(pool.clone()));
                 Ok(Self {
@@ -212,6 +212,21 @@ impl PostgresMemory {
 
 const RECHECK: Duration = Duration::from_secs(5);
 const POOL_CONNECTIONS: u32 = 16;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Pooling {
+    OnDemand,
+    Serving,
+}
+
+impl Pooling {
+    const fn idle(self) -> Duration {
+        match self {
+            Self::OnDemand => Duration::from_secs(30),
+            Self::Serving => Duration::from_secs(600),
+        }
+    }
+}
 
 async fn check_when_reachable(pool: PgPool) {
     loop {

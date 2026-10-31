@@ -178,8 +178,14 @@ pub(super) fn filed_session(filed: FiledSession) -> TopicSession {
         node: filed.node,
         parent_session_id: filed.lineage.as_ref().map(|lineage| lineage.parent.clone()),
         task_id: filed.lineage.map(|lineage| lineage.task.to_string()),
-        visibility: None,
-        visibility_mark: None,
+        visibility: filed
+            .visibility
+            .as_ref()
+            .map(|state| state.effective.as_str().to_owned()),
+        visibility_mark: filed
+            .visibility
+            .and_then(|state| state.mark)
+            .map(|mark| mark.as_str().to_owned()),
     }
 }
 

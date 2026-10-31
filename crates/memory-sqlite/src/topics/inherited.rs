@@ -93,5 +93,6 @@ fn session(row: Row) -> Result<FiledSession, TopicError> {
                 .map_err(|error| stored("parent_session_id")(Box::new(error)))?,
             task: Uuid::parse_str(&row.task).map_err(|error| stored("task id")(Box::new(error)))?,
         }),
+        visibility: None,
     })
 }

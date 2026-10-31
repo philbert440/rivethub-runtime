@@ -14,6 +14,7 @@ use tokio_util::task::TaskTracker;
 
 use crate::Exit;
 use crate::service::{StartupError, load, postgres, report};
+use memory_postgres::Pooling;
 
 #[derive(Debug, Error)]
 pub(crate) enum SidecarError {
@@ -148,8 +149,8 @@ async fn run(
     let config = read_config(env).await?;
     let selected = select(&config)?;
     crate::identity::announce_resolved("mcp", &config, env).map_err(StartupError::from)?;
-    let memory =
-        Arc::new(postgres(&config, env, &shutdown, activities).await?) as Arc<dyn MemoryStore>;
+    let memory = Arc::new(postgres(&config, env, &shutdown, activities, Pooling::OnDemand).await?)
+        as Arc<dyn MemoryStore>;
     let scope = crate::composition::identities::load(&config, env)
         .await?
         .owner_scope();

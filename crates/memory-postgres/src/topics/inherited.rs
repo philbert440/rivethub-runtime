@@ -33,17 +33,27 @@ WITH RECURSIVE inherited AS (
        AND NOT EXISTS (SELECT 1 FROM rh_session_placements own WHERE own.session_id = i.session_id)
 )
 SELECT i.session_id, i.parent, i.task, i.node, i.topic_id, i.placed_by, i.placed_at,
-       i.owner_user_id, seen.title, seen.last_active
+       i.owner_user_id, seen.title, seen.last_active, seen.owner AS session_owner,
+       m.visibility AS mark,
+       coalesce(seen.visibility,
+                rh_member_visibility(rh_scope_principal(),
+                    coalesce(m.visibility, rh_owner_default(rh_scope_principal(), now())))) AS effective
   FROM inherited i
   LEFT JOIN LATERAL (
       SELECT max(c.updated_at) AS last_active,
              (array_agg(c.title ORDER BY c.updated_at DESC)
-                FILTER (WHERE c.title IS NOT NULL))[1] AS title
+                FILTER (WHERE c.title IS NOT NULL))[1] AS title,
+             (array_agg(c.owner_user_id ORDER BY c.created_at)
+                FILTER (WHERE c.session_key = i.session_id))[1] AS owner,
+             (array_agg(c.visibility ORDER BY c.created_at)
+                FILTER (WHERE c.session_key = i.session_id))[1] AS visibility
         FROM rh_conversations c
        WHERE c.session_key IN (i.session_id,
              CASE WHEN starts_with(i.session_id, $2)
                   THEN substr(i.session_id, length($2) + 1) END)
   ) seen ON true
+  LEFT JOIN rh_session_marks m
+         ON m.session_key = i.session_id AND m.owner_user_id = rh_scope_principal()
  WHERE NOT EXISTS (SELECT 1 FROM rh_session_placements own WHERE own.session_id = i.session_id)
 ";
 
@@ -88,6 +98,14 @@ fn session(row: &sqlx::postgres::PgRow) -> Result<FiledSession, TopicError> {
             parent: id(parent, "parent")?,
             task: row.try_get("task").map_err(read("task"))?,
         }),
+        visibility: super::rows::session_visibility(
+            row.try_get("session_owner")
+                .map_err(read("session_owner"))?,
+            row.try_get::<Option<String>, _>("mark")
+                .map_err(read("mark"))?
+                .as_deref(),
+            row.try_get("effective").map_err(read("effective"))?,
+        )?,
     })
 }
 
