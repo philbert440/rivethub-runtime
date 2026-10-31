@@ -368,7 +368,11 @@ impl HarnessAdapter for AcpHarnessAdapter {
         Ok(canonical)
     }
 
-    async fn resume(&self, session: &SessionId) -> Result<(), HarnessAdapterError> {
+    async fn resume(
+        &self,
+        session: &SessionId,
+        cwd: Option<&std::path::Path>,
+    ) -> Result<(), HarnessAdapterError> {
         let native = identity::from_canonical(session).map_err(port)?;
         let command = self.session_command(native.harness(), session)?;
         {
@@ -379,7 +383,7 @@ impl HarnessAdapter for AcpHarnessAdapter {
                 }));
             }
         }
-        let working_dir = self.resume_dir(&command)?;
+        let working_dir = cwd.map_or_else(|| self.resume_dir(&command), |cwd| Ok(cwd.into()))?;
         let protocol_session = acp::SessionId::new(native.native());
         let agent = crate::connection::start_loaded(&command, &working_dir, &protocol_session)
             .await

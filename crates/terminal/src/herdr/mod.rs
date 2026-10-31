@@ -252,12 +252,20 @@ impl HerdrSession {
         };
         let socket = paths::session_socket(&setup.config_home, &name)?;
         tokio::fs::create_dir_all(&setup.config_home).await?;
+        let mut server = None;
         if !tokio::fs::try_exists(&socket).await? {
-            server_command(&cli.binary, &setup.config_home, cli.server())
+            let said = paths::server_errors(&socket);
+            if let Some(dir) = said.parent() {
+                tokio::fs::create_dir_all(dir).await?;
+            }
+            let stderr = std::fs::File::create(&said)?;
+            let child = server_command(&cli.binary, &setup.config_home, cli.server())
+                .stderr(stderr)
                 .spawn()
                 .map_err(Error::Io)?;
+            server = Some(paths::Starting { child, said });
         }
-        paths::wait_for_socket(&socket, SERVER_OPEN_TIMEOUT, &name).await?;
+        paths::wait_for_socket(&socket, SERVER_OPEN_TIMEOUT, &name, server.as_mut()).await?;
         let client = HerdrClient::new(&socket);
         client
             .workspace_create(codec::WorkspaceCreateParams {

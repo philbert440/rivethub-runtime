@@ -81,7 +81,11 @@ impl HarnessAdapter for FakeHarness {
         Ok(spec.session)
     }
 
-    async fn resume(&self, session: &SessionId) -> Result<(), HarnessAdapterError> {
+    async fn resume(
+        &self,
+        session: &SessionId,
+        _cwd: Option<&std::path::Path>,
+    ) -> Result<(), HarnessAdapterError> {
         let mut sessions = self.sessions.lock().await;
         if !sessions.contains_key(session) {
             let (tx, rx) = tokio::sync::mpsc::channel(16);

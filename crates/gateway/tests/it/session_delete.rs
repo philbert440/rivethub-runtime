@@ -112,6 +112,7 @@ impl SessionLister for Stores {
 
 struct Setup {
     fixture: Fixture,
+    harness: Arc<Harness>,
     deletion: Arc<FakeSessionDeletion>,
     _state: tempfile::TempDir,
 }
@@ -127,7 +128,7 @@ async fn setup(owners: &str, stores: Stores, deletion: FakeSessionDeletion) -> S
     let harness = Arc::new(Harness::offering(&[HarnessId::ClaudeCode]));
     let deletion = Arc::new(deletion);
     let fixture = Fixture::with_deletion(
-        Some(harness),
+        Some(harness.clone()),
         registry,
         Some(Arc::new(stores)),
         &[],
@@ -136,6 +137,7 @@ async fn setup(owners: &str, stores: Stores, deletion: FakeSessionDeletion) -> S
     .await;
     Setup {
         fixture,
+        harness,
         deletion,
         _state: state,
     }
@@ -156,6 +158,13 @@ async fn call(
         token,
     )
     .await
+}
+
+async fn mid_turn(setup: &Setup, session: &SessionId) {
+    let path = format!("/api/harness-sessions/{session}/turn");
+    let (status, body) = call(setup, "POST", &path, r#"{"text":"hi"}"#, None).await;
+    assert_eq!(status, 200, "{}", String::from_utf8_lossy(&body));
+    setup.harness.traced("prompt:hi").await;
 }
 
 fn parsed<T: serde::de::DeserializeOwned>(body: &[u8]) -> T {
@@ -298,7 +307,7 @@ async fn a_percent_encoded_canonical_id_is_accepted() {
 }
 
 #[tokio::test]
-async fn a_live_session_is_refused_and_nothing_is_removed() {
+async fn a_session_mid_turn_is_refused_and_nothing_is_removed() {
     let setup = setup("{}", Stores::default(), FakeSessionDeletion::default()).await;
     let (status, body) = call(
         &setup,
@@ -310,6 +319,7 @@ async fn a_live_session_is_refused_and_nothing_is_removed() {
     .await;
     assert_eq!(status, 200, "{}", String::from_utf8_lossy(&body));
     let live = parsed::<HarnessSessionSummary>(&body).session_id;
+    mid_turn(&setup, &live).await;
     let (status, body) = call(
         &setup,
         "DELETE",
@@ -427,6 +437,7 @@ async fn the_bulk_endpoint_refuses_a_live_session_without_failing_the_batch() {
     )
     .await;
     let live = parsed::<HarnessSessionSummary>(&body).session_id;
+    mid_turn(&setup, &live).await;
     let request = format!(r#"{{"sessions":["{live}","claude-code:s-idle"]}}"#);
     let (status, body) = call(&setup, "POST", "/api/sessions/delete", &request, None).await;
     assert_eq!(status, 200);
@@ -440,6 +451,35 @@ async fn the_bulk_endpoint_refuses_a_live_session_without_failing_the_batch() {
         Some(SessionDeleteResult::Deleted(_))
     ));
     assert_eq!(setup.deletion.deleted_by(&live), None);
+}
+
+#[tokio::test]
+async fn a_chat_at_rest_is_ended_and_deleted() {
+    let stores = Stores {
+        rows: vec![row("s-chat", hours_ago(2))],
+        ..Stores::default()
+    };
+    let setup = setup("{}", stores, FakeSessionDeletion::default()).await;
+    let chat = claude("s-chat");
+    mid_turn(&setup, &chat).await;
+    setup.harness.finish.add_permits(1);
+    let request = format!(r#"{{"sessions":["{chat}"]}}"#);
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            let (_, body) = call(&setup, "POST", "/api/sessions/delete", &request, None).await;
+            match parsed::<SessionDeleteResults>(&body).results.first() {
+                Some(SessionDeleteResult::Deleted(_)) => return,
+                Some(SessionDeleteResult::Refused(refused))
+                    if refused.error == SessionDeleteError::Live => {}
+                other => panic!("{other:?}"),
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("the chat comes to rest and is deleted");
+    setup.harness.traced("release").await;
+    assert!(setup.deletion.deleted_by(&chat).is_some());
 }
 
 fn tool_turn() -> HarnessTranscriptTurn {

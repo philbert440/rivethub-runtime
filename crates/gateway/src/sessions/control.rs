@@ -426,7 +426,10 @@ impl ChatActor {
             }
             self.approval = None;
             self.surface = Surface::Idle;
-            self.harness.resume(&self.session).await?;
+            if let Err(error) = self.resume().await {
+                self.queued.clear();
+                return self.turn_failed(&error);
+            }
             self.surface = Surface::Chat;
             self.events = Some(self.harness.events(&self.session).await?);
         }

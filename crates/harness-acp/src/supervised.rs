@@ -242,8 +242,12 @@ impl HarnessAdapter for HeadlessHarness {
         self.ready()?.new_session(spec).await
     }
 
-    async fn resume(&self, session: &SessionId) -> Result<(), HarnessAdapterError> {
-        self.ready()?.resume(session).await
+    async fn resume(
+        &self,
+        session: &SessionId,
+        cwd: Option<&std::path::Path>,
+    ) -> Result<(), HarnessAdapterError> {
+        self.ready()?.resume(session, cwd).await
     }
 
     async fn prompt(
