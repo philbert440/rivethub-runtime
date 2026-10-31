@@ -17,6 +17,24 @@ use crate::topics::TopicId;
 
 pub const WIKI_PIPELINE_VERSION: i32 = 4;
 
+pub const BACKFILL_PRIORITY: i16 = 50;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BackfillBudget {
+    pub idle: u32,
+    pub busy: u32,
+}
+
+impl BackfillBudget {
+    #[must_use]
+    pub const fn flat(jobs: u32) -> Self {
+        Self {
+            idle: jobs,
+            busy: jobs,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ExtractWiki {
@@ -116,7 +134,10 @@ pub enum WikiStoreError {
 pub trait WikiBuilderStore: Send + Sync {
     async fn wiki_work(&self, job: &ExtractWiki) -> Result<WikiWork, WikiStoreError>;
 
-    async fn wiki_backfill(&self, limit: u32) -> Result<Vec<ExtractWiki>, WikiStoreError>;
+    async fn wiki_backfill(
+        &self,
+        budget: BackfillBudget,
+    ) -> Result<Vec<ExtractWiki>, WikiStoreError>;
 
     async fn apply_wiki(
         &self,

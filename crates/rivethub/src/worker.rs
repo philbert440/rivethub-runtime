@@ -140,7 +140,8 @@ async fn run(
             .queue()
             .await
             .map_err(StartupError::from)?
-            .flagging_after(settings.flag_after);
+            .flagging_after(settings.flag_after)
+            .claiming_at_most(settings.claim_ceiling);
         let targets: Arc<dyn EmbeddingStore> = memory.clone();
         let summaries: Arc<dyn SummaryStore> = memory.clone();
         let wiki: Arc<dyn WikiBuilderStore> = memory.clone();
@@ -166,6 +167,9 @@ async fn run(
                 decisions,
                 tidy,
                 lineage: session_lineage(env),
+                load: crate::model_load::VllmMetrics::from_environment(env)
+                    .map_err(|error| RootError::Invalid(format!("model load probe: {error}")))?
+                    .map(|probe| Arc::new(probe) as Arc<dyn kernel::model::ModelLoadProbe>),
             },
             &config,
             env,
@@ -213,6 +217,7 @@ pub struct WorkerPorts<Q> {
     pub decisions: Arc<dyn DecisionStore>,
     pub tidy: Arc<dyn TidyStore>,
     pub lineage: Arc<dyn SessionLister>,
+    pub load: Option<Arc<dyn kernel::model::ModelLoadProbe>>,
 }
 
 pub(crate) fn session_lineage(env: &Environment) -> Arc<dyn SessionLister> {
@@ -267,6 +272,7 @@ pub fn with_models<Q: JobQueue + 'static>(
         consolidate: ports.consolidate,
         recompile: ports.recompile,
         model,
+        load: ports.load,
     })
     .with_topic_pages(Arc::clone(&ports.topics), ports.pages, ports.decisions)
     .with_tidy(ports.tidy)

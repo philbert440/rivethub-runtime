@@ -10,8 +10,9 @@ use chrono::{DateTime, Utc};
 use kernel::owner::Owner;
 use kernel::topics::Slug;
 use kernel::wiki::builder::{
-    DeferredWiki, ExtractWiki, HeldEntity, WIKI_PIPELINE_VERSION, WikiBuilderStore, WikiRouting,
-    WikiStoreError, WikiSummary, WikiWork, WikiWriteError,
+    BACKFILL_PRIORITY, BackfillBudget, DeferredWiki, ExtractWiki, HeldEntity,
+    WIKI_PIPELINE_VERSION, WikiBuilderStore, WikiRouting, WikiStoreError, WikiSummary, WikiWork,
+    WikiWriteError,
 };
 use kernel::wiki::page::WikiPatch;
 use kernel::wiki::page::WikiSlug;
@@ -52,17 +53,34 @@ impl WikiBuilderStore for PostgresMemory {
         Ok(WikiWork::Pending(summary))
     }
 
-    async fn wiki_backfill(&self, limit: u32) -> Result<Vec<ExtractWiki>, WikiStoreError> {
+    async fn wiki_backfill(
+        &self,
+        budget: BackfillBudget,
+    ) -> Result<Vec<ExtractWiki>, WikiStoreError> {
         let rows = sqlx::query_as::<_, BackfillRow>(
             "SELECT s.id, s.conversation_id FROM rh_summaries s
+             LEFT JOIN rh_conversations c ON c.id = s.conversation_id
              LEFT JOIN rh_wiki_extractions e ON e.summary_id = s.id
-             WHERE (e.summary_id IS NULL OR e.status = 'failed'
-                OR (e.status = 'done' AND (e.pipeline_version < $1 OR (cardinality(e.topics_touched) > 0 AND e.git_sha IS NULL))))
+             WHERE s.kind = 'leaf'
+               AND (c.id IS NULL OR c.session_key NOT LIKE 'heartbeat:%')
+               AND (e.summary_id IS NULL OR e.status = 'failed'
+                    OR (e.status = 'done' AND cardinality(e.topics_touched) > 0 AND e.git_sha IS NULL))
                AND NOT EXISTS (SELECT 1 FROM rh_flagged_jobs f WHERE f.job_key = 'wiki-ext-' || s.id::text)
-             ORDER BY s.created_at, s.id LIMIT $2",
+               AND NOT EXISTS (SELECT 1 FROM graphile_worker._private_jobs j WHERE j.key = 'wiki-ext-' || s.id::text)
+             ORDER BY s.created_at DESC, s.id
+             LIMIT greatest(0, (SELECT CASE WHEN EXISTS (
+                         SELECT 1 FROM graphile_worker._private_jobs n
+                         JOIN graphile_worker._private_tasks t ON t.id = n.task_id
+                         WHERE n.is_available AND n.run_at <= now()
+                           AND ((t.identifier = 'extract-wiki' AND n.priority < $3)
+                             OR (t.identifier = 'compact-conversation' AND n.priority < 0)))
+                       THEN $2 ELSE $1 END)
+                     - (SELECT count(*) FROM graphile_worker._private_jobs q
+                         WHERE q.key LIKE 'wiki-ext-%' AND q.priority = $3))",
         )
-        .bind(WIKI_PIPELINE_VERSION)
-        .bind(i64::from(limit))
+        .bind(i64::from(budget.idle))
+        .bind(i64::from(budget.busy))
+        .bind(BACKFILL_PRIORITY)
         .fetch_all(&self.pool)
         .await
         .map_err(query_error)?;

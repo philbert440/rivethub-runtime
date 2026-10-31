@@ -3,6 +3,7 @@ pub(crate) const CLAIM: &str = "WITH available AS MATERIALIZED (
     JOIN graphile_worker._private_tasks t ON t.id = j.task_id
     WHERE t.identifier = ANY($1)
       AND ($2::bigint IS NULL OR j.id = $2)
+      AND ($4::smallint IS NULL OR j.priority <= $4)
       AND j.is_available = true
       AND j.run_at <= now()
       AND (j.job_queue_id IS NULL OR EXISTS (
@@ -18,6 +19,7 @@ pub(crate) const CLAIM: &str = "WITH available AS MATERIALIZED (
     JOIN graphile_worker._private_tasks t ON t.id = j.task_id
     WHERE t.identifier = ANY($1)
       AND ($2::bigint IS NULL OR j.id = $2)
+      AND ($4::smallint IS NULL OR j.priority <= $4)
       AND j.locked_at < now() - interval '4 hours'
       AND j.attempts < j.max_attempts
       AND j.run_at <= now()

@@ -539,6 +539,7 @@ async fn all_claims_every_role_that_has_a_handler() {
             consolidate: None,
             recompile: None,
             model: "wiki-model".to_owned(),
+            load: None,
         }),
     );
     rig.store

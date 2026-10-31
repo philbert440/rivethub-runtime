@@ -73,6 +73,7 @@ pub(crate) struct GraphileQueue {
     pool: PgPool,
     worker: String,
     flag_after: u32,
+    claim_ceiling: Option<i16>,
 }
 
 impl GraphileQueue {
@@ -81,11 +82,17 @@ impl GraphileQueue {
             pool,
             worker: uuid::Uuid::new_v4().to_string(),
             flag_after: kernel::flagged::FLAG_AFTER_FAILURES,
+            claim_ceiling: None,
         }
     }
 
     pub(crate) fn flagging_after(mut self, failures: u32) -> Self {
         self.flag_after = failures;
+        self
+    }
+
+    pub(crate) fn claiming_at_most(mut self, priority: Option<i16>) -> Self {
+        self.claim_ceiling = priority;
         self
     }
 
@@ -139,6 +146,7 @@ impl GraphileQueue {
             .bind(&tasks)
             .bind(only_id.map(i64::from))
             .bind(&locked_by)
+            .bind(self.claim_ceiling)
             .fetch_optional(&self.pool)
             .await
             .map_err(|source| Error::operation("claim", source))?;

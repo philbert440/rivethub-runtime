@@ -51,6 +51,13 @@ impl PostgresQueue {
     }
 
     #[must_use]
+    pub fn claiming_at_most(self, priority: Option<i16>) -> Self {
+        Self {
+            inner: self.inner.claiming_at_most(priority),
+        }
+    }
+
+    #[must_use]
     pub fn task_list(role: WorkerRole) -> &'static [JobName] {
         role.task_list()
     }

@@ -27,7 +27,10 @@ impl WikiBuilderStore for WikiStore {
             .ok_or(WikiStoreError::Missing(job.summary_id))
     }
 
-    async fn wiki_backfill(&self, limit: u32) -> Result<Vec<ExtractWiki>, WikiStoreError> {
+    async fn wiki_backfill(
+        &self,
+        budget: kernel::wiki::builder::BackfillBudget,
+    ) -> Result<Vec<ExtractWiki>, WikiStoreError> {
         Ok(self
             .work
             .lock()
@@ -40,7 +43,7 @@ impl WikiBuilderStore for WikiStore {
                 }),
                 WikiWork::Complete { .. } => None,
             })
-            .take(usize::try_from(limit).expect("test limit"))
+            .take(usize::try_from(budget.idle).expect("test limit"))
             .collect())
     }
 
