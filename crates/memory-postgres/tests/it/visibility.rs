@@ -498,3 +498,35 @@ async fn the_categorizer_files_a_session_captured_under_its_bare_key(pool: PgPoo
     assert_eq!(owner.as_deref(), Some("alice"));
     Ok(())
 }
+
+#[sqlx::test(migrator = "migrate::POSTGRES")]
+async fn capture_checks_event_ids_through_their_index_under_row_security(
+    pool: PgPool,
+) -> TestResult {
+    seed(&pool).await?;
+    let probe = probe(&pool).await?;
+    let conversation: uuid::Uuid =
+        sqlx::query_scalar("SELECT id FROM rh_conversations WHERE session_key = $1")
+            .bind(FIRST)
+            .fetch_one(&pool)
+            .await?;
+    let plan: Vec<String> = Scope::Viewer(viewer("alice")?)
+        .run(async {
+            sqlx::query_scalar(
+                "EXPLAIN SELECT m.metadata->>'event_id' FROM rh_messages m
+                  WHERE m.conversation_id = $1
+                    AND m.metadata->>'event_id' IN (SELECT unnest($2::text[]))",
+            )
+            .bind(conversation)
+            .bind(vec!["a-new-event".to_owned()])
+            .fetch_all(&probe)
+            .await
+        })
+        .await?;
+    assert!(
+        plan.iter()
+            .any(|line| line.contains("rh_messages_event_id")),
+        "{plan:#?}"
+    );
+    Ok(())
+}

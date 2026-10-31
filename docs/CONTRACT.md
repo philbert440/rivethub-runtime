@@ -1265,6 +1265,13 @@ session's DAG a level at a time: `summaries` the top-level nodes (no parent in t
 `GET /api/memory/summaries/{session}/{summary}/children` answers `{ summaries, total }`: that node's children in the
 same order, cut and counted the same way, with the same `offset` and `limit`, `total` all its children, and `404` for a
 summary outside the session's DAG. Without `tree` the route answers as note 102 says.
+(104) Capture event-id index (Phil, 2026-10-31): Postgres 0051 indexes each message's capture event id per conversation
+(`rh_messages_event_id` on `(conversation_id, (metadata ->> 'event_id'))` where the id is set), so capture's check for
+already-stored event ids probes the index instead of reading every message of a long session. Row-level security lets
+it use that index only when `jsonb_object_field_text` (the `->>` operator) is LEAKPROOF: the migration marks it when it
+runs as a superuser and otherwise refuses with the statement a superuser runs once per database (as 0044 does for the
+text-search operators). On a large store the index can be built first with `CREATE INDEX CONCURRENTLY` under the same
+name and definition; the migration then leaves it as it is.
 
 ## 4. Gaps to close before building the affected slice
 
