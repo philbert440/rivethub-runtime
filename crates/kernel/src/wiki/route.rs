@@ -148,9 +148,21 @@ impl WikiRouter<'_> {
         target: Option<&TopicTarget>,
         patches: Vec<WikiPatch>,
     ) -> Result<Vec<String>, TopicPageError> {
+        self.apply_with(job, summary, Vec::new(), target, patches)
+            .await
+    }
+
+    pub async fn apply_with(
+        &self,
+        job: &ExtractWiki,
+        summary: &WikiSummary,
+        also: Vec<WikiSummary>,
+        target: Option<&TopicTarget>,
+        patches: Vec<WikiPatch>,
+    ) -> Result<Vec<String>, TopicPageError> {
         NoteOrigin::run(
             summary.id,
-            Box::pin(self.apply_notes(job, summary, target, patches)),
+            Box::pin(self.apply_notes(job, summary, also, target, patches)),
         )
         .await
     }
@@ -159,6 +171,7 @@ impl WikiRouter<'_> {
         &self,
         job: &ExtractWiki,
         summary: &WikiSummary,
+        also: Vec<WikiSummary>,
         target: Option<&TopicTarget>,
         patches: Vec<WikiPatch>,
     ) -> Result<Vec<String>, TopicPageError> {
@@ -190,7 +203,7 @@ impl WikiRouter<'_> {
                 routed.notes.push(patch);
             }
         }
-        self.finish(job, summary, target, routed).await
+        self.finish(job, summary, also, target, routed).await
     }
 
     pub async fn apply_deferred(&self) -> Result<Vec<String>, TopicPageError> {
@@ -299,6 +312,7 @@ impl WikiRouter<'_> {
         &self,
         job: &ExtractWiki,
         summary: &WikiSummary,
+        also: Vec<WikiSummary>,
         target: Option<&TopicTarget>,
         mut routed: Routed,
     ) -> Result<Vec<String>, TopicPageError> {
@@ -324,6 +338,7 @@ impl WikiRouter<'_> {
             topic_page: target.map(|topic| topic.page_slug.clone()),
             cited: routed.cited,
             merged: routed.merged,
+            also,
         };
         let mut touched = self
             .wiki

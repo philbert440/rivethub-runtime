@@ -4,6 +4,7 @@ use super::CurrentText;
 use super::TopicTarget;
 use super::WikiRouter;
 use crate::topics::TopicPageError;
+use crate::wiki::builder::WikiSummary;
 use crate::wiki::merge::MergeInput;
 use crate::wiki::merge::Merged;
 use crate::wiki::merge::MergedPage;
@@ -20,6 +21,23 @@ const UPDATED: &str = "Updated";
 const ARTICLE_LIMIT: usize = 14_000;
 
 impl WikiRouter<'_> {
+    pub async fn same_route(
+        &self,
+        lead: &TopicTarget,
+        summary: &WikiSummary,
+    ) -> Result<bool, TopicPageError> {
+        let Some(waits) = self.topics.waits_on(summary).await? else {
+            return Ok(false);
+        };
+        Ok(self
+            .topics
+            .filed_target(&waits, self.now)
+            .await?
+            .is_some_and(|target| {
+                target.page_slug == lead.page_slug && target.section == lead.section
+            }))
+    }
+
     pub(super) async fn with_current(
         &self,
         mut target: TopicTarget,

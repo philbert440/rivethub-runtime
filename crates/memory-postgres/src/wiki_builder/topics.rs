@@ -17,6 +17,7 @@ pub(super) struct Source<'a> {
     pub(super) topic_page: Option<&'a WikiSlug>,
     pub(super) merged: &'a [MergedPage],
     pub(super) home: &'a WikiScope,
+    pub(super) also: &'a [WikiSummary],
 }
 
 pub(super) async fn apply(
@@ -81,6 +82,7 @@ pub(super) async fn apply(
         }],
         allow_shrink: false,
     };
+    cite_also(&mut page_patch, source.also);
     let merge = merge_base(source.merged, &key, note_entry.is_some(), &mut page_patch);
     if let Some(entry) = note_entry {
         page_patch.title = None;
@@ -97,8 +99,32 @@ pub(super) async fn apply(
         .map(|entry| entry.body.clone());
     let applied = repository.apply(page_patch, &summary_id, merge).await?;
     store(tx, &applied.page, &key, Some(home), &applied.git_sha, now).await?;
-    provenance(tx, &key, summary, note, now).await?;
+    for cited_by in std::iter::once(summary).chain(source.also) {
+        provenance(tx, &key, cited_by, note.clone(), now).await?;
+    }
     Ok((key, applied.git_sha))
+}
+
+fn cite_also(page_patch: &mut PagePatch, also: &[WikiSummary]) {
+    let note = page_patch
+        .add_citations
+        .first()
+        .and_then(|first| first.note.clone());
+    for other in also {
+        let id = other.id.to_string();
+        page_patch.add_citations.push(PageCitation {
+            summary_id: id.clone(),
+            date: other.created_at.map(|at| at.date_naive()),
+            kind: Some(CitationKind::Leaf),
+            note: note.clone(),
+        });
+        page_patch.add_sources.push(PageSource {
+            kind: WikiSourceKind::Summary,
+            ids: vec![id],
+            conversation_id: other.conversation_id.map(|id| id.to_string()),
+            extra: wire::Extra::default(),
+        });
+    }
 }
 
 fn resolved(patch: &WikiPatch, gated: &gate::Gated) {
