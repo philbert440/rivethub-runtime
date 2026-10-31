@@ -1,3 +1,4 @@
+pub mod archive;
 mod article;
 pub mod bound;
 mod citations;

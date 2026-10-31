@@ -85,6 +85,10 @@ pub(crate) fn router() -> Router<Arc<Gateway>> {
             "/api/wiki/{slug}/archive",
             get(archive_raw).fallback(super::method_not_allowed),
         )
+        .route(
+            "/api/wiki/{slug}/archive/{month}",
+            get(archive_month_raw).fallback(super::method_not_allowed),
+        )
         .route("/wiki", get(index).fallback(super::method_not_allowed))
         .route("/wiki/", get(index).fallback(super::method_not_allowed))
         .route(
@@ -94,6 +98,10 @@ pub(crate) fn router() -> Router<Arc<Gateway>> {
         .route(
             "/wiki/{slug}/archive",
             get(archive_html).fallback(super::method_not_allowed),
+        )
+        .route(
+            "/wiki/{slug}/archive/{month}",
+            get(archive_month_html).fallback(super::method_not_allowed),
         )
 }
 
@@ -133,42 +141,58 @@ async fn archive_raw(
     State(gateway): State<Arc<Gateway>>,
     Path(slug): Path<String>,
 ) -> Result<Response, WikiError> {
-    let slug = requested_slug(slug)?;
-    Ok(
-        match gateway
-            .store()
-            .wiki_archive(&slug)
-            .await
-            .map_err(ApiError::from)?
-        {
-            Some(markdown) => (
-                [(header::CONTENT_TYPE, "text/markdown; charset=utf-8")],
-                markdown,
-            )
-                .into_response(),
-            None => (StatusCode::NOT_FOUND, Json(archive_missing())).into_response(),
-        },
-    )
+    archive(&gateway, slug, None, Format::Raw).await
+}
+
+async fn archive_month_raw(
+    State(gateway): State<Arc<Gateway>>,
+    Path((slug, month)): Path<(String, String)>,
+) -> Result<Response, WikiError> {
+    archive(&gateway, slug, Some(month), Format::Raw).await
 }
 
 async fn archive_html(
     State(gateway): State<Arc<Gateway>>,
     Path(slug): Path<String>,
 ) -> Result<Response, WikiError> {
+    archive(&gateway, slug, None, Format::Html).await
+}
+
+async fn archive_month_html(
+    State(gateway): State<Arc<Gateway>>,
+    Path((slug, month)): Path<(String, String)>,
+) -> Result<Response, WikiError> {
+    archive(&gateway, slug, Some(month), Format::Html).await
+}
+
+async fn archive(
+    gateway: &Gateway,
+    slug: String,
+    month: Option<String>,
+    format: Format,
+) -> Result<Response, WikiError> {
     let slug = requested_slug(slug)?;
-    Ok(
-        match gateway
-            .store()
-            .wiki_archive(&slug)
-            .await
-            .map_err(ApiError::from)?
-        {
-            Some(markdown) => {
-                html::response(StatusCode::OK, html::archive(slug.as_ref(), &markdown)?)
-            }
-            None => html::response(StatusCode::NOT_FOUND, html::missing(&archive_missing())?),
-        },
-    )
+    let markdown = gateway
+        .store()
+        .wiki_archive(&slug, month.as_deref())
+        .await
+        .map_err(ApiError::from)?;
+    Ok(match (markdown, format) {
+        (Some(markdown), Format::Html) => {
+            html::response(StatusCode::OK, html::archive(slug.as_ref(), &markdown)?)
+        }
+        (Some(markdown), Format::Raw | Format::Json) => (
+            [(header::CONTENT_TYPE, "text/markdown; charset=utf-8")],
+            markdown,
+        )
+            .into_response(),
+        (None, Format::Html) => {
+            html::response(StatusCode::NOT_FOUND, html::missing(&archive_missing())?)
+        }
+        (None, Format::Raw | Format::Json) => {
+            (StatusCode::NOT_FOUND, Json(archive_missing())).into_response()
+        }
+    })
 }
 
 fn archive_missing() -> WikiMissBody {

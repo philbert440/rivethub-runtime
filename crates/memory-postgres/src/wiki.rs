@@ -9,6 +9,9 @@ use kernel::wiki::WikiSource;
 use kernel::wiki::WikiTopic;
 use kernel::wiki::WikiTopicList;
 use kernel::wiki::page::WikiSlug;
+use kernel::wiki::page::archive::{
+    ARCHIVE_DIRECTORY, archive_directory, archive_path, legacy_archive_path, parse_archive_month,
+};
 use sqlx::Postgres;
 use sqlx::QueryBuilder;
 use uuid::Uuid;
@@ -251,7 +254,11 @@ impl PostgresMemory {
 }
 
 impl PostgresMemory {
-    pub(crate) async fn read_wiki_archive(&self, slug: &WikiSlug) -> Result<Option<String>, Error> {
+    pub(crate) async fn read_wiki_archive(
+        &self,
+        slug: &WikiSlug,
+        month: Option<&str>,
+    ) -> Result<Option<String>, Error> {
         let Some(directory) = self.wiki_directory.as_ref() else {
             return Ok(None);
         };
@@ -259,20 +266,58 @@ impl PostgresMemory {
         let root = tokio::fs::canonicalize(directory.join(&home.directory))
             .await
             .map_err(Error::WikiIo)?;
-        let path = root.join(kernel::wiki::page::bound::archive_path(&home.local));
-        let path = match tokio::fs::canonicalize(&path).await {
-            Ok(path) => path,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-            Err(error) => return Err(Error::WikiIo(error)),
+        let archives = root.join(ARCHIVE_DIRECTORY);
+        let paths = if let Some(month) = month {
+            let Some(month) = parse_archive_month(month) else {
+                return Ok(None);
+            };
+            vec![archive_path(&home.local, &month)]
+        } else {
+            let mut paths = vec![legacy_archive_path(&home.local)];
+            paths.extend(
+                months(&root.join(archive_directory(&home.local)))
+                    .await?
+                    .iter()
+                    .map(|month| archive_path(&home.local, month)),
+            );
+            paths
         };
-        if !path.starts_with(root.join(kernel::wiki::page::bound::ARCHIVE_DIRECTORY)) {
-            return Err(Error::WikiContainment);
+        let mut found: Option<String> = None;
+        for path in paths {
+            let path = match tokio::fs::canonicalize(root.join(path)).await {
+                Ok(path) => path,
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+                Err(error) => return Err(Error::WikiIo(error)),
+            };
+            if !path.starts_with(&archives) {
+                return Err(Error::WikiContainment);
+            }
+            let text = tokio::fs::read_to_string(path)
+                .await
+                .map_err(Error::WikiIo)?;
+            found.get_or_insert_with(String::new).push_str(&text);
         }
-        tokio::fs::read_to_string(path)
-            .await
-            .map(Some)
-            .map_err(Error::WikiIo)
+        Ok(found)
     }
+}
+
+async fn months(directory: &std::path::Path) -> Result<Vec<String>, Error> {
+    let mut entries = match tokio::fs::read_dir(directory).await {
+        Ok(entries) => entries,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(error) => return Err(Error::WikiIo(error)),
+    };
+    let mut months = Vec::new();
+    while let Some(entry) = entries.next_entry().await.map_err(Error::WikiIo)? {
+        let name = entry.file_name();
+        let month = name
+            .to_str()
+            .and_then(|name| name.strip_suffix(".md"))
+            .and_then(parse_archive_month);
+        months.extend(month);
+    }
+    months.sort_unstable();
+    Ok(months)
 }
 
 async fn read_markdown(directory: &std::path::Path, slug: &str) -> Result<String, Error> {

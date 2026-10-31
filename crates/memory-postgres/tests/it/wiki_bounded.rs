@@ -1,7 +1,10 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use chrono::{DateTime, Utc};
+use kernel::memory::MemoryStore as _;
 use kernel::wiki::builder::WikiWriteError;
+use kernel::wiki::merge::{MergeInput, Merged, PageMerger};
 use kernel::wiki::page::bound::{ARCHIVED_TITLE, ARTICLE_BUDGET};
 use kernel::wiki::page::{
     PagePatch, WikiAction, WikiHistoryEntry, WikiPage, WikiSlug, parse_wiki_page,
@@ -101,29 +104,35 @@ async fn a_rewrite_archives_what_it_dropped_behind_one_history_line() -> TestRes
     );
     let line = page.history.first().ok_or("an archive line")?;
     assert_eq!(line.title, ARCHIVED_TITLE);
-    assert!(line.body.contains("/wiki/acmekit/archive#a-"));
+    assert!(line.body.contains("/wiki/acmekit/archive/2026-10#a-"));
     assert!(line.body.contains(inline.get(..10).ok_or("sha")?));
-    let archive = tokio::fs::read_to_string(root.join("archive/acmekit.md")).await?;
+    let archive = tokio::fs::read_to_string(root.join("archive/acmekit/2026-10.md")).await?;
     assert!(archive.contains("Listens on 8080."));
     assert!(archive.starts_with("# Archive: AcmeKit"));
     let files = git(&root, &["show", "--name-only", "--format=", "HEAD"]).await?;
-    assert_eq!(files, "archive/acmekit.md\ntopics/acmekit.md\n");
+    assert_eq!(files, "archive/acmekit/2026-10.md\ntopics/acmekit.md\n");
     let stored = tokio::fs::read_to_string(root.join("topics/acmekit.md")).await?;
     assert_eq!(parse_wiki_page(&stored)?, page);
     Ok(())
+}
+
+fn facts(count: usize) -> String {
+    (0..count)
+        .map(|index| {
+            let words: Vec<String> = (0..24).map(|word| format!("f{index}w{word}")).collect();
+            format!("Fact {index}: {}", words.join(" "))
+        })
+        .collect::<Vec<_>>()
+        .join("\n\n")
 }
 
 #[tokio::test]
 async fn an_oversized_article_is_held_to_its_budget() -> TestResult {
     let directory = tempfile::tempdir()?;
     let root = directory.path().join("wiki");
-    let article = (0..200)
-        .map(|index| format!("Fact {index}: {}", "x".repeat(200)))
-        .collect::<Vec<_>>()
-        .join("\n\n");
-    let applied = apply(&root, patch("acmekit", &article)?).await?;
+    let applied = apply(&root, patch("acmekit", &facts(200))?).await?;
     assert!(applied.page.article.len() <= ARTICLE_BUDGET);
-    let archive = tokio::fs::read_to_string(root.join("archive/acmekit.md")).await?;
+    let archive = tokio::fs::read_to_string(root.join("archive/acmekit/2026-10.md")).await?;
     assert!(archive.contains("Fact 199:"));
     Ok(())
 }
@@ -188,7 +197,7 @@ async fn recompile_restores_pushed_out_history_and_archives_copies(pool: PgPool)
         vec![ARCHIVED_TITLE, "Moved the build box", "First release"]
     );
     assert_eq!(stored.current_state, "AcmeKit ships on Fridays. Merged.");
-    let archive = tokio::fs::read_to_string(root.join("archive/acmekit.md")).await?;
+    let archive = tokio::fs::read_to_string(root.join("archive/acmekit/2026-10.md")).await?;
     assert!(archive.contains("copy 3"));
     assert!(archive.contains("### Note 16"));
     assert!(archive.contains("### Note 79"));
@@ -197,5 +206,120 @@ async fn recompile_restores_pushed_out_history_and_archives_copies(pool: PgPool)
             .fetch_one(&pool)
             .await?;
     assert_eq!(sha, git(&root, &["rev-parse", "HEAD"]).await?.trim());
+    Ok(())
+}
+
+fn rotated(round: usize, sentences: &[&str]) -> String {
+    sentences
+        .iter()
+        .map(|sentence| {
+            let mut words: Vec<&str> = sentence.split(' ').collect();
+            let turn = round % words.len();
+            words.rotate_left(turn);
+            words.join(" ")
+        })
+        .collect::<Vec<_>>()
+        .join("\n\n")
+}
+
+#[tokio::test]
+async fn fifty_rephrasings_archive_only_the_paragraph_that_left() -> TestResult {
+    let directory = tempfile::tempdir()?;
+    let root = directory.path().join("wiki");
+    let kept = [
+        "AcmeKit releases ship every Friday from the build box after the health gate passes",
+        "The deploy pipeline runs integration suites against staging before each production rollout",
+    ];
+    let dropped = "The staging cluster listens on port 8080 behind the internal proxy";
+    for round in 0..50 {
+        let mut sentences = kept.to_vec();
+        if round < 25 {
+            sentences.push(dropped);
+        }
+        let mut update = patch("acmekit", &rotated(round, &sentences))?;
+        if round > 0 {
+            update.action = WikiAction::Update;
+        }
+        apply(&root, update).await?;
+    }
+    let archive = tokio::fs::read_to_string(root.join("archive/acmekit/2026-10.md")).await?;
+    assert_eq!(archive.matches("8080").count(), 1, "{archive}");
+    assert!(!archive.contains("AcmeKit releases") && !archive.contains("integration suites"));
+    let commits = git(&root, &["log", "--format=%h", "--", "archive"]).await?;
+    assert_eq!(commits.lines().count(), 1);
+    Ok(())
+}
+
+struct ConcurrentMerger {
+    root: PathBuf,
+    wrote: AtomicBool,
+    inner: RecordingMerger,
+}
+
+#[async_trait::async_trait]
+impl PageMerger for ConcurrentMerger {
+    async fn merge(
+        &self,
+        input: &MergeInput,
+    ) -> Result<Merged, Box<dyn std::error::Error + Send + Sync>> {
+        if !self.wrote.swap(true, Ordering::SeqCst) {
+            let mut update = patch(
+                "acmekit",
+                &format!("Port 8080 opened for staging.\n\n{}", facts(200)),
+            )?;
+            update.action = WikiAction::Update;
+            update.summary_delta = None;
+            apply(&self.root, update).await?;
+        }
+        self.inner.merge(input).await
+    }
+}
+
+#[sqlx::test(migrator = "migrate::POSTGRES")]
+async fn a_recompile_rebases_onto_a_write_that_landed_meanwhile(pool: PgPool) -> TestResult {
+    let directory = tempfile::tempdir()?;
+    let root = directory.path().join("wiki");
+    tokio::fs::create_dir_all(&root).await?;
+    git(&root, &["init", "-q", "-b", "main"]).await?;
+    let slug = WikiSlug::try_from("acmekit".to_owned())?;
+    let mut page = WikiPage::empty(slug.clone(), "AcmeKit".to_owned());
+    page.current_state = "AcmeKit ships on Fridays.".to_owned();
+    page.article = facts(200);
+    commit_page(&root, &page, "first").await?;
+    let memory = PostgresMemory::new(pool.clone()).with_wiki_directory(root.clone());
+    let merger = ConcurrentMerger {
+        root: root.clone(),
+        wrote: AtomicBool::new(false),
+        inner: RecordingMerger::default(),
+    };
+    let job = RecompileWiki {
+        slug,
+        since: "2026-10-01T00:00:00Z".parse()?,
+    };
+    recompile(&memory, &merger, &job, now()?)
+        .await?
+        .ok_or("the page exists")?;
+    let stored =
+        parse_wiki_page(&tokio::fs::read_to_string(root.join("topics/acmekit.md")).await?)?;
+    assert!(stored.article.starts_with("Port 8080 opened for staging."));
+    assert!(
+        stored
+            .current_state
+            .starts_with("AcmeKit ships on Fridays. Merged.")
+    );
+    let sha: String =
+        sqlx::query_scalar("SELECT git_sha FROM rh_wiki_topics WHERE slug = 'acmekit'")
+            .fetch_one(&pool)
+            .await?;
+    assert_eq!(sha, git(&root, &["rev-parse", "HEAD"]).await?.trim());
+    let slug = WikiSlug::try_from("acmekit".to_owned())?;
+    let month = memory
+        .wiki_archive(&slug, Some("2026-10"))
+        .await?
+        .ok_or("this month's archive")?;
+    assert!(month.starts_with("# Archive: AcmeKit, 2026-10"));
+    assert_eq!(memory.wiki_archive(&slug, None).await?, Some(month));
+    assert_eq!(memory.wiki_archive(&slug, Some("2026-09")).await?, None);
+    assert_eq!(memory.wiki_archive(&slug, Some("../x")).await?, None);
     Ok(())
 }

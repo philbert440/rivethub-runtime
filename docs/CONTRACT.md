@@ -1182,8 +1182,8 @@ extraction input gains `current`, the bound page's `summary` and `article` cut t
 with what the summary says about parts of the topic folded in. That patch replaces the page's summary and article, or
 the sub-topic's section, instead of appending (23). The page summary is a stable lead: what the topic or entity is,
 then at most one sentence starting "Currently". A merged write (a topic page or an entity merge) keeps the page's
-existing description and replaces only that last "Currently" sentence; an update that carries none leaves the summary
-as it is, an empty summary takes the update's lead, and only recompile-wiki's summary-only call or an edit rewrites the
+existing description and replaces only that last "Currently" sentence (left out when it would take the summary past
+2,400 characters); an update that carries none leaves the summary as it is, an empty summary takes the update's lead, and only recompile-wiki's summary-only call or an edit rewrites the
 description. News goes to the article, the sections and History. A patch whose `type` names a known entity with a page is merged into
 that page by a second model call that sends only the entity page's summary and article cut to budget plus the patches'
 text and answers `{summary, article, history}`; a failed merge falls back to the patch as before. Notes that still
@@ -1194,13 +1194,18 @@ dropped from what it read, and placing its new blocks after the block they follo
 (extractions, topic page syncs, edits, consolidation folds) archives what it removes: blocks a rewrite dropped from the
 article or a section, text over budget (trimmed from the end at paragraph boundaries; a write never fails for size),
 the legacy "Superseded article", "Superseded current state" and "Summary overflow (v7 cap)" History copies (no new ones
-are written), History entries pushed past 48, and the long body of an existing History entry when it is shortened.
-Archived text is appended to `archive/<slug>.md` in the wiki repository, outside `topics/`, as a block under
+are written), History entries pushed past 48, and the long body of an existing History entry when it is shortened. A
+block counts as removed only when fewer than 60% of its words (four or more letters, or containing a digit) are still
+on the page after the write, and is archived only when no block already in that month's archive holds 60% or more of
+them, so a rephrasing, a "Currently" swap or a repeat archives nothing. Archived text is appended to
+`archive/<slug>/<YYYY-MM>.md` (one file a month) in the wiki repository, outside `topics/`, as a block under
 `<a id="a-<UTC timestamp>"></a>` that names the commit where it was last inline, and is committed with the page. The
-page gets at most one History entry a day titled "Archived" that links `/wiki/<slug>/archive#<anchor>` and names that
+page gets at most one History entry a day titled "Archived" that links `/wiki/<slug>/archive/<YYYY-MM>#<anchor>` and names that
 commit; History pushed out on its own adds no entry. Archive files are not pages: they have no `rh_wiki_topics` row and
-are not embedded, searched or listed. `GET /api/wiki/{slug}/archive` answers the archive as `text/markdown` and
-`/wiki/{slug}/archive` as HTML keeping the anchors, `404` when the page has none. Repair: `recompile-wiki`
+are not embedded, searched or listed. `GET /api/wiki/{slug}/archive/{month}` answers one month as `text/markdown` and
+`/wiki/{slug}/archive/{month}` as HTML keeping the anchors; without `{month}` they answer every month joined, oldest first,
+after a pre-month `archive/<slug>.md` if one is left; `404` when there is none. The writers run git with `gc.auto=0` and
+`maintenance.auto=false`, so packing never runs inside a worker; it runs outside them (`git gc --auto` on a timer). Repair: `recompile-wiki`
 (`{slug, since}`, handled by the wiki builder; key `wiki-recompile-<slug>`, priority 5) restores the page's real History
 entries found in its git versions since `since` (one per date and title, newest first, at most 47 so the Archived entry fits; the
 rest go to the archive), then rebuilds the page from its newest sources: the summaries the page cites, newest first,
@@ -1209,7 +1214,9 @@ each section from the summaries of sessions placed in that section's topic and t
 merges its newest 8 or 12 KiB instead; at most 32 sections a page), with the first 2 or 4 KiB of the old text as the
 current text and the newest material winning; when the summary is empty or anything was merged, a summary-only merge
 call (`summaryOnly`) writes the page's lead from the rebuilt page. It writes through the same writer, so the replaced
-text is archived; a page that changed meanwhile is refused so the job retries. `rh memory recompile-wiki --since <iso> [--min-bytes <n>]
+text is archived; a page that changed meanwhile is rebased onto the newer page: the blocks the other writes added go first in
+the article and in each section, the recompiled text after them, their new History entries are kept and the recompiled
+summary stands. `rh memory recompile-wiki --since <iso> [--min-bytes <n>]
 [--slug <slug>]... [--dry-run] [--json]` queues one job per page at or over `--min-bytes` (default 61440) or per
 `--slug`. SQLite (`rh local`) applies the merged rewrite, the rebase and the budgets to its stored pages but keeps no
 archive: it has no repository and stores no History.

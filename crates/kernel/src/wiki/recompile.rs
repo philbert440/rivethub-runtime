@@ -4,8 +4,10 @@ use serde::{Deserialize, Serialize};
 
 use super::builder::WikiStoreError;
 use super::merge::PageMerger;
-use super::page::bound::{ARCHIVED_TITLE, Archived, HISTORY_LINE, history_line, is_revision};
-use super::page::{WikiHistoryEntry, WikiPage, WikiSlug};
+use super::page::bound::{
+    ARCHIVED_TITLE, Archived, HISTORY_LINE, history_line, is_revision, rebase,
+};
+use super::page::{ArticleSection, WikiHistoryEntry, WikiPage, WikiSlug};
 
 mod consolidate;
 
@@ -144,6 +146,80 @@ pub fn restore_history(
     }
     page.history = real;
     restored
+}
+
+#[must_use]
+pub fn rebase_recompiled(
+    base: &WikiPage,
+    ours: WikiPage,
+    current: &WikiPage,
+    archived: &mut Vec<Archived>,
+) -> WikiPage {
+    let mut page = current.clone();
+    page.current_state = ours.current_state;
+    page.article = newest_first(&base.article, &ours.article, &current.article);
+    page.extra_sections = rebase_sections(base, ours.extra_sections, current);
+    let mut history: Vec<WikiHistoryEntry> = current
+        .history
+        .iter()
+        .filter(|entry| !base.history.iter().any(|known| same(known, entry)))
+        .cloned()
+        .collect();
+    for entry in ours.history {
+        if !history.iter().any(|kept| same(kept, &entry)) {
+            history.push(entry);
+        }
+    }
+    let spilled = history.split_off(HISTORY_KEPT.min(history.len()));
+    archived.extend(spilled.iter().map(history_item));
+    page.history = history;
+    page
+}
+
+fn rebase_sections(
+    base: &WikiPage,
+    ours: Vec<ArticleSection>,
+    current: &WikiPage,
+) -> Vec<ArticleSection> {
+    let body = |page: &WikiPage, heading: &str| {
+        page.extra_sections
+            .iter()
+            .find(|section| section.heading == heading)
+            .map_or(String::new(), |section| section.body.clone())
+    };
+    let mut merged: Vec<ArticleSection> = ours
+        .into_iter()
+        .map(|section| ArticleSection {
+            body: newest_first(
+                &body(base, &section.heading),
+                &section.body,
+                &body(current, &section.heading),
+            ),
+            heading: section.heading,
+        })
+        .collect();
+    for section in &current.extra_sections {
+        if merged.iter().any(|kept| kept.heading == section.heading) {
+            continue;
+        }
+        let added = rebase(&body(base, &section.heading), "", &section.body);
+        if !added.is_empty() {
+            merged.push(ArticleSection {
+                heading: section.heading.clone(),
+                body: added,
+            });
+        }
+    }
+    merged
+}
+
+fn newest_first(base: &str, ours: &str, current: &str) -> String {
+    let added = rebase(base, "", current);
+    [added.as_str(), ours.trim()]
+        .into_iter()
+        .filter(|text| !text.is_empty())
+        .collect::<Vec<_>>()
+        .join("\n\n")
 }
 
 fn history_item(entry: &WikiHistoryEntry) -> Archived {

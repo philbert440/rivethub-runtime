@@ -1,3 +1,5 @@
+use super::summary::SUMMARY_LIMIT;
+
 pub const CURRENTLY: &str = "Currently";
 const CURRENTLY_LIMIT: usize = 300;
 
@@ -57,7 +59,15 @@ pub fn stable_summary(existing: &str, proposed: &str) -> String {
     };
     match new.currently.or(old.currently) {
         Some(currently) if lead.is_empty() => currently,
-        Some(currently) => format!("{lead} {currently}"),
-        None => lead,
+        Some(currently) if fits(&lead, &currently) => format!("{lead} {currently}"),
+        Some(_) | None => lead,
     }
+}
+
+fn fits(lead: &str, currently: &str) -> bool {
+    lead.chars()
+        .count()
+        .saturating_add(1)
+        .saturating_add(currently.chars().count())
+        <= SUMMARY_LIMIT
 }

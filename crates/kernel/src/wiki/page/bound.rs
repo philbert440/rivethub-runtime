@@ -1,8 +1,5 @@
 use std::collections::BTreeSet;
 
-use chrono::{DateTime, Utc};
-
-use super::limits;
 use super::lines::fence_aware;
 use super::patch::Revision;
 use super::summary::{SUMMARY_LIMIT, cap_summary};
@@ -14,7 +11,6 @@ pub const SECTIONS_BUDGET: usize = 12 * 1024;
 pub const HISTORY_LINE: usize = 200;
 const SECTION_FLOOR: usize = 512;
 pub const ENTITIES: usize = 64;
-pub const ARCHIVE_DIRECTORY: &str = "archive";
 pub const ARCHIVED_TITLE: &str = "Archived";
 const ELLIPSIS: char = '…';
 
@@ -401,7 +397,7 @@ fn keep(archived: &mut Vec<Archived>, label: &str, text: &str) {
     });
 }
 
-fn spill(archived: &mut Vec<Archived>, entry: &WikiHistoryEntry) {
+pub(super) fn spill(archived: &mut Vec<Archived>, entry: &WikiHistoryEntry) {
     let body = entry.body.trim();
     if body.is_empty() || entry.title == ARCHIVED_TITLE {
         return;
@@ -411,126 +407,4 @@ fn spill(archived: &mut Vec<Archived>, entry: &WikiHistoryEntry) {
         text: body.to_owned(),
         notice: false,
     });
-}
-
-#[must_use]
-pub fn archive_path(slug: &str) -> String {
-    format!("{ARCHIVE_DIRECTORY}/{slug}.md")
-}
-
-#[must_use]
-pub fn archive_anchor(at: DateTime<Utc>) -> String {
-    format!("a-{}", at.format("%Y%m%dT%H%M%S%3fZ"))
-}
-
-#[must_use]
-pub fn archive_header(title: &str, slug: &str) -> String {
-    format!(
-        "# Archive: {title}\n\nText moved out of [[{slug}]] when it was rewritten or went over its size budget, oldest first.\n"
-    )
-}
-
-#[must_use]
-pub fn archive_block(at: DateTime<Utc>, inline: Option<&str>, archived: &[Archived]) -> String {
-    let mut block = format!(
-        "\n<a id=\"{}\"></a>\n\n## {}",
-        archive_anchor(at),
-        at.format("%Y-%m-%d %H:%M UTC")
-    );
-    if let Some(sha) = inline {
-        block.push_str(" (last inline at ");
-        block.push_str(short(sha));
-        block.push(')');
-    }
-    block.push('\n');
-    for item in archived {
-        block.push_str("\n### ");
-        block.push_str(&item.label);
-        block.push_str("\n\n");
-        block.push_str(&item.text);
-        block.push('\n');
-    }
-    block
-}
-
-#[must_use]
-pub fn archive_entry(
-    slug: &str,
-    at: DateTime<Utc>,
-    inline: Option<&str>,
-    archived: &[Archived],
-) -> WikiHistoryEntry {
-    let bytes: usize = archived.iter().map(|item| item.text.len()).sum();
-    let mut labels: Vec<&str> = Vec::new();
-    for item in archived {
-        if !labels.contains(&item.label.as_str()) {
-            labels.push(&item.label);
-        }
-    }
-    let named = if labels.len() > 3 {
-        format!(
-            "{} and {} more",
-            labels.get(..3).unwrap_or_default().join(", "),
-            labels.len().saturating_sub(3)
-        )
-    } else {
-        labels.join(", ")
-    };
-    let mut body = format!(
-        "Moved {} to [the archive](/wiki/{slug}/archive#{}): {named}.",
-        size(bytes),
-        archive_anchor(at)
-    );
-    if let Some(sha) = inline {
-        body.push_str(" Last inline at `");
-        body.push_str(short(sha));
-        body.push_str("`.");
-    }
-    let line = history_line(&body);
-    WikiHistoryEntry {
-        date: at.date_naive(),
-        title: ARCHIVED_TITLE.to_owned(),
-        body: line.kept,
-    }
-}
-
-pub fn settle_archive(
-    page: &mut WikiPage,
-    at: DateTime<Utc>,
-    inline: Option<&str>,
-    archived: &mut Vec<Archived>,
-) -> Option<String> {
-    if archived.is_empty() {
-        return None;
-    }
-    let today = at.date_naive();
-    let noted = page
-        .history
-        .iter()
-        .any(|entry| entry.title == ARCHIVED_TITLE && entry.date == today);
-    if archived.iter().any(|item| item.notice) && !noted {
-        while page.history.len() >= limits::HISTORY {
-            let Some(entry) = page.history.pop() else {
-                break;
-            };
-            spill(archived, &entry);
-        }
-        let slug = page.meta.slug.as_ref().to_owned();
-        page.history
-            .insert(0, archive_entry(&slug, at, inline, archived));
-    }
-    Some(archive_block(at, inline, archived))
-}
-
-fn short(sha: &str) -> &str {
-    sha.get(..10).unwrap_or(sha)
-}
-
-fn size(bytes: usize) -> String {
-    if bytes < 1024 {
-        format!("{bytes} B")
-    } else {
-        let tenths = bytes.saturating_mul(10) / 1024;
-        format!("{}.{} KB", tenths / 10, tenths % 10)
-    }
 }

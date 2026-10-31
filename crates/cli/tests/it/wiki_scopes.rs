@@ -307,7 +307,10 @@ async fn a_personal_page_stays_bounded_under_repeated_updates(pool: PgPool) -> T
         if round > 0 {
             update.action = kernel::wiki::page::WikiAction::Update;
         }
-        let body = format!("Deploy round {round} kept the health gate green. ").repeat(60);
+        let body = (0..60)
+            .map(|step| format!("Deploy r{round}s{step} kept the health gate green."))
+            .collect::<Vec<_>>()
+            .join(" ");
         update.article = Some(format!("## Round {round}\n{body}"));
         update.summary = format!("AcmeKit deploys, round {round}.");
         store
@@ -330,8 +333,8 @@ async fn a_personal_page_stays_bounded_under_repeated_updates(pool: PgPool) -> T
     assert!(page.len() < 48 * 1024, "{} bytes on disk", page.len());
     assert!(
         wiki.path()
-            .join("users/coco/archive/acmekit-deploys.md")
-            .is_file(),
+            .join("users/coco/archive/acmekit-deploys")
+            .is_dir(),
         "what the rewrites dropped is archived in her own repository"
     );
     assert!(!wiki.path().join("topics/acmekit-deploys.md").exists());

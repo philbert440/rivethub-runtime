@@ -2,7 +2,9 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use kernel::wiki::builder::WikiStoreError;
 use kernel::wiki::page::WikiSlug;
-use kernel::wiki::recompile::{RecompileSource, Recompiled, SourceSummary, WikiRecompileStore};
+use kernel::wiki::recompile::{
+    RecompileSource, Recompiled, SourceSummary, WikiRecompileStore, rebase_recompiled,
+};
 use uuid::Uuid;
 
 use super::overlays::Placed;
@@ -116,7 +118,7 @@ impl PostgresMemory {
         let Recompiled {
             base,
             mut page,
-            archived,
+            mut archived,
             message,
         } = recompiled;
         let slug = placed.key.clone();
@@ -126,10 +128,13 @@ impl PostgresMemory {
             current.meta.slug = page.meta.slug.clone();
             current
         });
-        if current.as_ref() != Some(&base) {
+        let Some(current) = current else {
             return Err(WikiStoreError::InvalidPatch(format!(
-                "wiki page {slug} changed while it was recompiled"
+                "wiki page {slug} was removed while it was recompiled"
             )));
+        };
+        if current != base {
+            page = rebase_recompiled(&base, page, &current, &mut archived);
         }
         page.meta.slug = WikiSlug::try_from(placed.local.clone())
             .map_err(|error| WikiStoreError::InvalidPatch(error.to_string()))?;

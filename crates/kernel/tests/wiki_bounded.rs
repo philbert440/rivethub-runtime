@@ -1,12 +1,13 @@
 #![cfg(test)]
 
 use chrono::{DateTime, NaiveDate, Utc};
+use kernel::wiki::page::archive::{settle_archive, unarchived};
 use kernel::wiki::page::bound::{
-    ARCHIVED_TITLE, ARTICLE_BUDGET, HISTORY_LINE, SECTION_BUDGET, SECTIONS_BUDGET, bound_page,
-    dropped, fit, history_line, rebase, settle_archive, tail,
+    ARCHIVED_TITLE, ARTICLE_BUDGET, Archived, HISTORY_LINE, SECTION_BUDGET, SECTIONS_BUDGET,
+    bound_page, dropped, fit, history_line, rebase, tail,
 };
 use kernel::wiki::page::{ArticleSection, WikiHistoryEntry, WikiPage, WikiSlug};
-use kernel::wiki::recompile::restore_history;
+use kernel::wiki::recompile::{rebase_recompiled, restore_history};
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 
@@ -151,7 +152,7 @@ fn settle_archive_adds_one_dated_line_a_day_and_writes_every_block() -> TestResu
     assert_eq!(line.title, ARCHIVED_TITLE);
     assert!(
         line.body
-            .contains("/wiki/acmekit/archive#a-20261030T120000000Z")
+            .contains("/wiki/acmekit/archive/2026-10#a-20261030T120000000Z")
     );
     let again = next.clone();
     next.article = String::new();
@@ -324,4 +325,92 @@ fn a_stable_lead_keeps_its_description_and_swaps_only_the_currently_sentence() {
         split_lead("Recurrently Currently is a word.").lead,
         "Recurrently Currently is a word."
     );
+}
+
+#[test]
+fn only_text_that_left_the_page_and_is_not_archived_yet_is_archived() -> TestResult {
+    let mut next = page()?;
+    next.article = "AcmeKit ships its releases every Friday from the build box.".to_owned();
+    let candidates = || {
+        vec![Archived {
+            label: "Article".to_owned(),
+            text: "Releases of AcmeKit ship every Friday from the build box.\n\nThe staging cluster listens on port 8080.".to_owned(),
+            notice: true,
+        }]
+    };
+    let kept = unarchived(candidates(), &next, "");
+    assert_eq!(
+        kept.iter()
+            .map(|item| item.text.as_str())
+            .collect::<Vec<_>>(),
+        vec!["The staging cluster listens on port 8080."]
+    );
+    let archive =
+        "## 2026-10-29 09:00 UTC\n\n### Article\n\nThe staging cluster listens on port 8080.\n";
+    assert_eq!(
+        unarchived(candidates(), &next, archive),
+        Vec::<Archived>::new()
+    );
+    Ok(())
+}
+
+#[test]
+fn a_currently_swap_archives_nothing() -> TestResult {
+    use kernel::wiki::page::lead::stable_summary;
+    let mut previous = page()?;
+    previous.current_state =
+        "AcmeKit is the deploy tool. Currently, releases ship on Fridays.".to_owned();
+    previous.article = "AcmeKit deploys every service.".to_owned();
+    let mut next = previous.clone();
+    next.current_state = stable_summary(
+        &previous.current_state,
+        "Release 2.0 shipped. Currently, releases ship daily.",
+    );
+    assert_eq!(
+        next.current_state,
+        "AcmeKit is the deploy tool. Currently, releases ship daily."
+    );
+    let archived = bound_page(Some(&previous), &mut next);
+    assert_eq!(unarchived(archived, &next, ""), Vec::<Archived>::new());
+    Ok(())
+}
+
+#[test]
+fn a_currently_sentence_that_does_not_fit_is_left_out() {
+    use kernel::wiki::page::lead::stable_summary;
+    let lead = format!("AcmeKit is the deploy tool. {}", "It deploys. ".repeat(196));
+    let summary = stable_summary(&lead, "Currently, releases ship daily.");
+    assert_eq!(summary, lead.trim());
+}
+
+#[test]
+fn a_recompile_keeps_what_a_concurrent_write_added() -> TestResult {
+    let mut base = page()?;
+    base.current_state = "AcmeKit news.".to_owned();
+    base.article = "Ships on Fridays.\n\nBuilds on the old box.".to_owned();
+    base.history = vec![entry("2026-10-28", "First release", "Shipped 1.0.")?];
+    let mut ours = base.clone();
+    ours.current_state = "AcmeKit is the deploy tool.".to_owned();
+    ours.article = "AcmeKit ships every Friday.".to_owned();
+    let mut current = base.clone();
+    current.article =
+        "Ships on Fridays.\n\nBuilds on the old box.\n\nPort 8080 opened for staging.".to_owned();
+    current
+        .history
+        .insert(0, entry("2026-10-30", "Staging port", "Opened 8080.")?);
+    let mut archived = Vec::new();
+    let page = rebase_recompiled(&base, ours, &current, &mut archived);
+    assert_eq!(page.current_state, "AcmeKit is the deploy tool.");
+    assert_eq!(
+        page.article,
+        "Port 8080 opened for staging.\n\nAcmeKit ships every Friday."
+    );
+    let titles: Vec<&str> = page
+        .history
+        .iter()
+        .map(|kept| kept.title.as_str())
+        .collect();
+    assert_eq!(titles, vec!["Staging port", "First release"]);
+    assert_eq!(archived, Vec::<Archived>::new());
+    Ok(())
 }
