@@ -1128,7 +1128,8 @@ Naming: no bare "RivetHub clients" anywhere — the clients are RivetHub web / A
 run. Postgres counts every failure of a job in `rh_job_failures` under its key (`job:<id>` without one), so the count
 survives re-enqueueing a key, which resets graphile's attempts; a job is flagged when its count reaches
 `RIVETHUB_FLAG_AFTER_FAILURES` (default 5), when it fails its last allowed attempt, or when its key is already flagged.
-Flagging deletes the job and writes `rh_flagged_jobs` (migration 0047): task, key, payload, priority, max attempts,
+A retry-later answer (a throttled or unreachable model) pauses the job without counting a failure, and `extract-wiki`
+writes no failed extraction for it. Flagging deletes the job and writes `rh_flagged_jobs` (migration 0047): task, key, payload, priority, max attempts,
 failures, last error, first and last failure. A job that later completes under the same key clears its count and its
 flagged record. The hourly `reap-dead-jobs` sweep flags every job already out of attempts or past the count, instead of
 reviving dead `compact-conversation` jobs; `run-task` jobs are never flagged (tasks keep their own failed state). The wiki

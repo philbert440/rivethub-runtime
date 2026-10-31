@@ -132,7 +132,9 @@ pub async fn handle_extract_wiki(
         WikiWork::Complete { topics } => topics,
         WikiWork::Pending(summary) => match extract_and_apply(env, &job, &summary).await {
             Ok(topics) => topics,
-            Err(WorkerError::Cancelled) => return Err(WorkerError::Cancelled),
+            Err(error @ (WorkerError::Cancelled | WorkerError::ProviderOutage { .. })) => {
+                return Err(error);
+            }
             Err(error) => {
                 env.store
                     .fail_wiki(job.summary_id, &error.to_string(), env.now)
