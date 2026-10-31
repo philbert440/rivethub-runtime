@@ -453,3 +453,48 @@ async fn the_filing_listing_reads_each_session_as_the_visibility_store_does(
     }
     Ok(())
 }
+
+#[sqlx::test(migrator = "migrate::POSTGRES")]
+async fn the_categorizer_files_a_session_captured_under_its_bare_key(pool: PgPool) -> TestResult {
+    let (store, _) = seed(&pool).await?;
+    let bare = "00000000-0000-4000-8000-0000000000b5";
+    sqlx::query(
+        "INSERT INTO rh_conversations (id, session_key, agent, channel, owner_user_id)
+         VALUES ('00000000-0000-4000-8000-0000000000c5', $1, 'rivet', 'claude-code', 'alice')",
+    )
+    .bind(bare)
+    .execute(&pool)
+    .await?;
+    let alice = viewer("alice")?;
+    let topic = store
+        .create(Topic::create(
+            TopicId::random(),
+            NewTopic {
+                kind: TopicKind::Work,
+                name: TopicName::new("Garden")?,
+                aliases: Vec::new(),
+                parent: None,
+                directory: None,
+                owner: Some(alice.principal().clone()),
+            },
+            Utc::now(),
+        )?)
+        .await?;
+    let categorizer = PostgresMemory::new(probe(&pool).await?);
+    Scope::Viewer(alice)
+        .run(categorizer.place(Placement {
+            session: SessionId::try_from(format!("claude-code:{bare}"))?,
+            topic: topic.id,
+            by: PlacementSource::Categorizer,
+            at: Utc::now(),
+            owner: None,
+        }))
+        .await?;
+    let owner: Option<String> =
+        sqlx::query_scalar("SELECT owner_user_id FROM rh_session_placements WHERE session_id = $1")
+            .bind(format!("claude-code:{bare}"))
+            .fetch_optional(&pool)
+            .await?;
+    assert_eq!(owner.as_deref(), Some("alice"));
+    Ok(())
+}

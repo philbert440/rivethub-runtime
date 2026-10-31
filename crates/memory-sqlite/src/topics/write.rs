@@ -1,3 +1,4 @@
+use kernel::filing::conversation_keys;
 use kernel::owner::Owner;
 use kernel::topics::MergePlan;
 use kernel::topics::Placement;
@@ -248,7 +249,8 @@ pub(super) fn placement(conn: &Connection, placement: &Placement) -> Result<(), 
     conn.execute(
         "INSERT INTO rh_session_placements (session_id, topic_id, placed_by, placed_at, owner_user_id)
          VALUES (?1, ?2, ?3, ?4,
-                 coalesce((SELECT c.owner_user_id FROM ros_conversations c WHERE c.session_key = ?1
+                 coalesce((SELECT c.owner_user_id FROM ros_conversations c
+                            WHERE c.session_key IN (?1, ?6)
                             ORDER BY c.created_at LIMIT 1), ?5))
          ON CONFLICT (session_id) DO UPDATE SET topic_id = excluded.topic_id,
                                                 placed_by = excluded.placed_by,
@@ -260,6 +262,7 @@ pub(super) fn placement(conn: &Connection, placement: &Placement) -> Result<(), 
             placement.by.to_string(),
             time::stamp(placement.at),
             placement.owner.as_ref().map(Owner::as_str),
+            conversation_keys(&placement.session).get(1),
         ],
     )
     .map_err(failed("session placement write"))?;
