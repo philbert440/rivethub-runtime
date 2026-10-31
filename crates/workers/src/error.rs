@@ -12,6 +12,8 @@ pub(crate) const PERMANENT_NULL_EMBED_ERROR: &str = "Embedding returned null (pe
 
 #[derive(Debug, Error)]
 pub enum WorkerError {
+    #[error(transparent)]
+    Tenancy(#[from] kernel::tenancy::TenancyStoreError),
     #[error("{name} must be a positive 32-bit integer")]
     JobSetting { name: String },
     #[error("Empty synth response")]

@@ -81,12 +81,21 @@ pub struct Tenancy {
     devices: BTreeMap<String, UserId>,
     unmapped_device_owner: Option<UserId>,
     spaces: Vec<Space>,
+    admins: Vec<UserId>,
 }
 
 impl Tenancy {
     #[must_use]
     pub fn with_spaces(mut self, spaces: Vec<Space>) -> Self {
         self.spaces = spaces;
+        self
+    }
+
+    #[must_use]
+    pub fn with_admin(mut self, user: UserId) -> Self {
+        if !self.admins.contains(&user) {
+            self.admins.push(user);
+        }
         self
     }
 
@@ -150,7 +159,7 @@ impl Tenancy {
     }
 
     pub(crate) fn owner(&self, user: &UserId) -> Result<(), ApiError> {
-        if self.local.as_ref() == Some(user) {
+        if self.local.as_ref() == Some(user) || self.admins.contains(user) {
             Ok(())
         } else {
             Err(ApiError::OwnerRequired)

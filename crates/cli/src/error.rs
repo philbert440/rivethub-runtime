@@ -195,6 +195,8 @@ pub enum Error {
     ImportPath,
     #[error("import accepts one file path")]
     ImportOne,
+    #[error("merge-store: {0}")]
+    MergeStore(String),
     #[error("reembed runs on a SQLite memory file; pass --sqlite <file>")]
     ReembedSqlite,
     #[error("--sqlite requires a file path")]

@@ -74,6 +74,7 @@ pub struct WorkerDeps {
     pub provider: Arc<dyn ModelProvider>,
     pub embed: EmbedSettings,
     pub summary: SummarySettings,
+    pub scopes: Option<crate::OwnerScopes>,
 }
 
 #[expect(
@@ -92,6 +93,7 @@ pub struct Runner<Q> {
     topic_pages: Option<crate::topic_page::TopicPages>,
     tidy: Option<Arc<dyn kernel::tidy::TidyStore>>,
     deletions: Option<Arc<dyn kernel::memory::SessionDeletion>>,
+    scopes: Option<crate::OwnerScopes>,
     queue: Arc<Q>,
     targets: Arc<dyn EmbeddingStore>,
     summaries: Arc<dyn SummaryStore>,
@@ -126,6 +128,7 @@ where
             topic_pages: None,
             tidy: None,
             deletions: None,
+            scopes: deps.scopes,
             queue,
             targets: deps.targets,
             summaries: deps.summaries,
@@ -415,6 +418,7 @@ where
             topic_pages: self.topic_pages.clone(),
             tidy: self.tidy.clone(),
             deletions: self.deletions.clone(),
+            scopes: self.scopes.clone(),
         };
         let wake = Arc::clone(&self.wake);
         let open = Arc::clone(&self.open);

@@ -83,9 +83,13 @@ pub(crate) async fn postgres(
 ) -> Result<PostgresMemory, StartupError> {
     let url = postgres_url(config, env)?;
     let embed = query_embed(config, env, shutdown, activities)?;
+    let owner = crate::composition::identities::load(config, env)
+        .await?
+        .primary();
     let memory = PostgresMemory::connect_deferred(&url)
         .await?
-        .with_wiki_directory(config.wiki_directory(env));
+        .with_wiki_directory(config.wiki_directory(env))
+        .with_wiki_owner(owner);
     Ok(match embed {
         Some(embed) => memory.with_query_embed(embed),
         None => memory,

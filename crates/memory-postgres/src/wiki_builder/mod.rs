@@ -49,6 +49,13 @@ impl WikiBuilderStore for PostgresMemory {
         if let Some(topics) = completed(&mut connection, job.summary_id).await? {
             return Ok(WikiWork::Complete { topics });
         }
+        if self
+            .wiki_owner
+            .as_ref()
+            .is_some_and(|owner| summary.owner.as_ref() != Some(owner))
+        {
+            return Ok(WikiWork::Complete { topics: Vec::new() });
+        }
         Ok(WikiWork::Pending(summary))
     }
 
@@ -59,10 +66,12 @@ impl WikiBuilderStore for PostgresMemory {
              WHERE (e.summary_id IS NULL OR e.status = 'failed'
                 OR (e.status = 'done' AND (e.pipeline_version < $1 OR (cardinality(e.topics_touched) > 0 AND e.git_sha IS NULL))))
                AND NOT EXISTS (SELECT 1 FROM rh_flagged_jobs f WHERE f.job_key = 'wiki-ext-' || s.id::text)
+               AND ($3::text IS NULL OR s.owner_user_id = $3)
              ORDER BY s.created_at, s.id LIMIT $2",
         )
         .bind(WIKI_PIPELINE_VERSION)
         .bind(i64::from(limit))
+        .bind(self.wiki_owner.as_ref().map(kernel::owner::Owner::as_str))
         .fetch_all(&self.pool)
         .await
         .map_err(query_error)?;

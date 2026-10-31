@@ -166,6 +166,13 @@ async fn run(
                 decisions,
                 tidy,
                 lineage: session_lineage(env),
+                scopes: Some(workers::OwnerScopes {
+                    store: Arc::new(memory_postgres::PostgresTenancy::new(memory.pool().clone())),
+                    primary: crate::composition::identities::load(&config, env)
+                        .await
+                        .map_err(StartupError::from)?
+                        .primary(),
+                }),
             },
             &config,
             env,
@@ -213,6 +220,7 @@ pub struct WorkerPorts<Q> {
     pub decisions: Arc<dyn DecisionStore>,
     pub tidy: Arc<dyn TidyStore>,
     pub lineage: Arc<dyn SessionLister>,
+    pub scopes: Option<workers::OwnerScopes>,
 }
 
 pub(crate) fn session_lineage(env: &Environment) -> Arc<dyn SessionLister> {
@@ -256,6 +264,7 @@ pub fn with_models<Q: JobQueue + 'static>(
         provider,
         embed: EmbedSettings::from_config(config)?,
         summary: SummarySettings::standard(model.clone())?,
+        scopes: ports.scopes,
     };
     let runner = Runner::new(
         ports.queue,

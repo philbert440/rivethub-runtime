@@ -64,6 +64,7 @@ pub(super) enum MemoryCommand {
     },
     RecompileWiki(super::recompile::RecompileArgs),
     Cleanup(super::cleanup::CleanupArgs),
+    MergeStore(super::merge::MergeArgs),
 }
 
 enum Verb {
@@ -78,6 +79,7 @@ enum Verb {
     ConsolidateWiki,
     RecompileWiki,
     Cleanup,
+    MergeStore,
 }
 
 fn verb(text: &str) -> Option<Verb> {
@@ -93,6 +95,7 @@ fn verb(text: &str) -> Option<Verb> {
         "consolidate-wiki" => Some(Verb::ConsolidateWiki),
         "recompile-wiki" => Some(Verb::RecompileWiki),
         "cleanup" => Some(Verb::Cleanup),
+        "merge-store" => Some(Verb::MergeStore),
         _ => None,
     }
 }
@@ -125,6 +128,9 @@ pub(super) fn parse(args: &[String]) -> Result<Option<MemoryCommand>, Error> {
             .map(Some),
         Verb::Cleanup => super::cleanup::parse(rest)
             .map(MemoryCommand::Cleanup)
+            .map(Some),
+        Verb::MergeStore => super::merge::parse(rest)
+            .map(MemoryCommand::MergeStore)
             .map(Some),
     }
 }

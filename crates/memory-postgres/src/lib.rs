@@ -17,6 +17,7 @@ mod hub_state;
 mod listen;
 mod loss;
 mod memory_jobs;
+pub mod merge;
 pub mod queue;
 pub mod read;
 pub mod search;
@@ -83,6 +84,7 @@ pub(crate) const ACQUIRE_TIMEOUT: Duration = Duration::from_secs(3);
 #[derive(Debug)]
 pub struct PostgresMemory {
     wiki_directory: Option<std::path::PathBuf>,
+    wiki_owner: Option<kernel::owner::Owner>,
     pool: PgPool,
     embed: Option<embed::EmbedArm>,
     synthesis: Option<SearchSynthesis>,
@@ -100,6 +102,7 @@ impl PostgresMemory {
     pub fn new(pool: PgPool) -> Self {
         Self {
             wiki_directory: None,
+            wiki_owner: None,
             pool,
             embed: None,
             synthesis: None,
@@ -114,6 +117,12 @@ impl PostgresMemory {
     #[must_use]
     pub fn with_wiki_directory(mut self, directory: std::path::PathBuf) -> Self {
         self.wiki_directory = Some(directory);
+        self
+    }
+
+    #[must_use]
+    pub fn with_wiki_owner(mut self, owner: kernel::owner::Owner) -> Self {
+        self.wiki_owner = Some(owner);
         self
     }
 

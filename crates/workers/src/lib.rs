@@ -13,6 +13,8 @@ pub use job_settings::worker_concurrency;
 mod outage;
 mod role;
 mod runner;
+mod scopes;
+pub use scopes::OwnerScopes;
 pub mod schedule;
 mod summarize;
 mod tidy;

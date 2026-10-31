@@ -458,6 +458,7 @@ fn deps(
         provider,
         embed: settings(),
         summary: SummarySettings::standard("fake-chat").expect("summary settings"),
+        scopes: None,
     }
 }
 
