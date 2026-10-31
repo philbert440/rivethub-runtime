@@ -7,6 +7,7 @@ use kernel::topics::DeliveredVia;
 use tokio::sync::{mpsc, oneshot, watch};
 use wire::events::{AgentEvent, AgentEventKind, ProtocolVersion};
 use wire::gateway::term::{PtyInfo, PtyState, TermSpawnResponse};
+use wire::session_id::SessionId;
 
 use super::{Launch, Spawned, TerminalService};
 use crate::error::ApiError;
@@ -185,6 +186,16 @@ impl TerminalActor {
         Ok(())
     }
 
+    async fn follow_turns(&self, id: &TerminalId, session: &SessionId) {
+        match self.service.mux.turn_ends(id).await {
+            Ok(ends) => self
+                .service
+                .follow_turn_ends(self.session.clone(), session.clone(), ends),
+            Err(kernel::terminal::TerminalMuxError::Unsupported(_)) => {}
+            Err(error) => tracing::debug!(%error, "the terminal's turn ends are not followed"),
+        }
+    }
+
     async fn spawn(
         &mut self,
         launch: Launch,
@@ -253,11 +264,7 @@ impl TerminalActor {
         self.status.send_replace(Some(state));
         self.permit = Some(permit);
         self.register(&launch.command, &id)?;
-        match self.service.mux.turn_ends(&id).await {
-            Ok(ends) => self.service.follow_turn_ends(self.session.clone(), ends),
-            Err(kernel::terminal::TerminalMuxError::Unsupported(_)) => {}
-            Err(error) => tracing::debug!(%error, "the terminal's turn ends are not followed"),
-        }
+        self.follow_turns(&id, &port_session).await;
         let mux = self.service.mux.clone();
         exits.spawn(async move {
             let code = mux.wait(&id).await?;

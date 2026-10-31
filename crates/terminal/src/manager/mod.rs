@@ -185,7 +185,8 @@ impl kernel::terminal::TerminalMux for TerminalManager {
     async fn turn_ends(
         &self,
         id: &TerminalId,
-    ) -> Result<mpsc::Receiver<()>, kernel::terminal::TerminalMuxError> {
+    ) -> Result<mpsc::Receiver<kernel::terminal::PaneTurn>, kernel::terminal::TerminalMuxError>
+    {
         self.port_turn_ends(id)
     }
 

@@ -25,7 +25,7 @@ impl TerminalManager {
     pub(super) fn port_turn_ends(
         &self,
         id: &TerminalId,
-    ) -> Result<mpsc::Receiver<()>, TerminalMuxError> {
+    ) -> Result<mpsc::Receiver<kernel::terminal::PaneTurn>, TerminalMuxError> {
         let server = self.inner.port_backends.lock().get(id).cloned();
         let events = {
             let state = self.inner.state.lock();

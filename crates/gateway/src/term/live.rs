@@ -8,6 +8,7 @@ use wire::harness::{
 
 use kernel::harness::ToolCallUpdate;
 use kernel::preview::{LiveActivity, Preview};
+use kernel::terminal::PaneTurn;
 use wire::plugin::process::PluginEvent;
 use wire::session_id::SessionId;
 
@@ -371,6 +372,24 @@ impl TerminalService {
                     summary.effort = Some(level.to_string());
                 }
                 kernel::harness::SessionOption::Mode(_) => {}
+            }
+        }
+    }
+
+    pub(crate) fn pane_changed(&self, key: &str, session: &SessionId, change: PaneTurn) {
+        let live = self
+            .summaries
+            .read()
+            .get(key)
+            .map(|summary| summary.session_id.clone());
+        match (live, change) {
+            (Some(live), PaneTurn::Waiting(waiting)) => self.set_blocked(key, &live, waiting),
+            (Some(_), PaneTurn::Ended) => {}
+            (None, PaneTurn::Waiting(waiting)) => {
+                self.publish_update(key, session, HarnessSessionStatus::Active, Some(waiting));
+            }
+            (None, PaneTurn::Ended) => {
+                self.publish_update(key, session, HarnessSessionStatus::Idle, Some(false));
             }
         }
     }

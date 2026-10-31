@@ -20,6 +20,12 @@ pub enum TerminalMuxError {
     Exited(TerminalId),
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PaneTurn {
+    Ended,
+    Waiting(bool),
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct TerminalId(String);
@@ -88,7 +94,7 @@ pub trait TerminalMux: Send + Sync {
         Err(TerminalMuxError::Unsupported("wait"))
     }
 
-    async fn turn_ends(&self, _id: &TerminalId) -> Result<Receiver<()>, TerminalMuxError> {
+    async fn turn_ends(&self, _id: &TerminalId) -> Result<Receiver<PaneTurn>, TerminalMuxError> {
         Err(TerminalMuxError::Unsupported("turn_ends"))
     }
     async fn spawn(

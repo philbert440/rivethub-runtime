@@ -75,7 +75,7 @@ pub enum AgentKind {
 impl AgentKind {
     #[must_use]
     pub const fn reports_turns(self) -> bool {
-        matches!(self, Self::Codex | Self::Opencode)
+        matches!(self, Self::Codex | Self::Opencode | Self::Claude)
     }
 }
 

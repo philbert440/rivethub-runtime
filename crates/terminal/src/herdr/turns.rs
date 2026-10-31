@@ -7,16 +7,18 @@ use crate::Error;
 use crate::herdr::AgentKind;
 use crate::herdr::HerdrEventKind;
 use crate::herdr::codec::EventFrame;
+use kernel::terminal::PaneTurn;
 
 #[derive(Debug, Default)]
 pub struct TurnWatch {
     running: bool,
+    waiting: bool,
 }
 
 impl TurnWatch {
-    pub fn ended(&mut self, frame: &EventFrame) -> bool {
+    pub fn changed(&mut self, frame: &EventFrame) -> Vec<PaneTurn> {
         if frame.event != HerdrEventKind::PaneAgentStatusChanged {
-            return false;
+            return Vec::new();
         }
         let reports = frame
             .data
@@ -30,24 +32,30 @@ impl TurnWatch {
         let status = frame
             .data
             .get("agent_status")
-            .and_then(|status| status.as_str());
-        match status.filter(|_| reports) {
-            Some("working" | "blocked") => {
-                self.running = true;
-                false
-            }
-            Some("idle" | "done") => std::mem::take(&mut self.running),
-            Some(_) | None => {
-                self.running = false;
-                false
-            }
+            .and_then(|status| status.as_str())
+            .filter(|_| reports);
+        let mut changes = Vec::new();
+        let waiting = status == Some("blocked");
+        if waiting != self.waiting {
+            self.waiting = waiting;
+            changes.push(PaneTurn::Waiting(waiting));
         }
+        match status {
+            Some("working" | "blocked") => self.running = true,
+            Some("idle" | "done") => {
+                if std::mem::take(&mut self.running) {
+                    changes.push(PaneTurn::Ended);
+                }
+            }
+            Some(_) | None => self.running = false,
+        }
+        changes
     }
 }
 
 pub(crate) async fn follow(
     mut events: broadcast::Receiver<Result<EventFrame, Arc<Error>>>,
-    ends: mpsc::Sender<()>,
+    ends: mpsc::Sender<PaneTurn>,
 ) {
     let mut watch = TurnWatch::default();
     loop {
@@ -57,8 +65,10 @@ pub(crate) async fn follow(
         };
         match frame {
             Ok(Ok(frame)) => {
-                if watch.ended(&frame) && ends.send(()).await.is_err() {
-                    return;
+                for change in watch.changed(&frame) {
+                    if ends.send(change).await.is_err() {
+                        return;
+                    }
                 }
             }
             Ok(Err(error)) => {
@@ -78,6 +88,7 @@ mod tests {
     use super::TurnWatch;
     use crate::herdr::codec::InboundFrame;
     use crate::herdr::codec::decode_line;
+    use kernel::terminal::PaneTurn;
 
     fn status(agent: &str, status: &str) -> super::EventFrame {
         let line = format!(
@@ -92,7 +103,7 @@ mod tests {
     #[test]
     fn a_turn_ends_when_a_proven_agent_settles_after_working() {
         let mut watch = TurnWatch::default();
-        let seen: Vec<bool> = [
+        let seen: Vec<Vec<PaneTurn>> = [
             status("codex", "idle"),
             status("codex", "working"),
             status("codex", "blocked"),
@@ -107,12 +118,24 @@ mod tests {
             status("omp", "idle"),
         ]
         .iter()
-        .map(|frame| watch.ended(frame))
+        .map(|frame| watch.changed(frame))
         .collect();
+        let (waits, ends) = (PaneTurn::Waiting, PaneTurn::Ended);
         assert_eq!(
             seen,
             [
-                false, false, false, false, true, false, false, true, false, false, false, false
+                vec![],
+                vec![],
+                vec![waits(true)],
+                vec![waits(false)],
+                vec![ends],
+                vec![],
+                vec![],
+                vec![ends],
+                vec![],
+                vec![ends],
+                vec![],
+                vec![]
             ]
         );
     }

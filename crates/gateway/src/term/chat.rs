@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use kernel::harness::SessionSpec;
+use kernel::terminal::PaneTurn;
 use wire::events::{AgentEvent, AgentEventKind, ProtocolVersion};
 use wire::harness::{
     ApprovalDecision, ApprovalOutcome, HarnessEvent, HarnessId, HarnessSessionStatus,
@@ -350,24 +351,27 @@ impl TerminalService {
     pub(crate) fn follow_turn_ends(
         self: &Arc<Self>,
         key: String,
-        mut ends: tokio::sync::mpsc::Receiver<()>,
+        session: SessionId,
+        mut ends: tokio::sync::mpsc::Receiver<PaneTurn>,
     ) {
         let service = Arc::clone(self);
         self.track(async move {
             loop {
                 tokio::select! {
                     () = service.shutdown.cancelled() => return,
-                    end = ends.recv() => {
-                        if end.is_none() {
-                            return;
+                    end = ends.recv() => match end {
+                        None => return,
+                        Some(change @ PaneTurn::Waiting(_)) => service.pane_changed(&key, &session, change),
+                        Some(PaneTurn::Ended) => {
+                            service.pane_changed(&key, &session, PaneTurn::Ended);
+                            let chat = service.chats.read().get(&key).cloned();
+                            if let Some(chat) = chat
+                                && let Err(error) = chat.signal(TerminalSignal::TurnEnded).await
+                            {
+                                tracing::debug!(%error, "a terminal turn ended after its session actor stopped");
+                            }
                         }
-                        let chat = service.chats.read().get(&key).cloned();
-                        if let Some(chat) = chat
-                            && let Err(error) = chat.signal(TerminalSignal::TurnEnded).await
-                        {
-                            tracing::debug!(%error, "a terminal turn ended after its session actor stopped");
-                        }
-                    }
+                    },
                 }
             }
         });

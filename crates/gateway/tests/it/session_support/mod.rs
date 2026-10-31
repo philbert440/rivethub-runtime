@@ -49,7 +49,7 @@ struct Terminal {
 #[derive(Debug)]
 pub(crate) struct Mux {
     terminals: Mutex<BTreeMap<TerminalId, Terminal>>,
-    turns: Mutex<BTreeMap<TerminalId, mpsc::Sender<()>>>,
+    turns: Mutex<BTreeMap<TerminalId, mpsc::Sender<kernel::terminal::PaneTurn>>>,
     pub(crate) calls: watch::Sender<Vec<Call>>,
     pub(crate) tasks: tokio_util::task::TaskTracker,
 }
@@ -87,7 +87,7 @@ impl Mux {
         let turns = self.turns.lock().get(id).cloned();
         turns
             .expect("the terminal's turn ends are followed")
-            .send(())
+            .send(kernel::terminal::PaneTurn::Ended)
             .await
             .expect("turn end delivered");
     }
@@ -145,7 +145,10 @@ impl TerminalMux for Mux {
         Ok(self.open(id).await?.output)
     }
 
-    async fn turn_ends(&self, id: &TerminalId) -> Result<mpsc::Receiver<()>, TerminalMuxError> {
+    async fn turn_ends(
+        &self,
+        id: &TerminalId,
+    ) -> Result<mpsc::Receiver<kernel::terminal::PaneTurn>, TerminalMuxError> {
         let (sender, ends) = mpsc::channel(4);
         self.turns.lock().insert(id.clone(), sender);
         Ok(ends)
