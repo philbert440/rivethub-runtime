@@ -11,6 +11,7 @@ const FRESH_FOR: Duration = Duration::from_secs(30);
 #[derive(Debug, Default)]
 pub(crate) struct StatsCache {
     answers: Mutex<BTreeMap<String, (Instant, MemoryStatsResponse)>>,
+    computing: tokio::sync::Mutex<()>,
 }
 
 fn key() -> String {
@@ -40,6 +41,10 @@ impl StatsCache {
             .get(&key)
             .filter(|(at, _)| at.elapsed() < FRESH_FOR)
             .map(|(_, answer)| answer.clone())
+    }
+
+    pub(crate) async fn computing(&self) -> tokio::sync::MutexGuard<'_, ()> {
+        self.computing.lock().await
     }
 
     pub(crate) fn keep(&self, answer: &MemoryStatsResponse) {

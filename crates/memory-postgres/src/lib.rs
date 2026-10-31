@@ -21,6 +21,7 @@ pub mod search;
 mod search_complete;
 mod search_details;
 mod search_sql;
+mod search_vector;
 pub use search_complete::SearchSynthesis;
 mod stats_cache;
 mod store_impl;
@@ -123,7 +124,7 @@ impl PostgresMemory {
     }
 
     pub async fn connect(url: &str) -> Result<Self, Error> {
-        let pool = open_pool(url, 5, Some(Duration::from_secs(30)))
+        let pool = open_pool(url, POOL_CONNECTIONS, Some(Duration::from_secs(30)))
             .await
             .map_err(Error::Connection)?;
         Self::prepare(&pool).await?;
@@ -131,7 +132,7 @@ impl PostgresMemory {
     }
 
     pub async fn connect_deferred(url: &str) -> Result<Self, Error> {
-        let options = pool_options(5, Some(Duration::from_secs(30)));
+        let options = pool_options(POOL_CONNECTIONS, Some(Duration::from_secs(30)));
         match options.connect(url).await {
             Ok(pool) => {
                 Self::prepare(&pool).await?;
@@ -142,8 +143,8 @@ impl PostgresMemory {
                     %error,
                     "the memory database is unreachable; memory stays unavailable until it answers"
                 );
-                let pool =
-                    lazy_pool(url, 5, Some(Duration::from_secs(30))).map_err(Error::Connection)?;
+                let pool = lazy_pool(url, POOL_CONNECTIONS, Some(Duration::from_secs(30)))
+                    .map_err(Error::Connection)?;
                 tokio::spawn(check_when_reachable(pool.clone()));
                 Ok(Self {
                     unverified: true,
@@ -194,6 +195,7 @@ impl PostgresMemory {
 }
 
 const RECHECK: Duration = Duration::from_secs(5);
+const POOL_CONNECTIONS: u32 = 16;
 
 async fn check_when_reachable(pool: PgPool) {
     loop {

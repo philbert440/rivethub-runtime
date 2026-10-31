@@ -34,6 +34,7 @@ type TestResult = Result<(), Box<dyn std::error::Error>>;
 const FIRST: &str = "claude-code:00000000-0000-4000-8000-0000000000b1";
 const SECOND: &str = "claude-code:00000000-0000-4000-8000-0000000000b2";
 const LATER: &str = "claude-code:00000000-0000-4000-8000-0000000000b3";
+const UNCAPTURED: &str = "claude-code:00000000-0000-4000-8000-0000000000b4";
 const PROBE: &str = "rh_rls_probe";
 
 fn batch(session: &str, text: &str) -> CaptureBatchRequest {
@@ -278,6 +279,7 @@ async fn a_session_follows_its_topic_unless_it_is_marked(pool: PgPool) -> TestRe
         .await?;
     let second = SessionId::try_from(SECOND.to_owned())?;
     owners
+        .clone()
         .run(tenancy.mark_session(&alice, &second, Some(&shared), Utc::now()))
         .await?;
     assert_eq!(
@@ -292,6 +294,29 @@ async fn a_session_follows_its_topic_unless_it_is_marked(pool: PgPool) -> TestRe
         visible(&probe, members, "rh_session_placements").await?,
         0,
         "a shared session in a private topic shows without its topic"
+    );
+
+    let uncaptured = SessionId::try_from(UNCAPTURED.to_owned())?;
+    store
+        .place(Placement {
+            session: uncaptured.clone(),
+            topic: topic.id,
+            by: PlacementSource::You,
+            at: now,
+            owner: Some(alice.principal().clone()),
+        })
+        .await?;
+    owners
+        .clone()
+        .run(tenancy.mark_topic(&alice, topic.id, Some(&shared)))
+        .await?;
+    let found = owners
+        .run(tenancy.session_visibility(&alice, std::slice::from_ref(&uncaptured)))
+        .await?;
+    assert_eq!(
+        found.get(&uncaptured).map(|state| state.effective.clone()),
+        Some(shared),
+        "a session with no transcript yet follows its topic"
     );
     Ok(())
 }

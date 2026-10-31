@@ -12,22 +12,23 @@ use kernel::memory_core::recency_boost;
 use kernel::memory_core::should_trigram_fallback;
 use pgvector::HalfVector;
 use sqlx::QueryBuilder;
-use std::collections::BTreeMap;
 use std::str::FromStr as _;
 use wire::message::Role;
 
-const CHUNK_POOL_MULTIPLIER: i64 = 4;
-const CHUNK_POOL_MAX: i64 = 400;
-
-fn chunk_pool(limit: u32) -> i64 {
-    (hybrid_pool(limit) * CHUNK_POOL_MULTIPLIER).min(CHUNK_POOL_MAX)
-}
-
-fn semantic_floor(alias: &str) -> String {
+pub(crate) fn semantic_floor(alias: &str) -> String {
     format!("least(length(btrim({alias}.content)) / 1000.0, 1.0)")
 }
 
-fn recency_columns(alias: &str, is_message: bool) -> String {
+const LENGTH_PREFIX: i64 = 1000;
+
+fn long_enough(body: &str) -> String {
+    format!(
+        "(length(btrim(left({body}, {LENGTH_PREFIX}))) >= {HYBRID_MIN_CONTENT_LEN} \
+         OR (octet_length({body}) > {LENGTH_PREFIX} AND length(btrim({body})) >= {HYBRID_MIN_CONTENT_LEN}))"
+    )
+}
+
+pub(crate) fn recency_columns(alias: &str, is_message: bool) -> String {
     let importance = if is_message {
         format!(
             "(CASE WHEN {alias}.role = 'system' THEN 0.5 \
@@ -81,7 +82,7 @@ impl TagFilter {
     }
 }
 
-fn push_time_conditions(
+pub(crate) fn push_time_conditions(
     query: &mut QueryBuilder<sqlx::Postgres>,
     options: &SearchOptions,
     alias: &str,
@@ -96,7 +97,7 @@ fn push_time_conditions(
     }
 }
 
-fn push_scope_conditions(
+pub(crate) fn push_scope_conditions(
     query: &mut QueryBuilder<sqlx::Postgres>,
     options: &SearchOptions,
     is_message: bool,
@@ -221,7 +222,7 @@ fn push_literal_match(
 }
 
 #[derive(Debug, Clone, sqlx::FromRow)]
-struct ArmSqlRow {
+pub(crate) struct ArmSqlRow {
     chunk: Option<sqlx::types::Json<kernel::memory::MemoryChunkMatch>>,
     id: String,
     content: String,
@@ -240,7 +241,7 @@ struct ArmSqlRow {
 }
 
 impl ArmSqlRow {
-    fn into_arm(self, is_message: bool) -> Result<ArmRow, Error> {
+    pub(crate) fn into_arm(self, is_message: bool) -> Result<ArmRow, Error> {
         let (role, kind) = if is_message {
             (role_of(self.role_or_kind)?, None)
         } else {
@@ -269,7 +270,11 @@ impl ArmSqlRow {
     }
 }
 
-fn push_select_prefix(query: &mut QueryBuilder<sqlx::Postgres>, is_message: bool, chunk: bool) {
+pub(crate) fn push_select_prefix(
+    query: &mut QueryBuilder<sqlx::Postgres>,
+    is_message: bool,
+    chunk: bool,
+) {
     query.push("SELECT ");
     query.push(if chunk {
         "jsonb_build_object('index', c.idx, 'total', (SELECT count(*) FROM rh_message_chunks all_chunks WHERE all_chunks.message_id = c.message_id), 'charStart', c.char_start, 'charEnd', c.char_end, 'content', c.content) AS chunk, "
@@ -293,7 +298,7 @@ fn push_select_prefix(query: &mut QueryBuilder<sqlx::Postgres>, is_message: bool
     }
 }
 
-fn push_embedded_semantic(
+pub(crate) fn push_embedded_semantic(
     query: &mut QueryBuilder<sqlx::Postgres>,
     distance_expr: &str,
     alias: &str,
@@ -308,9 +313,9 @@ fn push_embedded_semantic(
     query.push(")::float8 AS semantic, ");
 }
 
-struct ArmContext<'a> {
-    options: &'a SearchOptions,
-    tag_filter: Option<&'a TagFilter>,
+pub(crate) struct ArmContext<'a> {
+    pub(crate) options: &'a SearchOptions,
+    pub(crate) tag_filter: Option<&'a TagFilter>,
 }
 
 const ESCAPE_HATCH_TIMEOUT: &str = "30s";
@@ -327,13 +332,22 @@ impl crate::PostgresMemory {
             options,
             tag_filter,
         };
-        let mut rows = Vec::new();
-        if matches!(options.scope, MemoryScope::Messages | MemoryScope::Both) {
-            rows.extend(self.arm_table(&context, kind, true, query_vector).await?);
-        }
-        if matches!(options.scope, MemoryScope::Summaries | MemoryScope::Both) {
-            rows.extend(self.arm_table(&context, kind, false, query_vector).await?);
-        }
+        let messages = async {
+            if matches!(options.scope, MemoryScope::Messages | MemoryScope::Both) {
+                self.arm_table(&context, kind, true, query_vector).await
+            } else {
+                Ok(Vec::new())
+            }
+        };
+        let summaries = async {
+            if matches!(options.scope, MemoryScope::Summaries | MemoryScope::Both) {
+                self.arm_table(&context, kind, false, query_vector).await
+            } else {
+                Ok(Vec::new())
+            }
+        };
+        let (mut rows, summary_rows) = tokio::try_join!(Box::pin(messages), Box::pin(summaries))?;
+        rows.extend(summary_rows);
         rows.sort_by(|a, b| {
             let by_score = b.arm_score.total_cmp(&a.arm_score);
             if kind == ArmKind::Trigram {
@@ -429,17 +443,12 @@ impl crate::PostgresMemory {
             }
         }
         if kind == ArmKind::Fts {
-            if is_message {
-                query.push(format!(
-                    " AND CASE WHEN m.role = 'tool'
-                                THEN length(btrim(coalesce(m.tool_result, '')))
-                                ELSE length(btrim(m.content)) END >= {HYBRID_MIN_CONTENT_LEN}"
-                ));
+            query.push(" AND ");
+            query.push(long_enough(if is_message {
+                "CASE WHEN m.role = 'tool' THEN coalesce(m.tool_result, '') ELSE m.content END"
             } else {
-                query.push(format!(
-                    " AND length(btrim(s.content)) >= {HYBRID_MIN_CONTENT_LEN}"
-                ));
-            }
+                "s.content"
+            }));
         }
         push_time_conditions(&mut query, options, alias);
         push_scope_conditions(&mut query, options, is_message);
@@ -482,140 +491,4 @@ impl crate::PostgresMemory {
             .map(|row| row.into_arm(is_message))
             .collect()
     }
-
-    pub(crate) async fn vector_arm_rows(
-        &self,
-        options: &SearchOptions,
-        tag_filter: Option<&TagFilter>,
-        query_vector: &[f32],
-        ef_search: u64,
-    ) -> Result<Vec<ArmRow>, Error> {
-        let vector = HalfVector::from_f32_slice(query_vector);
-        let mut tx = self
-            .pool
-            .begin()
-            .await
-            .map_err(|source| Error::operation("vector search", source))?;
-        crate::search::tune_hnsw(&mut tx, ef_search).await?;
-        let context = ArmContext {
-            options,
-            tag_filter,
-        };
-        let mut rows = Vec::new();
-        if matches!(options.scope, MemoryScope::Messages | MemoryScope::Both) {
-            let message_rows = self.vector_table(&context, &vector, true, &mut tx).await?;
-            let chunks = self.chunk_arm_rows(&context, &vector, &mut tx).await?;
-            rows.extend(merge_chunk_arm(message_rows, chunks));
-        }
-        if matches!(options.scope, MemoryScope::Summaries | MemoryScope::Both) {
-            rows.extend(self.vector_table(&context, &vector, false, &mut tx).await?);
-        }
-        drop(tx);
-        rows.sort_by(|a, b| {
-            b.arm_score
-                .total_cmp(&a.arm_score)
-                .then_with(|| a.id.cmp(&b.id))
-        });
-        Ok(rows)
-    }
-
-    async fn vector_table(
-        &self,
-        context: &ArmContext<'_>,
-        vector: &HalfVector,
-        is_message: bool,
-        tx: &mut sqlx::PgConnection,
-    ) -> Result<Vec<ArmRow>, Error> {
-        let options = context.options;
-        let tag_filter = context.tag_filter;
-        let alias = if is_message { "m" } else { "s" };
-        let table = if is_message {
-            "rh_messages m"
-        } else {
-            "rh_summaries s"
-        };
-        let distance = format!("{alias}.embedding");
-        let mut query = QueryBuilder::new("");
-        push_select_prefix(&mut query, is_message, false);
-        query.push("coalesce(1.0 - (");
-        query.push(distance.clone());
-        query.push(" <=> ");
-        query.push_bind(vector.clone());
-        query.push("), 0.0)::float8 AS score, ");
-        push_embedded_semantic(&mut query, &distance, alias, vector);
-        query.push(format!(
-            "{} FROM {table} WHERE {alias}.embedding IS NOT NULL",
-            recency_columns(alias, is_message)
-        ));
-        if let Some(filter) = tag_filter {
-            query.push(" AND ");
-            filter.push_condition(&mut query, is_message);
-        }
-        push_time_conditions(&mut query, options, alias);
-        push_scope_conditions(&mut query, options, is_message);
-        query.push(" ORDER BY ");
-        query.push(distance);
-        query.push(" <=> ");
-        query.push_bind(vector.clone());
-        query.push(format!(" LIMIT {}", hybrid_pool(options.limit)));
-        let fetched = query
-            .build_query_as::<ArmSqlRow>()
-            .fetch_all(&mut *tx)
-            .await
-            .map_err(|source| Error::operation("vector search", source))?;
-        fetched
-            .into_iter()
-            .map(|row| row.into_arm(is_message))
-            .collect()
-    }
-
-    async fn chunk_arm_rows(
-        &self,
-        context: &ArmContext<'_>,
-        vector: &HalfVector,
-        tx: &mut sqlx::PgConnection,
-    ) -> Result<Vec<ArmRow>, Error> {
-        let mut query = QueryBuilder::new("");
-        push_select_prefix(&mut query, true, true);
-        query.push("coalesce(1.0 - (c.embedding <=> ");
-        query.push_bind(vector.clone());
-        query.push("), 0.0)::float8 AS score, ");
-        push_embedded_semantic(&mut query, "c.embedding", "m", vector);
-        query.push(format!(
-            "{} FROM rh_message_chunks c \
-             JOIN rh_messages m ON m.id = c.message_id WHERE c.embedding IS NOT NULL",
-            recency_columns("m", true)
-        ));
-        if let Some(filter) = context.tag_filter {
-            query.push(" AND ");
-            filter.push_condition(&mut query, true);
-        }
-        push_time_conditions(&mut query, context.options, "m");
-        push_scope_conditions(&mut query, context.options, true);
-        query.push(" ORDER BY c.embedding <=> ");
-        query.push_bind(vector.clone());
-        query.push(format!(" LIMIT {}", chunk_pool(context.options.limit)));
-        let fetched = query
-            .build_query_as::<ArmSqlRow>()
-            .fetch_all(&mut *tx)
-            .await
-            .map_err(|source| Error::operation("chunk search", source))?;
-        fetched.into_iter().map(|row| row.into_arm(true)).collect()
-    }
-}
-
-fn merge_chunk_arm(parents: Vec<ArmRow>, chunks: Vec<ArmRow>) -> Vec<ArmRow> {
-    let mut merged: BTreeMap<String, ArmRow> = parents
-        .into_iter()
-        .map(|row| (row.id.clone(), row))
-        .collect();
-    for chunk in chunks {
-        if merged
-            .get(&chunk.id)
-            .is_none_or(|current| current.arm_score <= chunk.arm_score)
-        {
-            merged.insert(chunk.id.clone(), chunk);
-        }
-    }
-    merged.into_values().collect()
 }
