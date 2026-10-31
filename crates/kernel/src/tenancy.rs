@@ -42,13 +42,6 @@ impl fmt::Display for SpaceId {
     }
 }
 
-#[cfg_attr(
-    dylint_lib = "rr_lints",
-    expect(
-        duptype,
-        reason = "KERNELWIRE: the kernel owns what kind of space a principal shares into; wire::gateway::tenancy::SpaceKind is the contract's copy, translated by the gateway's visibility routes and the users registry"
-    )
-)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum SpaceKind {
     Household,
