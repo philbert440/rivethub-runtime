@@ -42,6 +42,12 @@ pub enum Error {
         timeout_ms: u128,
         session: String,
     },
+    #[error("herdr server for {session} exited ({status}) before opening its socket: {said}")]
+    HerdrServerExited {
+        session: String,
+        status: std::process::ExitStatus,
+        said: String,
+    },
     #[error("herdr server did not release {socket} within {timeout_ms}ms for {session}")]
     HerdrStopTimeout {
         socket: Box<std::path::Path>,
@@ -124,6 +130,7 @@ impl From<Error> for kernel::terminal::TerminalMuxError {
             | Error::StopStatus(_)
             | Error::SocketPathTooLong { .. }
             | Error::HerdrServerTimeout { .. }
+            | Error::HerdrServerExited { .. }
             | Error::HerdrStopTimeout { .. }
             | Error::Ack { .. }
             | Error::Json(_)
