@@ -70,10 +70,17 @@ const SESSIONS: &str = "WITH keys AS (SELECT DISTINCT key FROM unnest($1::text[]
      convs AS (SELECT DISTINCT ON (session_key) session_key, owner_user_id, visibility
                  FROM rh_conversations WHERE session_key = ANY ($1::text[]) ORDER BY session_key, created_at),
      marks AS (SELECT session_key, visibility FROM rh_session_marks
-                WHERE owner_user_id = $2 AND session_key = ANY ($1::text[]))
+                WHERE owner_user_id = $2 AND session_key = ANY ($1::text[])),
+     placed AS (SELECT p.session_id, p.topic_id FROM rh_session_placements p
+                 WHERE p.session_id = ANY ($1::text[])
+                   AND NOT EXISTS (SELECT 1 FROM convs c WHERE c.session_key = p.session_id)),
+     topic_marks AS (SELECT t.topic_id, rh_topic_mark(t.topic_id) AS mark
+                       FROM (SELECT DISTINCT topic_id FROM placed) t)
 SELECT k.key AS session, c.owner_user_id AS owner, m.visibility AS mark,
-       coalesce(c.visibility, rh_session_visibility(k.key, $2, now())) AS effective
-  FROM keys k LEFT JOIN convs c ON c.session_key = k.key LEFT JOIN marks m ON m.session_key = k.key";
+       coalesce(c.visibility,
+                rh_member_visibility($2, coalesce(m.visibility, tm.mark, rh_owner_default($2, now())))) AS effective
+  FROM keys k LEFT JOIN convs c ON c.session_key = k.key LEFT JOIN marks m ON m.session_key = k.key
+  LEFT JOIN placed p ON p.session_id = k.key LEFT JOIN topic_marks tm ON tm.topic_id = p.topic_id";
 
 #[async_trait]
 impl TenancyStore for PostgresTenancy {

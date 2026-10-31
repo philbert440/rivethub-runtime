@@ -147,12 +147,17 @@ impl crate::PostgresMemory {
             }
             None => None,
         };
-        let expanded = if query.expand == Some(false) {
-            Vec::new()
-        } else {
-            self.expand_summaries(&outcome.hits, &query).await?
+        let expand = async {
+            if query.expand == Some(false) {
+                Ok(Vec::new())
+            } else {
+                self.expand_summaries(&outcome.hits, &query)
+                    .await
+                    .map_err(MemoryStoreError::from)
+            }
         };
-        let summaries = self.summary_details(&outcome.hits, &query).await?;
+        let (expanded, summaries) =
+            tokio::try_join!(expand, self.summary_details(&outcome.hits, &query))?;
         let mut response = SearchOutcome {
             summaries,
             results: outcome

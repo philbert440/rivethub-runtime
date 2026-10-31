@@ -169,6 +169,35 @@ fn push_wire_columns(builder: &mut QueryBuilder<Postgres>) {
     );
 }
 
+pub(crate) async fn summary_conversation_tags(
+    pool: &PgPool,
+    summaries: &[Uuid],
+) -> Result<BTreeMap<Uuid, Vec<TagWire>>, MemoryStoreError> {
+    let mut builder = QueryBuilder::new("");
+    push_wire_columns(&mut builder);
+    builder
+        .push(" and t.entity_type = ")
+        .push_bind(TagEntityType::Conversation.to_string())
+        .push(" and t.state = ")
+        .push_bind(TagState::Accepted.to_string())
+        .push(" and t.entity_id in (select conversation_id from rh_summaries where id = any(")
+        .push_bind(summaries.to_vec())
+        .push(")) order by t.entity_id, t.key, t.value");
+    let rows = read_rows(
+        "tags list",
+        builder.build_query_as::<TagWireRow>().fetch_all(pool).await,
+    )?;
+    let mut grouped: BTreeMap<Uuid, Vec<TagWire>> = BTreeMap::new();
+    for row in rows.shape() {
+        let entity = Uuid::parse_str(&row.entity_id).map_err(Error::from)?;
+        grouped
+            .entry(entity)
+            .or_default()
+            .push(TagWire::try_from(row).map_err(MemoryStoreError::from)?);
+    }
+    Ok(grouped)
+}
+
 async fn list_tags(pool: &PgPool, query: &TagListQuery) -> Result<Vec<TagWire>, MemoryStoreError> {
     let mut builder = QueryBuilder::new("");
     push_wire_columns(&mut builder);

@@ -324,6 +324,10 @@ impl MemoryStore for crate::PostgresMemory {
             self.probe().await?;
             return Ok(answer);
         }
+        let _computing = self.stats_cache.computing().await;
+        if let Some(answer) = self.stats_cache.fresh() {
+            return Ok(answer);
+        }
         let answer = self.memory_stats().await.map_err(MemoryStoreError::from)?;
         self.stats_cache.keep(&answer);
         Ok(answer)

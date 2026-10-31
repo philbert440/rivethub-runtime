@@ -38,12 +38,13 @@ impl UpkeepStore for PostgresMemory {
                  FROM (SELECT (c.channel = ANY($2)
                                OR EXISTS (SELECT 1 FROM unnest($1::text[]) AS prefix
                                            WHERE starts_with(c.session_key, prefix))) AS left_out,
-                              coalesce(cp.placed_by,
-                                       (SELECT p.placed_by FROM rh_session_placements p
-                                         WHERE p.session_id IN (c.session_key, $3 || c.session_key)
-                                         LIMIT 1)) AS placed_by
+                              coalesce(cp.placed_by, bare.placed_by, prefixed.placed_by) AS placed_by
                          FROM rh_conversations c
-                         LEFT JOIN rh_conversation_placements cp ON cp.conversation_id = c.id) f"#,
+                         LEFT JOIN rh_conversation_placements cp ON cp.conversation_id = c.id
+                         LEFT JOIN rh_session_placements bare ON bare.session_id = c.session_key
+                         LEFT JOIN rh_session_placements prefixed
+                                ON prefixed.session_id = $3 || c.session_key
+                       OFFSET 0) f"#,
             &left_out.key_prefixes,
             &left_out.channels,
             bare_session_prefix(),

@@ -367,19 +367,31 @@ impl crate::PostgresMemory {
         tag_filter: Option<&TagFilter>,
     ) -> Result<SearchOutcome, Error> {
         let embed = self.embed_query(&options.text).await;
-        let query = embed.vector().cloned();
+        let query = embed.vector().map(Vec::as_slice);
         let literal = literal_scan(&options.text);
-        let fts_rows = self
-            .arm_rows(options, ArmKind::Fts, tag_filter, query.as_deref())
-            .await?;
-        let trigram_rows = if literal {
-            Some(
-                self.arm_rows(options, ArmKind::Trigram, tag_filter, query.as_deref())
-                    .await?,
-            )
-        } else {
-            None
+        let trigram = async {
+            if literal {
+                self.arm_rows(options, ArmKind::Trigram, tag_filter, query)
+                    .await
+                    .map(Some)
+            } else {
+                Ok(None)
+            }
         };
+        let vector = async {
+            match &embed {
+                EmbedAttempt::Embedded { vector, ef_search } => self
+                    .vector_arm_rows(options, tag_filter, vector, *ef_search)
+                    .await
+                    .map(Some),
+                EmbedAttempt::NotWired | EmbedAttempt::Failed { .. } => Ok(None),
+            }
+        };
+        let (fts_rows, trigram_rows, vector_rows) = tokio::try_join!(
+            Box::pin(self.arm_rows(options, ArmKind::Fts, tag_filter, query)),
+            Box::pin(trigram),
+            Box::pin(vector)
+        )?;
 
         let mut fallback = None;
         let trigram_rows = match trigram_rows {
@@ -387,7 +399,7 @@ impl crate::PostgresMemory {
             None => {
                 if fts_rows.is_empty() && should_trigram_fallback(&options.text) {
                     let recovered = self
-                        .arm_rows(options, ArmKind::Trigram, tag_filter, query.as_deref())
+                        .arm_rows(options, ArmKind::Trigram, tag_filter, query)
                         .await?;
                     if !recovered.is_empty() {
                         fallback = Some(MemoryFallback::Trigram);
@@ -399,21 +411,15 @@ impl crate::PostgresMemory {
             }
         };
 
-        let mut degraded = None;
-        let vector_rows = match embed {
-            EmbedAttempt::NotWired => None,
-            EmbedAttempt::Embedded { vector, ef_search } => Some(
-                self.vector_arm_rows(options, tag_filter, &vector, ef_search)
-                    .await?,
-            ),
-            EmbedAttempt::Failed {
-                failure,
-                elapsed_ms,
-            } => {
-                self.vector_dropped(&failure, elapsed_ms);
-                degraded = Some(failure.reason());
-                None
-            }
+        let degraded = if let EmbedAttempt::Failed {
+            failure,
+            elapsed_ms,
+        } = &embed
+        {
+            self.vector_dropped(failure, *elapsed_ms);
+            Some(failure.reason())
+        } else {
+            None
         };
 
         let fused = fuse(&fts_rows, vector_rows.as_deref(), trigram_rows.as_deref());

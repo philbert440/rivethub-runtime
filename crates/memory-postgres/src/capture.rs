@@ -225,8 +225,9 @@ impl<'a> CaptureWriter<'a> {
             return Ok(Vec::new());
         }
         let seen = sqlx::query_scalar!(
-            "select metadata->>'event_id' from rh_messages
-              where conversation_id = $1 and metadata->>'event_id' = any($2)",
+            "select m.metadata->>'event_id' from rh_messages m
+              where m.conversation_id = $1
+                and m.metadata->>'event_id' in (select unnest($2::text[]))",
             conversation_id,
             event_ids
         )
