@@ -472,6 +472,7 @@ async fn build_runners(
             decisions: Arc::clone(store) as Arc<dyn DecisionStore>,
             tidy: Arc::clone(store) as Arc<dyn TidyStore>,
             lineage: worker::session_lineage(env),
+            load: None,
         };
         let mut runner =
             worker::build_runner(role, ports, config, env, shutdown, activities).await?;

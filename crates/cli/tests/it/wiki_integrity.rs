@@ -173,6 +173,7 @@ async fn wiki_rejects_wrong_conversation_before_model_or_writes(pool: PgPool) ->
 
 #[sqlx::test(migrator = "migrate::POSTGRES")]
 async fn wiki_bad_model_output_is_failed_and_retryable(pool: PgPool) -> TestResult {
+    testkit::graphile_schema::install_graphile_worker(&pool).await?;
     let wiki = tempfile::tempdir()?;
     let store = PostgresMemory::new(pool.clone()).with_wiki_directory(wiki.path().to_path_buf());
     let queue = FakeJobQueue::default();
@@ -205,7 +206,12 @@ async fn wiki_bad_model_output_is_failed_and_retryable(pool: PgPool) -> TestResu
                 .await?;
         assert_eq!(row.0, "failed");
         assert!(row.1.is_some());
-        assert!(store.wiki_backfill(100).await?.contains(&job));
+        assert!(
+            store
+                .wiki_backfill(kernel::wiki::builder::BackfillBudget::flat(100))
+                .await?
+                .contains(&job)
+        );
         let model = provider(&[]);
         let env = WikiBuilderEnv {
             provider: &model,
@@ -215,7 +221,12 @@ async fn wiki_bad_model_output_is_failed_and_retryable(pool: PgPool) -> TestResu
             handle_extract_wiki(&env, &extract_wiki_job(&job)?.payload).await?,
             Vec::<String>::new()
         );
-        assert!(!store.wiki_backfill(100).await?.contains(&job));
+        assert!(
+            !store
+                .wiki_backfill(kernel::wiki::builder::BackfillBudget::flat(100))
+                .await?
+                .contains(&job)
+        );
     }
     Ok(())
 }
@@ -374,12 +385,18 @@ async fn wiki_file_failure_marks_extraction_failed_and_retry_reconciles(
 
 #[sqlx::test(migrator = "migrate::POSTGRES")]
 async fn index_only_completion_is_rebuilt_as_a_page(pool: PgPool) -> TestResult {
+    testkit::graphile_schema::install_graphile_worker(&pool).await?;
     let wiki = tempfile::tempdir()?;
     let store = PostgresMemory::new(pool.clone()).with_wiki_directory(wiki.path().to_path_buf());
     let job = seed(&pool).await?;
     sqlx::query("INSERT INTO rh_wiki_extractions (summary_id, status, pipeline_version, topics_touched, owner_user_id) VALUES ($1, 'done', $2, ARRAY['acmekit-deploys'], 'owner')")
         .bind(job.summary_id).bind(kernel::wiki::builder::WIKI_PIPELINE_VERSION).execute(&pool).await?;
-    assert!(store.wiki_backfill(100).await?.contains(&job));
+    assert!(
+        store
+            .wiki_backfill(kernel::wiki::builder::BackfillBudget::flat(100))
+            .await?
+            .contains(&job)
+    );
     assert!(matches!(
         store.wiki_work(&job).await?,
         kernel::wiki::builder::WikiWork::Pending(_)
@@ -388,6 +405,11 @@ async fn index_only_completion_is_rebuilt_as_a_page(pool: PgPool) -> TestResult 
         .apply_wiki(&job, vec![patch()], &WikiRouting::default(), now())
         .await?;
     assert!(wiki.path().join("topics/acmekit-deploys.md").is_file());
-    assert!(!store.wiki_backfill(100).await?.contains(&job));
+    assert!(
+        !store
+            .wiki_backfill(kernel::wiki::builder::BackfillBudget::flat(100))
+            .await?
+            .contains(&job)
+    );
     Ok(())
 }

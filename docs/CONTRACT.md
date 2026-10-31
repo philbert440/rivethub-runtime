@@ -1148,6 +1148,20 @@ dead, its dead jobs are the flagged records (no `firstFailedAt`; retry requeues 
 re-enqueueing a key still revives its dead job. Wiki order: `stale-wiki-sweep` re-adds missing leaves newest first, and
 one summarized within the last 24 hours is enqueued at priority -10 instead of 10, so new sessions reach the wiki ahead
 of the backlog.
+Wiki backfill (Phil, 2026-10-30): `wiki-backfill` runs every minute and keeps a tier of `extract-wiki` jobs at priority
+50 (`kernel::wiki::builder::BACKFILL_PRIORITY`), below all new work, so it is claimed only when nothing newer is ready.
+It selects leaf summaries outside heartbeat sessions that have no extraction or a failed one (or a done one with pages but
+no commit), newest first, skipping any whose `wiki-ext-` key is queued or flagged; a done or skipped extraction, of any
+pipeline version, is never re-run. The tier is topped up to one job while new work waits (a runnable `extract-wiki` job
+below priority 50 or a `compact-conversation` job below 0) and otherwise to the model's free slots: the worker reads
+`vllm:num_requests_running` and `vllm:num_requests_waiting` from `RIVETHUB_WIKI_BACKFILL_METRICS_URL` and allows
+`min(RIVETHUB_WIKI_BACKFILL_MAX` (6)`, RIVETHUB_MODEL_SLOTS` (8) `− running)` jobs when nothing waits, one otherwise or
+without the URL. In `rh worker` the tier is off unless the worker running `wiki-backfill` has
+`RIVETHUB_WIKI_BACKFILL=1`, and until then the cron only settles deferred notes; `rh local` keeps it on, since that is how
+a SQLite node finds new summaries. `RIVETHUB_CLAIM_MAX_PRIORITY` caps the priorities a Postgres worker claims, and a
+worker without `RIVETHUB_WIKI_BACKFILL=1` defaults to 49, so it never takes the tier. A Codex worker is let onto the tier
+by hand (`RIVETHUB_CLAIM_MAX_PRIORITY=50`) only while at least 30% of its weekly quota is left, and set back to 49 below
+that.
 
 (98) Memory counts, access counts and said chunks (Phil, 2026-10-31; memory in milliseconds): Postgres migration 0050 keeps per-conversation message counts in `rh_message_counts` (one row per conversation, owner and tool name, `''` for no tool, holding total, tool calls, embedded, queued and failed), maintained by statement triggers on `rh_messages`; `GET /api/memory/stats` sums them instead of scanning the messages, under the same read rule as the messages (the viewer's own rows, or rows of a conversation the viewer can see). Search access counts move to `rh_message_access` and `rh_summary_access`: a search hit upserts its row there, starting from the message's or summary's own `access_count`, which is no longer written, so a search no longer rewrites a message row; ranking and export read the new tables first and the old columns after. A chunk carries `said`, true when its message is a user or assistant message; a vector search that can only return user or assistant messages (the desktop's, which leaves out tool and system) searches chunks through a vector index of said chunks only. The migration itself takes short locks; `rh db migrate` and `rivethub-migrate` then fill the counts for existing conversations in batches of 50 under a short share lock on `rh_messages`, and mark existing said chunks in batches of 1,000. `rh_backfills` names what is still filling; until a backfill finishes, stats scan the messages and vector search uses every chunk. Common text: when Postgres estimates more than 5,000 matches for a text search, the text arm ranks only the 5,000 newest matches (messages by `created_at`, summaries by `latest_at`), breaking equal scores newest first; a search estimated at 5,000 matches or fewer ranks every match, unchanged. SQLite is unchanged.
 

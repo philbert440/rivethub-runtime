@@ -11,6 +11,10 @@ pub struct MemoryJobSettings {
     pub sweep_max_attempts: u32,
     pub wiki_sweep_limit: u32,
     pub flag_after: u32,
+    pub backfill_max: u32,
+    pub model_slots: u32,
+    pub claim_ceiling: Option<i16>,
+    pub backfill_enabled: bool,
 }
 
 impl MemoryJobSettings {
@@ -22,6 +26,10 @@ impl MemoryJobSettings {
             sweep_max_attempts: 5,
             wiki_sweep_limit: 20,
             flag_after: kernel::flagged::FLAG_AFTER_FAILURES,
+            backfill_max: 6,
+            model_slots: 8,
+            claim_ceiling: None,
+            backfill_enabled: true,
         }
     }
 
@@ -38,6 +46,8 @@ impl MemoryJobSettings {
                 &mut settings.sweep_max_attempts,
             ),
             ("RIVETHUB_FLAG_AFTER_FAILURES", &mut settings.flag_after),
+            ("RIVETHUB_WIKI_BACKFILL_MAX", &mut settings.backfill_max),
+            ("RIVETHUB_MODEL_SLOTS", &mut settings.model_slots),
         ] {
             if let Some(parsed) = number(env, name)? {
                 if parsed == 0 || parsed > i64::from(i32::MAX) {
@@ -49,6 +59,14 @@ impl MemoryJobSettings {
                     name: name.to_owned(),
                 })?;
             }
+        }
+        settings.backfill_enabled = env.text("RIVETHUB_WIKI_BACKFILL") == Some("1");
+        let name = "RIVETHUB_CLAIM_MAX_PRIORITY";
+        if let Some(parsed) = number(env, name)? {
+            settings.claim_ceiling =
+                Some(i16::try_from(parsed).map_err(|_| WorkerError::JobSetting {
+                    name: name.to_owned(),
+                })?);
         }
         let name = "RIVETHUB_WIKI_SWEEP_LIMIT";
         if let Some(parsed) = number(env, name)? {

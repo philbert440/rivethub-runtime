@@ -179,3 +179,14 @@ impl ModelProviderError {
         }
     }
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ModelLoad {
+    pub running: u32,
+    pub waiting: u32,
+}
+
+#[async_trait]
+pub trait ModelLoadProbe: Send + Sync {
+    async fn load(&self) -> Result<ModelLoad, BoxError>;
+}

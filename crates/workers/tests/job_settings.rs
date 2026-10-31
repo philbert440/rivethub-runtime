@@ -15,11 +15,21 @@ fn unconfigured_sweeps_use_the_datahub_defaults() -> Result<(), WorkerError> {
         sweep_max_attempts: 5,
         wiki_sweep_limit: 20,
         flag_after: 5,
+        backfill_max: 6,
+        model_slots: 8,
+        claim_ceiling: None,
+        backfill_enabled: false,
     };
-    assert_eq!(MemoryJobSettings::standard(), expected);
     assert_eq!(
         MemoryJobSettings::from_environment(&Environment::default())?,
         expected
+    );
+    assert_eq!(
+        MemoryJobSettings::standard(),
+        MemoryJobSettings {
+            backfill_enabled: true,
+            ..expected
+        }
     );
     assert!(EmbedSettings::standard().chunks_enabled);
     assert_eq!(EmbedSettings::standard().chars_per_chunk, 6000);
@@ -38,6 +48,11 @@ fn environment_overrides_are_typed_and_the_wiki_cap_is_clamped() -> Result<(), W
         9
     );
     assert_eq!(with("RIVETHUB_FLAG_AFTER_FAILURES", "3")?.flag_after, 3);
+    assert_eq!(
+        with("RIVETHUB_CLAIM_MAX_PRIORITY", "49")?.claim_ceiling,
+        Some(49)
+    );
+    assert!(with("RIVETHUB_WIKI_BACKFILL", "1")?.backfill_enabled);
     assert_eq!(
         with("RIVETHUB_WIKI_SWEEP_LIMIT", "500")?.wiki_sweep_limit,
         200
@@ -129,4 +144,17 @@ fn summary_caps_and_embed_timeout_follow_the_environment() -> Result<(), WorkerE
 #[test]
 fn wiki_extraction_leaves_the_model_the_same_room_as_the_den() {
     assert_eq!(workers::wiki_builder::WIKI_EXTRACT_MAX_TOKENS, 32_000);
+}
+
+#[test]
+fn the_backfill_grows_only_into_free_model_slots() {
+    use kernel::model::ModelLoad;
+    use workers::wiki_builder::backfill_budget;
+    let load = |running, waiting| Some(ModelLoad { running, waiting });
+    assert_eq!(backfill_budget(load(2, 0), 6, 8).idle, 6);
+    assert_eq!(backfill_budget(load(5, 0), 6, 8).idle, 3);
+    assert_eq!(backfill_budget(load(8, 0), 6, 8).idle, 1);
+    assert_eq!(backfill_budget(load(2, 1), 6, 8).idle, 1);
+    assert_eq!(backfill_budget(None, 6, 8).idle, 1);
+    assert_eq!(backfill_budget(load(0, 0), 6, 8).busy, 1);
 }

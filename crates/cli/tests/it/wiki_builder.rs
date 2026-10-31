@@ -223,7 +223,7 @@ async fn wiki_claims_jobs_persists_sources_and_retries_embedding_delivery(
 }
 
 #[sqlx::test(migrator = "migrate::POSTGRES")]
-async fn wiki_backfill_requeues_old_done_and_failed_but_preserves_current_and_skipped(
+async fn wiki_backfill_tops_up_missing_and_failed_leaves_and_never_reruns_done(
     pool: PgPool,
 ) -> TestResult {
     testkit::graphile_schema::install_graphile_worker(&pool).await?;
@@ -234,7 +234,7 @@ async fn wiki_backfill_requeues_old_done_and_failed_but_preserves_current_and_sk
     let cancel = CancellationToken::new();
     let mut expected = std::collections::BTreeSet::new();
     for (status, version, eligible) in [
-        ("done", 3, true),
+        ("done", 3, false),
         ("done", 4, false),
         ("failed", 4, true),
         ("skipped", 3, false),
@@ -257,8 +257,20 @@ async fn wiki_backfill_requeues_old_done_and_failed_but_preserves_current_and_sk
         cancel: &cancel,
         topics: Some(wiki_support::ports(&store)),
     };
-    assert_eq!(handle_wiki_backfill(&env).await?, expected.len());
-    assert_eq!(handle_wiki_backfill(&env).await?, expected.len());
+    let one = kernel::wiki::builder::BackfillBudget::flat(1);
+    assert_eq!(handle_wiki_backfill(&env, one).await?, 1);
+    assert_eq!(
+        handle_wiki_backfill(&env, one).await?,
+        0,
+        "the tier is full"
+    );
+    let all = kernel::wiki::builder::BackfillBudget::flat(100);
+    assert_eq!(handle_wiki_backfill(&env, all).await?, expected.len() - 1);
+    assert_eq!(
+        handle_wiki_backfill(&env, all).await?,
+        0,
+        "queued leaves are not added twice"
+    );
     let mut actual = std::collections::BTreeSet::new();
     while let Some(job) = queue
         .claim(&kernel::queue::ClaimSelector::matching(
@@ -275,8 +287,29 @@ async fn wiki_backfill_requeues_old_done_and_failed_but_preserves_current_and_sk
     let crons = PostgresQueue::crontab(WorkerRole::WikiBuilder);
     assert!(crons.iter().any(
         |cron| cron.task == JobName::Fixed(FixedJob::EnqueueWikiBackfill)
-            && cron.schedule == "*/10 * * * *"
+            && cron.schedule == "*/1 * * * *"
     ));
+    Ok(())
+}
+
+#[sqlx::test(migrator = "migrate::POSTGRES")]
+async fn waiting_new_work_holds_the_backfill_to_its_busy_size(pool: PgPool) -> TestResult {
+    testkit::graphile_schema::install_graphile_worker(&pool).await?;
+    let queue = PostgresQueue::connect(pool.clone()).await?;
+    let store = PostgresMemory::new(pool.clone());
+    for _ in 0..3 {
+        seed(&pool).await?;
+    }
+    let budget = kernel::wiki::builder::BackfillBudget { idle: 3, busy: 1 };
+    let fresh = seed(&pool).await?;
+    let mut new_work = extract_wiki_job(&fresh)?;
+    new_work.priority = -10;
+    queue.enqueue(new_work).await?;
+    assert_eq!(store.wiki_backfill(budget).await?.len(), 1);
+    sqlx::query("DELETE FROM graphile_worker._private_jobs")
+        .execute(&pool)
+        .await?;
+    assert_eq!(store.wiki_backfill(budget).await?.len(), 3);
     Ok(())
 }
 

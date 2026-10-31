@@ -3,6 +3,7 @@ pub mod exit;
 mod identity;
 pub mod local;
 pub mod logging;
+pub mod model_load;
 pub mod models;
 pub mod service;
 mod shutdown;

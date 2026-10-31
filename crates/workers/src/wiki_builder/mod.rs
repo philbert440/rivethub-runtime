@@ -4,11 +4,13 @@ use chrono::{DateTime, NaiveDate, Utc};
 use kernel::memory::jobs::MissingWiki;
 use kernel::memory::{EmbedTable, EmbedTarget};
 use kernel::model::FinishReason;
+use kernel::model::{ModelLoad, ModelLoadProbe};
 use kernel::model::{ModelProvider, ModelProviderError, ModelRequest};
 use kernel::queue::{FixedJob, Job, JobKeyMode, JobName, JobQueue};
 use kernel::topics::TopicPageError;
 use kernel::wiki::builder::{
-    ExtractWiki, WikiBuilderStore, WikiSummary, WikiWork, extraction_schema,
+    BACKFILL_PRIORITY, BackfillBudget, ExtractWiki, WikiBuilderStore, WikiSummary, WikiWork,
+    extraction_schema,
 };
 use kernel::wiki::consolidate::WikiConsolidateStore;
 use kernel::wiki::page::WikiPatch;
@@ -43,6 +45,7 @@ pub struct WikiBuilderDeps {
     pub consolidate: Option<Arc<dyn WikiConsolidateStore>>,
     pub recompile: Option<Arc<dyn WikiRecompileStore>>,
     pub model: String,
+    pub load: Option<Arc<dyn ModelLoadProbe>>,
 }
 
 #[expect(
@@ -69,6 +72,7 @@ struct ExtractionInput<'a> {
 }
 
 const RECENT_WIKI_PRIORITY: i16 = -10;
+const BACKFILL_FLOOR: u32 = 1;
 const WIKI_BACKLOG_PRIORITY: i16 = 10;
 
 pub fn extract_wiki_job(job: &ExtractWiki) -> Result<Job, WorkerError> {
@@ -91,17 +95,34 @@ pub fn missing_wiki_job(missing: &MissingWiki, now: DateTime<Utc>) -> Result<Job
     Ok(job)
 }
 
-pub async fn handle_wiki_backfill(env: &WikiBuilderEnv<'_>) -> Result<usize, WorkerError> {
+#[must_use]
+pub fn backfill_budget(load: Option<ModelLoad>, max: u32, slots: u32) -> BackfillBudget {
+    let idle = match load {
+        Some(load) if load.waiting == 0 => slots.saturating_sub(load.running).min(max),
+        Some(_) | None => BACKFILL_FLOOR,
+    };
+    BackfillBudget {
+        idle: idle.max(BACKFILL_FLOOR),
+        busy: BACKFILL_FLOOR,
+    }
+}
+
+pub async fn handle_wiki_backfill(
+    env: &WikiBuilderEnv<'_>,
+    budget: BackfillBudget,
+) -> Result<usize, WorkerError> {
     let jobs = tokio::select! {
         biased;
         () = env.cancel.cancelled() => return Err(WorkerError::Cancelled),
-        result = env.store.wiki_backfill(100) => result?,
+        result = env.store.wiki_backfill(budget) => result?,
     };
     for job in &jobs {
+        let mut queued = extract_wiki_job(job)?;
+        queued.priority = BACKFILL_PRIORITY;
         tokio::select! {
             biased;
             () = env.cancel.cancelled() => return Err(WorkerError::Cancelled),
-            result = env.queue.enqueue(extract_wiki_job(job)?) => {
+            result = env.queue.enqueue(queued) => {
                 result.map(|_| ()).map_err(WorkerError::Queue)?;
             }
         }
