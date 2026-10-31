@@ -55,7 +55,7 @@ async fn release_closes_the_owner_and_allows_resume_on_the_same_adapter() {
             .await,
         Err(HarnessAdapterError::UnknownSession(_))
     ));
-    tokio::time::timeout(WAIT, adapter.resume(&session))
+    tokio::time::timeout(WAIT, adapter.resume(&session, None))
         .await
         .expect("resume initialization deadline")
         .expect("resume");

@@ -3,15 +3,15 @@ use std::str::FromStr;
 use async_trait::async_trait;
 use chrono::DateTime;
 use chrono::Utc;
+use kernel::agent_presets::AgentPreset;
 use kernel::agent_presets::AgentPresetStore;
 use kernel::agent_presets::AgentPresetStoreError;
+use kernel::agent_presets::AgentPresetUpdate;
+use kernel::agent_presets::AgentStoreBackend;
 use sqlx::PgPool;
 use sqlx::Postgres;
 use sqlx::postgres::PgTypeInfo;
 use sqlx::postgres::PgValueRef;
-use wire::gateway::agents::AgentPreset;
-use wire::gateway::agents::AgentPresetUpdate;
-use wire::gateway::agents::AgentStoreBackend;
 use wire::harness::HarnessId;
 
 use crate::Error;
@@ -200,7 +200,7 @@ impl AgentPresetStore for PostgresPresets {
     ) -> Result<Option<AgentPreset>, AgentPresetStoreError> {
         let harness = changes
             .harness_id
-            .map(|slot| slot.map(|known| HarnessId::from(known).to_string()));
+            .map(|slot| slot.map(|harness| harness.to_string()));
         let sort_order = match changes.sort_order {
             Some(slot) => Some(sort_column(slot)?),
             None => None,

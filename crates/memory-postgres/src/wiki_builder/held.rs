@@ -35,10 +35,10 @@ pub(super) async fn hold(
     held: HeldEntity,
 ) -> Result<Vec<HeldEntity>, WikiStoreError> {
     sqlx::query(
-        "INSERT INTO rh_wiki_entity_candidates (key, source, summary_id, patch, held_at)
-         VALUES ($1, $2, $3, $4::jsonb, $5)
+        "INSERT INTO rh_wiki_entity_candidates (key, source, summary_id, patch, held_at, owner_user_id)
+         VALUES ($1, $2, $3, $4::jsonb, $5, (SELECT owner_user_id FROM rh_summaries WHERE id = $3))
          ON CONFLICT (key, source) DO UPDATE SET summary_id = EXCLUDED.summary_id,
-            patch = EXCLUDED.patch, held_at = EXCLUDED.held_at",
+            patch = EXCLUDED.patch, held_at = EXCLUDED.held_at, owner_user_id = EXCLUDED.owner_user_id",
     )
     .bind(held.key.as_str())
     .bind(&held.source)
@@ -96,8 +96,9 @@ pub(super) async fn release(pool: &PgPool, held: &[HeldEntity]) -> Result<(), Wi
 pub(super) async fn defer(pool: &PgPool, deferred: DeferredWiki) -> Result<(), WikiStoreError> {
     sqlx::query(
         "INSERT INTO rh_wiki_deferred
-             (summary_id, waits_session, waits_conversation, applied_topic, patches, deferred_at)
-         VALUES ($1, $2, $3, $4, $5::jsonb, $6)
+             (summary_id, waits_session, waits_conversation, applied_topic, patches, deferred_at,
+              owner_user_id)
+         VALUES ($1, $2, $3, $4, $5::jsonb, $6, (SELECT owner_user_id FROM rh_summaries WHERE id = $1))
          ON CONFLICT (summary_id) DO UPDATE SET waits_session = EXCLUDED.waits_session,
             waits_conversation = EXCLUDED.waits_conversation, applied_topic = EXCLUDED.applied_topic,
             patches = EXCLUDED.patches, deferred_at = EXCLUDED.deferred_at",

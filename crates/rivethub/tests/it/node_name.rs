@@ -139,13 +139,6 @@ async fn finish(started: Started) -> TestResult<String> {
     Ok(text)
 }
 
-fn free_port() -> TestResult<u16> {
-    let probe = std::net::TcpListener::bind(("127.0.0.1", 0))?;
-    let port = probe.local_addr()?.port();
-    drop(probe);
-    Ok(port)
-}
-
 #[tokio::test]
 async fn worker_check_uses_the_configured_node_name() -> TestResult {
     let home = tempfile::tempdir()?;
@@ -181,7 +174,7 @@ async fn gateway_healthz_reports_the_configured_node(pool: PgPool) -> TestResult
     migrate::postgres_pool(&pool).await?;
     let url = pool.connect_options().to_url_lossy();
     let home = tempfile::tempdir()?;
-    let port = free_port()?;
+    let port = testkit::ports::claim()?;
     write_state(
         home.path(),
         &provider_config(
@@ -224,7 +217,7 @@ async fn gateway_claims_the_configured_queue_and_not_the_hostname(pool: PgPool) 
     attempts_heard.listen("rh_node_name_attempts").await?;
     let url = pool.connect_options().to_url_lossy();
     let home = tempfile::tempdir()?;
-    let port = free_port()?;
+    let port = testkit::ports::claim()?;
     write_state(
         home.path(),
         &provider_config(

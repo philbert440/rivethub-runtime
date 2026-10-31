@@ -1,20 +1,31 @@
 use crate::error::Error;
 use chrono::DateTime;
 use chrono::Utc;
+use kernel::memory::CaptureMessage;
+use kernel::owner::Owner;
 use sqlx::PgPool;
 use sqlx::Transaction;
 use sqlx::postgres::Postgres;
 use uuid::Uuid;
 use wire::JsonObject;
-use wire::capture::CaptureMessage;
 use wire::message::Role;
 
 pub const MAX_CONTENT_CHARS: usize = 16_000;
 
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CaptureOptions {
-    pub owner_user_id: Option<String>,
+    pub owner: Owner,
     pub node: Option<String>,
+}
+
+impl CaptureOptions {
+    #[must_use]
+    pub fn owned_by(owner: &Owner) -> Self {
+        Self {
+            owner: owner.clone(),
+            node: None,
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -22,7 +33,7 @@ pub struct CaptureWriter<'a> {
     pub(crate) tx: Transaction<'a, Postgres>,
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ConversationUpsert<'a> {
     pub session_key: &'a str,
     pub agent: &'a str,
@@ -30,8 +41,14 @@ pub struct ConversationUpsert<'a> {
     pub title: Option<&'a str>,
     pub settings: Option<&'a JsonObject>,
     pub task_id: Option<&'a str>,
-    pub owner_user_id: Option<&'a str>,
+    pub owner_user_id: &'a str,
     pub node: Option<&'a str>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UpsertedConversation {
+    pub id: Uuid,
+    pub owner_user_id: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -42,7 +59,7 @@ pub struct ConversationEnsure<'a> {
     pub title: Option<&'a str>,
     pub settings: &'a JsonObject,
     pub task_id: Option<&'a str>,
-    pub owner_user_id: Option<&'a str>,
+    pub owner_user_id: &'a str,
     pub created_at: Option<DateTime<Utc>>,
     pub updated_at: Option<DateTime<Utc>>,
     pub active: bool,
@@ -75,7 +92,7 @@ pub struct MessageRow<'a> {
     pub tool_args: Option<&'a JsonObject>,
     pub tool_result: Option<&'a str>,
     pub metadata: &'a JsonObject,
-    pub owner_user_id: Option<&'a str>,
+    pub owner_user_id: &'a str,
     pub created_at: Option<DateTime<Utc>>,
 }
 
@@ -108,19 +125,6 @@ impl<'a> CaptureWriter<'a> {
             .commit()
             .await
             .map_err(|source| Error::operation("capture commit", source))
-    }
-
-    pub async fn adopt_owner(&mut self, id: Uuid, owner: &str) -> Result<(), Error> {
-        sqlx::query!(
-            "update rh_conversations set owner_user_id = $2
-              where id = $1 and owner_user_id is null",
-            id,
-            owner
-        )
-        .execute(&mut *self.tx)
-        .await
-        .map_err(|source| Error::operation("owner adoption", source))?;
-        Ok(())
     }
 
     pub async fn backfill_task_id(&mut self, id: Uuid, task_id: &str) -> Result<(), Error> {
@@ -221,8 +225,9 @@ impl<'a> CaptureWriter<'a> {
             return Ok(Vec::new());
         }
         let seen = sqlx::query_scalar!(
-            "select metadata->>'event_id' from rh_messages
-              where conversation_id = $1 and metadata->>'event_id' = any($2)",
+            "select m.metadata->>'event_id' from rh_messages m
+              where m.conversation_id = $1
+                and m.metadata->>'event_id' in (select unnest($2::text[]))",
             conversation_id,
             event_ids
         )

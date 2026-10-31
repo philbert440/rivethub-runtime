@@ -1,8 +1,9 @@
 use std::path::{Path, PathBuf};
 
 use kernel::harness::TurnAttachment;
+use kernel::transcript::{HarnessTranscriptTurn, SessionMessageRole};
 use serde::{Deserialize, Serialize};
-use wire::gateway::sessions::{HarnessTranscriptTurn, SessionMessageRole, TranscriptAttachment};
+use wire::gateway::sessions::TranscriptAttachment;
 use wire::session_id::SessionId;
 
 use super::UploadError;
@@ -55,6 +56,17 @@ fn transcript_attachment(attachment: &TurnAttachment) -> TranscriptAttachment {
     }
 }
 
+fn kernel_attachment(
+    attachment: &TranscriptAttachment,
+) -> kernel::transcript::TranscriptAttachment {
+    kernel::transcript::TranscriptAttachment {
+        media_type: attachment.media_type.clone(),
+        name: attachment.name.clone(),
+        uri: attachment.uri.clone(),
+        upload_id: attachment.upload_id.clone(),
+    }
+}
+
 fn resource_link(path: &str) -> String {
     let name = match path.rsplit_once('/') {
         Some((_, name)) => name,
@@ -78,7 +90,7 @@ pub(crate) fn attach(turns: &mut [HarnessTranscriptTurn], journal: &[AttachedTur
             .find_map(|(at, entry)| entry.matched(&turn.text).map(|text| (at, text, entry)));
         if let Some((at, text, entry)) = found {
             turn.text = text;
-            turn.attachments = Some(entry.attachments.clone());
+            turn.attachments = Some(entry.attachments.iter().map(kernel_attachment).collect());
             cursor = at;
         }
     }
@@ -126,7 +138,7 @@ mod tests {
     use std::path::PathBuf;
 
     use kernel::harness::TurnAttachment;
-    use wire::gateway::sessions::{HarnessTranscriptTurn, SessionMessageRole};
+    use kernel::transcript::{HarnessTranscriptTurn, SessionMessageRole};
 
     use super::{AttachedTurn, attach};
 

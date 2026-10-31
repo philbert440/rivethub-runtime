@@ -23,7 +23,7 @@ const WIDE: &str = "00000000-0000-4000-8000-000000000105";
 
 #[tokio::test]
 async fn embeddings_follow_the_recorded_row_effects() -> TestResult {
-    let fresh = fresh_store(None)?;
+    let fresh = fresh_store()?;
     seed(&fresh.store).await?;
     let vector = sample();
     write_done(&fresh.store, &vector).await?;
@@ -112,7 +112,7 @@ async fn keep_written_bytes(store: &memory_sqlite::SqliteStore, vector: &[f32]) 
 
 #[tokio::test]
 async fn width_and_missing_chunk_storage_are_refused() -> TestResult {
-    let fresh = fresh_store(None)?;
+    let fresh = fresh_store()?;
     seed(&fresh.store).await?;
     fresh
         .store
@@ -165,7 +165,7 @@ async fn width_and_missing_chunk_storage_are_refused() -> TestResult {
 
 #[tokio::test]
 async fn the_first_write_records_the_model_and_another_model_is_refused() -> TestResult {
-    let fresh = fresh_store(None)?;
+    let fresh = fresh_store()?;
     seed(&fresh.store).await?;
     let first = fresh.store.clone().with_embed_model("embed-a");
     first.write(stored(DONE, sample(), Vec::new())).await?;

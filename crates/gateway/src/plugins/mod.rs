@@ -1,6 +1,7 @@
 mod api;
 mod creator;
 mod events;
+pub(crate) mod fault;
 mod jobs;
 mod launch;
 mod logs;
@@ -26,7 +27,6 @@ use std::time::Duration;
 
 use chrono::{DateTime, Utc};
 use parking_lot::Mutex;
-use serde::de::DeserializeOwned;
 use sha2::{Digest, Sha256};
 use subtle::ConstantTimeEq as _;
 use tokio::sync::{broadcast, watch};
@@ -44,6 +44,7 @@ use wire::plugin::{PluginId, RouteName};
 use crate::sessions::SessionRegistry;
 use crate::tenancy::UserId;
 
+pub(crate) use fault::parse;
 pub use manage::start;
 
 const NOTIFICATION_BUFFER: usize = 64;
@@ -51,14 +52,6 @@ const DEFAULT_READY: Duration = Duration::from_millis(10_000);
 
 pub(crate) fn plugin_url(path: &str) -> String {
     format!("http://plugin/{path}")
-}
-
-pub(crate) fn parse<T: DeserializeOwned>(bytes: &[u8]) -> Result<T, String> {
-    let mut decoder = serde_json::Deserializer::from_slice(bytes);
-    serde_path_to_error::deserialize(&mut decoder).map_err(|error| {
-        let path = error.path().to_string();
-        format!("{path}: {}", error.into_inner())
-    })
 }
 
 #[derive(Debug, Clone)]

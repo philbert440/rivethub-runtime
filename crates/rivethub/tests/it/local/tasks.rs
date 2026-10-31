@@ -6,7 +6,7 @@ use wire::gateway::catalog::CatalogAgentsResponse;
 use wire::task::TaskCreateRequest;
 use wire::task::TasksListResponse;
 
-use super::{TestResult, free_port, model_stub, provider_base, start, stop};
+use super::{TestResult, model_stub, provider_base, start, stop};
 
 struct Observed {
     refused: (reqwest::StatusCode, GatewayError),
@@ -69,7 +69,7 @@ async fn observe(gateway: u16) -> TestResult<Observed> {
 async fn an_agent_on_a_model_provider_is_not_delegable_and_the_retired_routes_are_gone()
 -> TestResult {
     let home = tempfile::tempdir()?;
-    let gateway = free_port()?;
+    let gateway = testkit::ports::claim()?;
     let stub = model_stub().await?;
     let database = home.path().join(".rivethub").join("memory.sqlite");
     super::write_config(
@@ -77,7 +77,7 @@ async fn an_agent_on_a_model_provider_is_not_delegable_and_the_retired_routes_ar
         &provider_base(
             home.path(),
             &format!("http://{}", stub.address),
-            &gateway_config(&database, gateway),
+            &gateway_config(&database, gateway.number()),
         ),
     )?;
     let started = start(
@@ -86,7 +86,7 @@ async fn an_agent_on_a_model_provider_is_not_delegable_and_the_retired_routes_ar
         &["gateway listening on "],
     )
     .await?;
-    let observed = observe(gateway).await;
+    let observed = observe(gateway.number()).await;
     let stopped = stop(started).await;
     let closed = stub.close().await;
     let observed = observed?;

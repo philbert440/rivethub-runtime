@@ -147,11 +147,6 @@ fn success_payload(
                 label, body,
             ));
         }
-        "/api/capabilities" => {
-            errors.push_result(roundtrip_as::<wire::gateway::devices::NodeCapabilities>(
-                label, body,
-            ));
-        }
         "/api/phone-pairing" => {
             errors.push_result(roundtrip_as::<
                 wire::gateway::devices::PhonePairingAvailability,
@@ -162,7 +157,7 @@ fn success_payload(
                 errors.push_result(roundtrip_as::<wire::gateway::GatewayError>(label, body));
             }
         }
-        "/session" | "/layout" => {
+        "/session" => {
             if status == 200 && ok_body {
                 errors.push_result(roundtrip_as::<wire::gateway::OkReply>(label, body));
             }
@@ -628,6 +623,12 @@ fn provider_payloads_roundtrip() -> Result<(), String> {
         provider_chunks(server, scenario, &mut errors);
     }
     check(&errors)
+}
+
+#[test]
+fn llama_cpp_timings_chunk_roundtrips() -> Result<(), String> {
+    let chunk = r#"{"choices":[],"created":1793419284,"id":"chatcmpl-0SKSM8pfY3wNH8bLDE06FtAWSWu2XTQL","model":"hy-memory","system_fingerprint":"b50-1052f7e","object":"chat.completion.chunk","usage":{"completion_tokens":5,"prompt_tokens":17,"total_tokens":22,"prompt_tokens_details":{"cached_tokens":0}},"timings":{"cache_n":0,"prompt_n":17,"prompt_ms":46.54,"prompt_per_token_ms":2.7376470588235295,"prompt_per_second":365.2771809196391,"predicted_n":5,"predicted_ms":40.337,"predicted_per_token_ms":10.08425,"predicted_per_second":99.16453876093908}}"#;
+    typed_chunk("llama.cpp timings chunk", chunk)
 }
 
 #[test]

@@ -17,7 +17,7 @@ use super::{
 pub struct PagePatch {
     pub action: WikiAction,
     pub slug: String,
-    #[serde_as(as = "wire::time::Millis")]
+    #[serde_as(as = "values::Millis")]
     pub verified_at: DateTime<Utc>,
     #[serde(default)]
     pub title: Option<String>,
@@ -47,8 +47,8 @@ pub struct PagePatch {
     pub allow_shrink: bool,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, strum::Display)]
-enum Revision {
+#[derive(Debug, Clone, Copy, PartialEq, Eq, strum::Display, strum::EnumString)]
+pub(super) enum Revision {
     #[strum(serialize = "Superseded current state")]
     CurrentState,
     #[strum(serialize = "Summary overflow (v7 cap)")]

@@ -2,12 +2,12 @@ use std::str::FromStr as _;
 
 use chrono::DateTime;
 use chrono::Utc;
+use kernel::memory::MemoryEntry;
 use rusqlite::Row;
 use rusqlite::Transaction;
 use rusqlite::types::Type;
 use uuid::Uuid;
 use wire::JsonObject;
-use wire::memory::MemoryEntry;
 use wire::message::Role;
 
 use crate::error::SqliteError;
@@ -26,7 +26,7 @@ pub(crate) struct NewMessage<'a> {
     pub(crate) tool_result: Option<&'a str>,
     pub(crate) metadata: Option<&'a str>,
     pub(crate) created_at: DateTime<Utc>,
-    pub(crate) owner: Option<&'a str>,
+    pub(crate) owner: &'a str,
 }
 
 impl NewMessage<'_> {

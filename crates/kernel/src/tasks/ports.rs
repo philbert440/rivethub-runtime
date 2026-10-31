@@ -114,6 +114,8 @@ pub trait TaskStore: Debug + Send + Sync {
         stale_before: DateTime<Utc>,
         now: DateTime<Utc>,
     ) -> Result<Vec<Uuid>, TaskError>;
+
+    async fn expire(&self, now: DateTime<Utc>) -> Result<Vec<Uuid>, TaskError>;
 }
 
 pub trait TaskWatch: Debug + Send + Sync {

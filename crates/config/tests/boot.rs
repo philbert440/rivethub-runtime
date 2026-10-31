@@ -288,37 +288,6 @@ fn blank_connection_strings_fall_through() -> Result<(), Box<dyn std::error::Err
 }
 
 #[test]
-fn audio_flag_accepts_only_explicit_booleans() {
-    assert!(!env_from(&[]).audio_switch().enabled);
-    assert!(
-        env_from(&[("RIVETHUB_AUDIO", "   ")])
-            .audio_switch()
-            .ignored
-            .is_none()
-    );
-    for value in ["1", "true", "yes", "on", " TRUE "] {
-        let current = env_from(&[("RIVETHUB_AUDIO", value)]);
-        assert!(current.audio_switch().enabled, "{value}");
-        assert!(current.audio_switch().ignored.is_none());
-        let legacy = env_from(&[("RIVETOS_DEN_AUDIO", value)]);
-        assert!(legacy.audio_switch().enabled, "{value}");
-        alias_warns(&legacy, "RIVETHUB_AUDIO", "RIVETOS_DEN_AUDIO");
-    }
-    for value in ["0", "false", "no", "off"] {
-        let current = env_from(&[("RIVETHUB_AUDIO", value)]);
-        assert!(!current.audio_switch().enabled, "{value}");
-        assert!(current.audio_switch().ignored.is_none());
-    }
-    let weird = env_from(&[("RIVETHUB_AUDIO", "maybe")]);
-    assert!(!weird.audio_switch().enabled);
-    let ignored = weird.audio_switch().ignored.expect("ignored flag");
-    assert!(ignored.contains("RIVETHUB_AUDIO=maybe"), "{ignored}");
-    let legacy = env_from(&[("RIVETOS_DEN_AUDIO", "maybe")]);
-    let ignored = legacy.audio_switch().ignored.expect("legacy ignored flag");
-    assert!(ignored.contains("RIVETOS_DEN_AUDIO=maybe"), "{ignored}");
-}
-
-#[test]
 fn voice_endpoints_prefer_the_current_name() {
     let env = env_from(&[
         ("RIVETOS_DEN_VOICE_STT_URL", " http://legacy/stt "),

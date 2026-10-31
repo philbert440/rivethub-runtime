@@ -51,6 +51,7 @@ pub(super) enum MemoryCommand {
         dry_run: bool,
         json: bool,
         sqlite: Option<PathBuf>,
+        model: Option<super::titles::TitleModel>,
     },
     Reembed {
         dry_run: bool,
@@ -61,7 +62,9 @@ pub(super) enum MemoryCommand {
         dry_run: bool,
         json: bool,
     },
+    RecompileWiki(super::recompile::RecompileArgs),
     Cleanup(super::cleanup::CleanupArgs),
+    MergeStore(super::merge::MergeArgs),
 }
 
 enum Verb {
@@ -74,7 +77,9 @@ enum Verb {
     Titles,
     Reembed,
     ConsolidateWiki,
+    RecompileWiki,
     Cleanup,
+    MergeStore,
 }
 
 fn verb(text: &str) -> Option<Verb> {
@@ -88,7 +93,9 @@ fn verb(text: &str) -> Option<Verb> {
         "backfill-titles" => Some(Verb::Titles),
         "reembed" => Some(Verb::Reembed),
         "consolidate-wiki" => Some(Verb::ConsolidateWiki),
+        "recompile-wiki" => Some(Verb::RecompileWiki),
         "cleanup" => Some(Verb::Cleanup),
+        "merge-store" => Some(Verb::MergeStore),
         _ => None,
     }
 }
@@ -116,8 +123,14 @@ pub(super) fn parse(args: &[String]) -> Result<Option<MemoryCommand>, Error> {
         Verb::Titles => titles(rest).map(Some),
         Verb::Reembed => reembed(rest).map(Some),
         Verb::ConsolidateWiki => consolidate_wiki(rest).map(Some),
+        Verb::RecompileWiki => super::recompile::parse(rest)
+            .map(MemoryCommand::RecompileWiki)
+            .map(Some),
         Verb::Cleanup => super::cleanup::parse(rest)
             .map(MemoryCommand::Cleanup)
+            .map(Some),
+        Verb::MergeStore => super::merge::parse(rest)
+            .map(MemoryCommand::MergeStore)
             .map(Some),
     }
 }
@@ -359,6 +372,7 @@ fn titles(args: &[String]) -> Result<MemoryCommand, Error> {
     let mut dry_run = false;
     let mut json = false;
     let mut sqlite = None;
+    let (mut model, mut model_url, mut concurrency) = (None, None, None);
     while scan.current().is_some() {
         match scan.option("--sqlite", None) {
             Taken::Value(value) => {
@@ -366,6 +380,30 @@ fn titles(args: &[String]) -> Result<MemoryCommand, Error> {
                 continue;
             }
             Taken::Missing => return Err(Error::SqliteRequired),
+            Taken::Absent => {}
+        }
+        match scan.option("--model", None) {
+            Taken::Value(value) => {
+                model = Some(value);
+                continue;
+            }
+            Taken::Missing => return Err(Error::TitlesModel),
+            Taken::Absent => {}
+        }
+        match scan.option("--model-url", None) {
+            Taken::Value(value) => {
+                model_url = Some(value);
+                continue;
+            }
+            Taken::Missing => return Err(Error::TitlesModel),
+            Taken::Absent => {}
+        }
+        match scan.option("--concurrency", None) {
+            Taken::Value(value) => {
+                concurrency = Some(positive_count(&value)?);
+                continue;
+            }
+            Taken::Missing => return Err(Error::CleanupNumber("--concurrency")),
             Taken::Absent => {}
         }
         if scan.flag("--dry-run") {
@@ -378,10 +416,16 @@ fn titles(args: &[String]) -> Result<MemoryCommand, Error> {
         }
         return Err(reject(&scan));
     }
+    let model = match (model, model_url) {
+        (Some(name), Some(url)) => Some(super::titles::TitleModel::new(name, url, concurrency)),
+        (None, None) if concurrency.is_none() => None,
+        _ => return Err(Error::TitlesModel),
+    };
     Ok(MemoryCommand::Titles {
         dry_run,
         json,
         sqlite,
+        model,
     })
 }
 
@@ -485,6 +529,13 @@ fn positive_limit(text: &str) -> Result<(u32, bool), Error> {
         u32::try_from(parsed).map_err(|_| Error::LimitInteger)?,
         false,
     ))
+}
+
+fn positive_count(text: &str) -> Result<usize, Error> {
+    match text.parse::<usize>() {
+        Ok(count) if count > 0 => Ok(count),
+        Ok(_) | Err(_) => Err(Error::CleanupNumber("--concurrency")),
+    }
 }
 
 fn timestamp(text: &str) -> Result<DateTime<Utc>, Error> {

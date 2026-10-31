@@ -25,9 +25,7 @@ async fn gateway_with_a_missing_certificate_authority_root_refuses_to_start(
     migrate::postgres_pool(&pool).await?;
     let url = pool.connect_options().to_url_lossy();
     let home = tempfile::tempdir()?;
-    let probe = std::net::TcpListener::bind(("127.0.0.1", 0))?;
-    let port = probe.local_addr()?.port();
-    drop(probe);
+    let port = testkit::ports::claim()?;
     let root = home.path().join("missing-root.pem");
     let password = home.path().join("provisioner.password");
     std::fs::write(&password, "secret\n")?;
@@ -101,9 +99,7 @@ async fn phone_pairing_without_an_authority_stays_unavailable_and_agents_come_fr
     migrate::postgres_pool(&pool).await?;
     let url = pool.connect_options().to_url_lossy();
     let home = tempfile::tempdir()?;
-    let probe = std::net::TcpListener::bind(("127.0.0.1", 0))?;
-    let port = probe.local_addr()?.port();
-    drop(probe);
+    let port = testkit::ports::claim()?;
     write_state(
         home.path(),
         &provider_config(
@@ -177,9 +173,7 @@ async fn gateway_with_a_partial_request_exits_within_the_grace_on_sigint(
     migrate::postgres_pool(&pool).await?;
     let url = pool.connect_options().to_url_lossy();
     let home = tempfile::tempdir()?;
-    let probe = std::net::TcpListener::bind(("127.0.0.1", 0))?;
-    let port = probe.local_addr()?.port();
-    drop(probe);
+    let port = testkit::ports::claim()?;
     write_state(
         home.path(),
         &provider_config(
@@ -189,7 +183,7 @@ async fn gateway_with_a_partial_request_exits_within_the_grace_on_sigint(
         ),
     )?;
     let Started { mut child, logs } = start_gateway(home.path()).await?;
-    let mut socket = TcpStream::connect(("127.0.0.1", port)).await?;
+    let mut socket = TcpStream::connect(("127.0.0.1", port.number())).await?;
     socket
         .write_all(b"GET / HTTP/1.1\r\nHost: 127.0.0.1\r\n")
         .await?;

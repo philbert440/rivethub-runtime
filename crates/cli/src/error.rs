@@ -183,6 +183,10 @@ pub enum Error {
     OutRequired,
     #[error("--since requires an ISO timestamp")]
     SinceRequired,
+    #[error("--min-bytes requires a byte count: {0}")]
+    RecompileBytes(String),
+    #[error("--slug requires a wiki page slug: {0}")]
+    RecompileSlug(String),
     #[error("invalid --since timestamp: {0}")]
     SinceInvalid(String),
     #[error("refusing to write gzip to a TTY (redirect stdout or pass --out <file>)")]
@@ -191,6 +195,8 @@ pub enum Error {
     ImportPath,
     #[error("import accepts one file path")]
     ImportOne,
+    #[error("merge-store: {0}")]
+    MergeStore(String),
     #[error("reembed runs on a SQLite memory file; pass --sqlite <file>")]
     ReembedSqlite,
     #[error("--sqlite requires a file path")]
@@ -255,6 +261,12 @@ pub enum Error {
     CleanupOut,
     #[error("rh memory cleanup needs --model-url <url> and --model <name>")]
     CleanupModel,
+    #[error(
+        "rh memory backfill-titles names titles with both --model <name> and --model-url <url>"
+    )]
+    TitlesModel,
+    #[error("rh memory backfill-titles --model runs on Postgres memory only")]
+    TitlesSqlite,
     #[error("{0} requires a value")]
     CleanupValue(&'static str),
     #[error("{0} requires a positive integer")]

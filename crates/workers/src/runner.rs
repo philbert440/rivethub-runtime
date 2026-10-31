@@ -74,6 +74,7 @@ pub struct WorkerDeps {
     pub provider: Arc<dyn ModelProvider>,
     pub embed: EmbedSettings,
     pub summary: SummarySettings,
+    pub scopes: Option<crate::OwnerScopes>,
 }
 
 #[expect(
@@ -92,6 +93,7 @@ pub struct Runner<Q> {
     topic_pages: Option<crate::topic_page::TopicPages>,
     tidy: Option<Arc<dyn kernel::tidy::TidyStore>>,
     deletions: Option<Arc<dyn kernel::memory::SessionDeletion>>,
+    scopes: Option<crate::OwnerScopes>,
     queue: Arc<Q>,
     targets: Arc<dyn EmbeddingStore>,
     summaries: Arc<dyn SummaryStore>,
@@ -126,6 +128,7 @@ where
             topic_pages: None,
             tidy: None,
             deletions: None,
+            scopes: deps.scopes,
             queue,
             targets: deps.targets,
             summaries: deps.summaries,
@@ -415,6 +418,7 @@ where
             topic_pages: self.topic_pages.clone(),
             tidy: self.tidy.clone(),
             deletions: self.deletions.clone(),
+            scopes: self.scopes.clone(),
         };
         let wake = Arc::clone(&self.wake);
         let open = Arc::clone(&self.open);
@@ -422,7 +426,7 @@ where
         let id = job.id;
         let activities = self.activities.clone();
         let activity = format!("job {} {id}", job.name);
-        tasks.spawn(async move {
+        tasks.spawn(kernel::tenancy::Scope::carry(async move {
             let _activity = activities.enter(activity);
             let result = settle(gate.as_ref(), queue.as_ref(), &env, job, &cancel).await;
             {
@@ -432,7 +436,7 @@ where
             drop(permit);
             wake.notify_one();
             result
-        });
+        }));
     }
 
     async fn park(

@@ -1,6 +1,7 @@
 use async_trait::async_trait;
 use chrono::DateTime;
 use chrono::Utc;
+use kernel::topics::PageChange;
 use kernel::topics::PageEdit;
 use kernel::topics::PageSection;
 use kernel::topics::TopicId;
@@ -9,8 +10,10 @@ use kernel::topics::TopicPageStore;
 use kernel::wiki::builder::WikiStoreError;
 use kernel::wiki::consolidate::WikiConsolidateStore;
 use kernel::wiki::consolidate::WikiFold;
+use kernel::wiki::page::ArticleSection;
 use kernel::wiki::page::FoldMark;
 use kernel::wiki::page::WikiSlug;
+use kernel::wiki::page::bound::bound_parts;
 use rusqlite::Connection;
 use rusqlite::OptionalExtension as _;
 use rusqlite::params;
@@ -99,6 +102,43 @@ impl TopicPageStore for SqliteStore {
             Ok(true)
         })
         .await
+    }
+
+    async fn change_page(
+        &self,
+        root: TopicId,
+        slug: &WikiSlug,
+        change: &PageChange<'_>,
+        now: DateTime<Utc>,
+    ) -> Result<(), WikiStoreError> {
+        for _ in 0..CHANGE_ATTEMPTS {
+            let before = self
+                .topic_page(slug)
+                .await?
+                .ok_or_else(|| WikiStoreError::TopicMissing(slug.as_ref().to_owned()))?;
+            let mut after = before.clone();
+            change(&mut after);
+            if after == before {
+                return Ok(());
+            }
+            let swapped = blocking(self, move |conn| {
+                let tx = conn.transaction().map_err(query)?;
+                if read(&tx, &before.slug)?.as_ref() != Some(&before) {
+                    return Ok(false);
+                }
+                save(&tx, root, &after, &time::stamp(now))?;
+                tx.commit().map_err(query)?;
+                Ok(true)
+            })
+            .await?;
+            if swapped {
+                return Ok(());
+            }
+        }
+        Err(WikiStoreError::InvalidPatch(format!(
+            "topic page {} kept changing under the update",
+            slug.as_ref()
+        )))
     }
 
     async fn redirect_page(
@@ -199,6 +239,7 @@ fn save(
     page: &TopicPage,
     at: &str,
 ) -> Result<(), WikiStoreError> {
+    let page = &bounded(page);
     let lists = conn
         .query_row(
             "SELECT aliases, tags, entities FROM ros_wiki_topics WHERE slug = ?1",
@@ -339,4 +380,38 @@ fn decode_list(text: &str) -> Result<Vec<String>, WikiStoreError> {
 
 fn encode(sections: &[StoredSection]) -> Result<String, WikiStoreError> {
     serde_json::to_string(sections).map_err(|source| WikiStoreError::Query(Box::new(source)))
+}
+
+const CHANGE_ATTEMPTS: usize = 8;
+
+fn bounded(page: &TopicPage) -> TopicPage {
+    let mut page = page.clone();
+    let mut sections: Vec<ArticleSection> = page
+        .sections
+        .iter()
+        .map(|section| ArticleSection {
+            heading: section.heading.clone(),
+            body: section.body.clone(),
+        })
+        .collect();
+    let owned: Vec<String> = page
+        .sections
+        .iter()
+        .filter(|section| section.topic.is_some())
+        .map(|section| section.heading.clone())
+        .collect();
+    let archived = bound_parts(&mut page.summary, &mut page.article, &mut sections, &owned);
+    if !archived.is_empty() {
+        tracing::info!(
+            "wiki page {} trimmed to its budget: {} block(s) left out",
+            page.slug.as_ref(),
+            archived.len()
+        );
+    }
+    for (section, fitted) in page.sections.iter_mut().zip(sections) {
+        section.body = fitted.body;
+    }
+    page.sections
+        .retain(|section| section.topic.is_some() || !section.body.trim().is_empty());
+    page
 }

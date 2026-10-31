@@ -186,6 +186,10 @@ impl TaskStore for PostgresTasks {
         })
         .await
     }
+
+    async fn expire(&self, now: DateTime<Utc>) -> Result<Vec<Uuid>, TaskError> {
+        in_transaction(&self.pool, async |conn| rows::expire(conn, now).await).await
+    }
 }
 
 #[async_trait]
@@ -237,15 +241,8 @@ impl JobQueue for PostgresTasks {
         .await
     }
 
-    async fn revive_dead(
-        &self,
-        name: &JobName,
-        dead_before: chrono::DateTime<chrono::Utc>,
-    ) -> Result<u64, JobQueueError> {
-        crate::graphile::GraphileQueue::new(self.pool.clone())
-            .revive_before(name, dead_before)
-            .await
-            .map_err(JobQueueError::from)
+    async fn flag_stuck(&self) -> Result<u64, JobQueueError> {
+        Ok(0)
     }
 
     async fn read(&self, id: JobId) -> Result<Option<kernel::queue::StoredJob>, JobQueueError> {

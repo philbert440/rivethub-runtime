@@ -3,6 +3,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use async_trait::async_trait;
+use kernel::harness::{ApprovalDecision, HarnessOffering};
 use kernel::harness::{
     HarnessAdapter, HarnessAdapterError, SessionEvent, SessionOption, SessionSpec, TurnInput,
 };
@@ -10,7 +11,6 @@ use kernel::model::{ModelRequest, ModelStreamItem};
 use parking_lot::Mutex;
 use tokio::sync::{Notify, mpsc};
 use tokio_util::sync::CancellationToken;
-use wire::harness::{ApprovalDecision, HarnessOffering};
 use wire::session_id::SessionId;
 
 pub(crate) type TestResult = Result<(), Box<dyn std::error::Error + Send + Sync>>;
@@ -129,7 +129,11 @@ impl HarnessAdapter for Harness {
         Ok(session)
     }
 
-    async fn resume(&self, session: &SessionId) -> Result<(), HarnessAdapterError> {
+    async fn resume(
+        &self,
+        session: &SessionId,
+        _cwd: Option<&std::path::Path>,
+    ) -> Result<(), HarnessAdapterError> {
         if self.sessions.lock().contains_key(session) {
             Ok(())
         } else {

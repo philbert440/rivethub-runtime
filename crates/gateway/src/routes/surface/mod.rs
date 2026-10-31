@@ -1,5 +1,4 @@
 mod assets;
-mod layout;
 mod mesh;
 
 use std::sync::Arc;
@@ -35,19 +34,8 @@ pub(super) fn mount(router: Router<Arc<Gateway>>) -> Router<Arc<Gateway>> {
                 .fallback(super::not_found),
         )
         .route(
-            "/layout",
-            routing::get(layout::get)
-                .post(layout::post)
-                .fallback(super::not_found)
-                .layer(axum::extract::DefaultBodyLimit::max(super::BODY_LIMIT)),
-        )
-        .route(
             "/mesh.json",
             routing::get(mesh::overview).fallback(super::not_found),
-        )
-        .route(
-            "/api/capabilities",
-            routing::get(mesh::capabilities).fallback(super::not_found),
         )
         .fallback(fallback)
 }
@@ -136,16 +124,12 @@ fn redirect(target: &str) -> Result<Response, ApiError> {
 async fn fallback(State(gateway): State<Arc<Gateway>>, request: Request) -> Response {
     let path = request.uri().path().to_owned();
     let method = request.method().clone();
-    if delegated(&path) || (method != Method::GET && method != Method::HEAD) {
-        return super::not_found(State(gateway), request).await;
+    if method != Method::GET && method != Method::HEAD {
+        return super::not_found().await.into_response();
     }
     assets::serve(&gateway, &method, &path)
         .await
         .into_response()
-}
-
-fn delegated(path: &str) -> bool {
-    blocked_prefix(path, "/v1") || blocked_prefix(path, "/api/conversations")
 }
 
 pub(super) fn static_blocked(path: &str) -> bool {

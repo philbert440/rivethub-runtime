@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use kernel::ToolContext;
-use kernel::agent::{StopReason, Turn, TurnResult, tool_permitted};
+use kernel::agent::{StopReason, Turn, TurnContext, TurnResult, TurnUsage, tool_permitted};
 use kernel::model::{ModelChunk, ModelProvider, ModelRequest};
 use kernel::tool::Tool;
 use tokio::sync::mpsc;
@@ -112,7 +112,7 @@ impl AgentLoop {
             tools_used: state.tools_used.clone(),
             iterations: state.iterations,
             aborted: outcome.is_err() || state.stop == StopReason::StepLimit,
-            usage: state.usage.clone(),
+            usage: state.usage.map(usage_body),
         };
         tokio::time::timeout(
             turn.limits.cleanup_timeout,
@@ -124,11 +124,11 @@ impl AgentLoop {
         Ok(state)
     }
 
-    async fn emit(&self, base: &HookContextBase, kind: HookContextKind) -> Result<(), Error> {
+    async fn emit(&self, context: &TurnContext, kind: HookContextKind) -> Result<(), Error> {
         let result = self
             .hooks
             .run(HookContext {
-                base: base.clone(),
+                base: hook_base(context),
                 kind,
             })
             .await?;
@@ -257,12 +257,12 @@ impl AgentLoop {
             let permitted =
                 tool_permitted(&call.name, &turn.authorized_tools, &turn.excluded_tools);
             let hooks = Arc::clone(&self.hooks);
-            let base = turn.context.clone();
+            let base = hook_base(&turn.context);
             let context = turn.tool_context.clone();
-            tasks.spawn(async move {
+            tasks.spawn(kernel::tenancy::Scope::carry(async move {
                 let completed = execute(tool, permitted, hooks, base, context, call).await?;
                 Ok::<_, Error>((index, completed))
-            });
+            }));
         }
         let mut completed = BTreeMap::new();
         while let Some(result) = tasks.join_next().await {
@@ -356,7 +356,23 @@ fn hook_usage(usage: &LlmUsage) -> HookUsage {
     }
 }
 
-fn add_usage(total: &mut Option<HookUsage>, usage: Option<LlmUsage>) -> Result<(), Error> {
+fn hook_base(context: &TurnContext) -> HookContextBase {
+    HookContextBase {
+        agent_id: context.agent_id.clone(),
+        session_id: context.session_id.clone(),
+        timestamp: context.timestamp,
+        metadata: context.metadata.clone(),
+    }
+}
+
+const fn usage_body(usage: TurnUsage) -> HookUsage {
+    HookUsage {
+        prompt_tokens: usage.prompt_tokens,
+        completion_tokens: usage.completion_tokens,
+    }
+}
+
+fn add_usage(total: &mut Option<TurnUsage>, usage: Option<LlmUsage>) -> Result<(), Error> {
     if let Some(usage) = usage {
         if let Some(total) = total {
             let prompt_tokens = total
@@ -367,12 +383,15 @@ fn add_usage(total: &mut Option<HookUsage>, usage: Option<LlmUsage>) -> Result<(
                 .completion_tokens
                 .checked_add(usage.completion_tokens)
                 .ok_or(Error::UsageOverflow)?;
-            *total = HookUsage {
+            *total = TurnUsage {
                 prompt_tokens,
                 completion_tokens,
             };
         } else {
-            *total = Some(hook_usage(&usage));
+            *total = Some(TurnUsage {
+                prompt_tokens: usage.prompt_tokens,
+                completion_tokens: usage.completion_tokens,
+            });
         }
     }
     Ok(())

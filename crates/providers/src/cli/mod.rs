@@ -8,6 +8,7 @@ use std::time::Duration;
 use async_trait::async_trait;
 use config::provider::{CliProvider, ProviderType};
 use kernel::harness::{HarnessAdapter, SessionSpec, TurnInput};
+use kernel::model::LlmResponse;
 use kernel::model::{Embedding, ModelProvider, ModelProviderError, ModelRequest, ModelStreamItem};
 use parking_lot::Mutex;
 use serde::Serialize;
@@ -16,7 +17,7 @@ use tokio_util::sync::CancellationToken;
 use tokio_util::task::TaskTracker;
 use wire::harness::HarnessId;
 use wire::session_id::SessionId;
-use wire::stream::{LlmResponse, ThinkingLevel};
+use wire::stream::ThinkingLevel;
 use wire::task::Effort;
 
 pub use error::CliError;

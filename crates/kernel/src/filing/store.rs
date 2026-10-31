@@ -7,6 +7,7 @@ use super::Correction;
 use super::CorrectionExample;
 use super::Target;
 use crate::memory::ConversationHead;
+use crate::tenancy::SessionVisibility;
 use crate::topics::HistoryMark;
 use crate::topics::Lineage;
 use crate::topics::Placement;
@@ -49,6 +50,7 @@ pub struct FiledSession {
     pub last_active: Option<DateTime<Utc>>,
     pub node: Option<String>,
     pub lineage: Option<Lineage>,
+    pub visibility: Option<SessionVisibility>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

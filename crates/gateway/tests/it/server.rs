@@ -128,11 +128,8 @@ async fn bind_loopback_hosts_and_the_recorded_refusal_hosts() {
     assert!(!is_bind_loopback(""));
     assert!(!is_bind_loopback("gateway.example.test"));
 
-    let free = tokio::net::TcpListener::bind(("127.0.0.1", 0))
-        .await
-        .expect("probe listener");
-    let port = free.local_addr().expect("addr").port();
-    drop(free);
+    let claim = testkit::ports::claim().expect("claimed port");
+    let port = claim.number();
     let source = BindSource {
         host: "localhost".to_string(),
         port,

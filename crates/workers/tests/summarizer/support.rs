@@ -19,6 +19,10 @@ pub(super) fn bind<'a>(
 }
 
 pub(super) fn assert_calls(calls: &[Captured], expected: &[ChatCall]) {
+    let calls: Vec<&Captured> = calls
+        .iter()
+        .filter(|call| call.kind != "TITLE_SYSTEM_PROMPT")
+        .collect();
     assert_eq!(calls.len(), expected.len());
     for (call, recorded) in calls.iter().zip(expected) {
         assert_eq!(call.kind, recorded.prompt);
@@ -105,6 +109,7 @@ impl MemStore {
         Self {
             windows: Mutex::new(windows),
             written: Mutex::new(Vec::new()),
+            retitled: Mutex::new(Vec::new()),
         }
     }
 }
@@ -198,6 +203,17 @@ impl SummaryStore for MemStore {
         } else {
             SummaryWrite::Added
         })
+    }
+
+    async fn retitle(&self, id: Uuid, title: &str) -> Result<bool, SummaryStoreError> {
+        let needs = self.windows.lock().await.iter().any(|window| {
+            window.conversation.id == id
+                && kernel::memory::needs_title(window.conversation.title.as_deref())
+        });
+        if needs {
+            self.retitled.lock().await.push((id, title.to_owned()));
+        }
+        Ok(needs)
     }
 }
 
@@ -303,6 +319,8 @@ pub(super) fn kind_name(system: &str) -> &'static str {
         "BRANCH_SYSTEM_PROMPT"
     } else if system == ROOT_SYSTEM_PROMPT {
         "ROOT_SYSTEM_PROMPT"
+    } else if system == TITLE_SYSTEM_PROMPT {
+        "TITLE_SYSTEM_PROMPT"
     } else {
         "OTHER"
     }
@@ -312,6 +330,7 @@ pub(super) fn answer(kind: &str) -> String {
     match kind {
         "BRANCH_SYSTEM_PROMPT" => BRANCH_TEXT.to_owned(),
         "ROOT_SYSTEM_PROMPT" => ROOT_TEXT.to_owned(),
+        "TITLE_SYSTEM_PROMPT" => TITLE_ANSWER.to_owned(),
         _ => LEAF_TEXT.to_owned(),
     }
 }
@@ -346,7 +365,7 @@ pub(super) fn plain_error(message: &str) -> ModelProviderError {
 }
 
 impl Seen {
-    pub(super) fn with_dead(dead: Vec<(JobName, DateTime<Utc>)>) -> Self {
+    pub(super) fn with_dead(dead: Vec<JobName>) -> Self {
         Self {
             jobs: Mutex::new(Vec::new()),
             dead: Mutex::new(dead),
@@ -377,7 +396,7 @@ impl Seen {
             .lock()
             .await
             .iter()
-            .filter(|(name, _)| *name == JobName::Fixed(job))
+            .filter(|name| **name == JobName::Fixed(job))
             .count()
     }
 }
@@ -490,24 +509,9 @@ impl JobQueue for Seen {
         outcome
     }
 
-    async fn revive_dead(
-        &self,
-        name: &JobName,
-        dead_before: DateTime<Utc>,
-    ) -> Result<u64, JobQueueError> {
-        let revived = {
-            let mut dead = self.dead.lock().await;
-            let mut revived = 0u64;
-            dead.retain(|(job, dead_at)| {
-                let due = job == name && *dead_at < dead_before;
-                if due {
-                    revived = revived.saturating_add(1);
-                }
-                !due
-            });
-            revived
-        };
-        Ok(revived)
+    async fn flag_stuck(&self) -> Result<u64, JobQueueError> {
+        let flagged = std::mem::take(&mut *self.dead.lock().await).len();
+        u64::try_from(flagged).map_err(|_| JobQueueError::Stored("flagged".to_owned()))
     }
 
     async fn read(&self, id: JobId) -> Result<Option<kernel::queue::StoredJob>, JobQueueError> {

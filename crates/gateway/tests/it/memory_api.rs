@@ -6,6 +6,7 @@ use common::answer;
 use futures::executor::block_on;
 use gateway::Gateway;
 use kernel::memory::Limit;
+use kernel::memory::MemoryEntry;
 use kernel::memory::MemoryStore;
 use testkit::Request;
 use wire::gateway::GatewayError;
@@ -31,7 +32,6 @@ use wire::gateway::memory::TagTaxonomyMergeRequest;
 use wire::gateway::memory::TagTaxonomyMergeResult;
 use wire::gateway::memory::TagTaxonomyUpsertRequest;
 use wire::gateway::memory::TagTaxonomyUpsertResult;
-use wire::memory::MemoryEntry;
 use wire::message::Role;
 
 const SESSION: &str = "claude-code:11111111-2222-4333-8444-555555555555";
@@ -62,7 +62,8 @@ fn seeded() -> Result<(Arc<testkit::FakeMemoryStore>, axum::Router), String> {
         entry("m1", "hello world", "2026-10-10T12:00:00Z"),
         entry("m2", "goodbye", "2026-10-10T13:00:00Z"),
     ];
-    block_on(store.append(batch)).map_err(|error| error.to_string())?;
+    let owner = testkit::owner().map_err(|error| error.to_string())?;
+    block_on(store.append(&owner, batch)).map_err(|error| error.to_string())?;
     Ok((store, gateway.router(false)))
 }
 
@@ -118,7 +119,7 @@ fn full_browse_filter() -> kernel::memory::BrowseFilter {
         since: None,
         before: None,
         include_tools: false,
-        order: wire::gateway::memory::MemoryBrowseOrder::Desc,
+        order: kernel::memory::MemoryBrowseOrder::Desc,
         limit: Limit::clamped(None, 50, 1..=200),
     }
 }

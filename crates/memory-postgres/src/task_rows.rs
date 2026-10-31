@@ -281,6 +281,23 @@ pub(crate) async fn reap(
     .map_err(|source| map_sql("reap tasks", source))
 }
 
+pub(crate) async fn expire(
+    conn: &mut PgConnection,
+    now: DateTime<Utc>,
+) -> Result<Vec<Uuid>, TaskError> {
+    sqlx::query_scalar(
+        "UPDATE rh_tasks SET status = 'timeout', completed_at = $1, error = $2 \
+         WHERE status = 'queued' AND budget ? 'maxWallClockMs' \
+         AND created_at + (budget->>'maxWallClockMs')::bigint * interval '1 millisecond' <= $1 \
+         RETURNING id",
+    )
+    .bind(now)
+    .bind(kernel::tasks::UNCLAIMED_PAST_DEADLINE)
+    .fetch_all(&mut *conn)
+    .await
+    .map_err(|source| map_sql("expire unclaimed tasks", source))
+}
+
 fn decode(row: &PgRow) -> Result<Task, TaskError> {
     let Json(criteria): Json<Vec<Criterion>> = get(row, "acceptance_criteria")?;
     let Json(budget): Json<StoredBudget> = get(row, "budget")?;

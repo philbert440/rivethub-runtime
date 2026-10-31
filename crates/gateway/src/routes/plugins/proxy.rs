@@ -6,7 +6,6 @@ use axum::body::Bytes;
 use axum::extract::{Path, Request, State};
 use axum::http::{HeaderMap, HeaderName, HeaderValue, Method, StatusCode, header};
 use axum::response::{IntoResponse, Response};
-use kernel::plugins::PluginTools as _;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use wire::plugin::action::{ViewAction, ViewActionRefusal, ViewActionRequest, ViewActionResult};
@@ -240,14 +239,15 @@ async fn typed<Asked, Answer>(
 ) -> Result<Json<Answer>, PluginRouteError>
 where
     Asked: DeserializeOwned + Serialize,
-    Answer: DeserializeOwned + Serialize,
+    Answer: DeserializeOwned + Serialize + schemars::JsonSchema,
 {
     let asked: Asked = read_request(request).await?;
     let (status, bytes) = send(target, &asked).await?;
     if status != reqwest::StatusCode::OK {
         return Err(target.failed(status, &bytes));
     }
-    let answer: Answer = crate::plugins::parse(&bytes).map_err(|detail| target.refused(detail))?;
+    let answer: Answer =
+        crate::plugins::fault::parse_answer(&bytes).map_err(|detail| target.refused(detail))?;
     check(&answer).map_err(|detail| target.refused(detail))?;
     Ok(Json(answer))
 }
@@ -257,14 +257,14 @@ async fn actions(target: &Target<'_>, request: Request) -> Result<Response, Plug
     let (status, bytes) = send(target, &asked).await?;
     match status {
         reqwest::StatusCode::OK => {
-            let answer: ViewActionResult =
-                crate::plugins::parse(&bytes).map_err(|detail| target.refused(detail))?;
+            let answer: ViewActionResult = crate::plugins::fault::parse_answer(&bytes)
+                .map_err(|detail| target.refused(detail))?;
             no_call(&answer.actions).map_err(|detail| target.refused(detail))?;
             Ok(Json(answer).into_response())
         }
         reqwest::StatusCode::UNPROCESSABLE_ENTITY => {
-            let refusal: ViewActionRefusal =
-                crate::plugins::parse(&bytes).map_err(|detail| target.refused(detail))?;
+            let refusal: ViewActionRefusal = crate::plugins::fault::parse_answer(&bytes)
+                .map_err(|detail| target.refused(detail))?;
             Ok((StatusCode::UNPROCESSABLE_ENTITY, Json(refusal)).into_response())
         }
         other => Err(target.failed(other, &bytes)),
@@ -281,7 +281,7 @@ async fn tool(
         .map_err(|error| PluginRouteError::NotFound(error.to_string()))?;
     host.record(plugin)?;
     let call: PluginToolCall = read_request(request).await?;
-    match host.call(plugin, &tool, call, None).await {
+    match host.called(plugin, &tool, call, None).await {
         Ok(result) => Ok(Json(result).into_response()),
         Err(error) => Ok(crate::plugins::tool_error(&error)),
     }

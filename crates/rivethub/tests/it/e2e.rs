@@ -194,7 +194,7 @@ async fn recorded_batches_land_and_read_back_through_the_memory_api(pool: PgPool
     ]);
     let config: Config = serde_yaml_ng::from_str("gateway:\n  host: 127.0.0.1\n  port: 0\n")?;
     let store = rivethub::service::connect(&config, &env).await?;
-    let gateway = rivethub::service::compose(&config, &env, store)?;
+    let gateway = rivethub::service::compose(&config, &env, store).await?;
     let (listener, tls) = rivethub::service::listen(&config, &env).await?;
     assert!(tls.is_none(), "loopback binds resolve without tls");
     let port = listener.local_addr()?.port();
@@ -360,9 +360,7 @@ async fn the_real_binary_answers_healthz_and_exits_cleanly_on_sigterm(pool: PgPo
     let home = tempdir()?;
     let hub_home = home.path().join(".rivethub");
     std::fs::create_dir_all(&hub_home)?;
-    let probe = std::net::TcpListener::bind(("127.0.0.1", 0))?;
-    let port = probe.local_addr()?.port();
-    drop(probe);
+    let port = testkit::ports::claim()?;
     let config_text = format!(
         "runtime:\n  workspace: {}\n  default_agent: main\nagents:\n  main:\n    provider: p\nproviders:\n  p:\n    type: openai-compatible\n    base_url: http://127.0.0.1:1\n    model: m\nmemory:\n  postgres:\n    connection_string: {url}\ngateway:\n  host: 127.0.0.1\n  port: {port}\n",
         home.path().display()
@@ -426,8 +424,10 @@ async fn the_real_binary_answers_healthz_and_exits_cleanly_on_sigterm(pool: PgPo
     Ok(())
 }
 
-fn minimal_config() -> &'static str {
-    "runtime:\n  workspace: /home/user/work\n  default_agent: main\nagents:\n  main:\n    provider: p\nproviders:\n  p:\n    model: m\n"
+fn minimal_config(port: u16) -> String {
+    format!(
+        "runtime:\n  workspace: /home/user/work\n  default_agent: main\nagents:\n  main:\n    provider: p\nproviders:\n  p:\n    model: m\ngateway:\n  host: 127.0.0.1\n  port: {port}\n"
+    )
 }
 
 #[tokio::test]
@@ -435,7 +435,8 @@ async fn first_start_moves_legacy_state_and_the_alias_names_the_new_variable() -
     let home = tempdir()?;
     let legacy = home.path().join(".rivetos");
     std::fs::create_dir_all(legacy.join("nested"))?;
-    std::fs::write(legacy.join("config.yaml"), minimal_config())?;
+    let port = testkit::ports::claim()?;
+    std::fs::write(legacy.join("config.yaml"), minimal_config(port.number()))?;
     std::fs::write(legacy.join("nested").join("marker"), "kept")?;
 
     let output = tokio::time::timeout(
@@ -468,18 +469,30 @@ async fn first_start_moves_legacy_state_and_the_alias_names_the_new_variable() -
             .contains(config::POSTGRES_URL_VARIABLE)
     );
 
-    let again = tokio::time::timeout(
-        Duration::from_secs(30),
-        Command::new(env!("CARGO_BIN_EXE_rivetos"))
-            .arg("gateway")
-            .env_clear()
-            .env("HOME", home.path())
-            .env("RIVETOS_PG_URL", "postgres://127.0.0.1:1/none")
-            .output(),
-    )
+    let mut again = Command::new(env!("CARGO_BIN_EXE_rivetos"))
+        .arg("gateway")
+        .env_clear()
+        .env("HOME", home.path())
+        .env("RIVETOS_PG_URL", "postgres://127.0.0.1:1/none")
+        .stderr(std::process::Stdio::piped())
+        .kill_on_drop(true)
+        .spawn()?;
+    let mut lines =
+        tokio::io::BufReader::new(again.stderr.take().ok_or("child stderr is missing")?).lines();
+    let stderr = tokio::time::timeout(Duration::from_secs(30), async {
+        let mut seen = String::new();
+        while let Some(line) = lines.next_line().await? {
+            seen.push_str(&line);
+            seen.push('\n');
+            if line.contains("gateway listening on") {
+                return Ok::<_, Box<dyn Error>>(seen);
+            }
+        }
+        Err(format!("rivetos exited before listening: {seen}").into())
+    })
     .await
-    .map_err(|_| "rivetos did not exit within 30s")??;
-    let stderr = String::from_utf8(again.stderr)?;
+    .map_err(|_| "rivetos was not listening within 30s")??;
+    again.kill().await?;
     assert!(
         !stderr.contains("moved legacy state"),
         "the directory is moved once: {stderr}"

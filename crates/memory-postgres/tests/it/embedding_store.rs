@@ -92,14 +92,14 @@ async fn insert_message(
 ) -> Result<Uuid, sqlx::Error> {
     let mut tx = begin_deferred(pool).await?;
     let conversation: Uuid = sqlx::query_scalar(
-        "insert into rh_conversations (session_key, agent) values ($1, 'rivet') returning id",
+        "insert into rh_conversations (session_key, agent, owner_user_id) values ($1, 'rivet', 'owner') returning id",
     )
     .bind(format!("embed-store-{index}"))
     .fetch_one(&mut *tx)
     .await?;
     let id: Uuid = sqlx::query_scalar(
-        "insert into rh_messages (conversation_id, agent, channel, role, content, tool_result)
-         values ($1, 'rivet', 'test', 'user', $2, $3)
+        "insert into rh_messages (conversation_id, agent, channel, role, content, tool_result, owner_user_id)
+         values ($1, 'rivet', 'test', 'user', $2, $3, 'owner')
          returning id",
     )
     .bind(conversation)
@@ -113,11 +113,12 @@ async fn insert_message(
 
 async fn insert_summary(pool: &PgPool, content: &str) -> Result<Uuid, sqlx::Error> {
     let mut tx = begin_deferred(pool).await?;
-    let id: Uuid =
-        sqlx::query_scalar("insert into rh_summaries (content) values ($1) returning id")
-            .bind(content)
-            .fetch_one(&mut *tx)
-            .await?;
+    let id: Uuid = sqlx::query_scalar(
+        "insert into rh_summaries (content, owner_user_id) values ($1, 'owner') returning id",
+    )
+    .bind(content)
+    .fetch_one(&mut *tx)
+    .await?;
     tx.commit().await?;
     Ok(id)
 }
@@ -126,8 +127,8 @@ async fn insert_chunk(pool: &PgPool, content: &str) -> Result<Uuid, sqlx::Error>
     let message = insert_message(pool, 10_000, "chunk parent", None).await?;
     let id: Uuid = sqlx::query_scalar(
         "insert into rh_message_chunks
-            (message_id, idx, char_start, char_end, content, embed_status)
-         values ($1, 0, 0, 1, $2, 'pending')
+            (message_id, idx, char_start, char_end, content, embed_status, owner_user_id)
+         values ($1, 0, 0, 1, $2, 'pending', 'owner')
          returning id",
     )
     .bind(message)

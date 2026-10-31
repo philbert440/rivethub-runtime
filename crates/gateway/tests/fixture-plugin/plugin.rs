@@ -17,6 +17,7 @@ use wire::plugin::process::{
 use wire::plugin::view::{View, ViewBlock, ViewInline, ViewProperty};
 
 const BROKEN_VIEW: &str = r#"{"title":"Broken","blocks":[{"type":"text"}]}"#;
+const NESTED_VIEW: &str = r#"{"title":"Nested","blocks":[{"type":"text","text":"ok"},{"type":"list","items":[{"id":"a","title":"fine"},{"id":"b","title":42}]}]}"#;
 const LOOPING_ANSWER: &str = r#"{"actions":[{"type":"call","action":"loop"}]}"#;
 
 struct Fixture {
@@ -172,6 +173,9 @@ fn shown(text: String) -> ViewInline {
 }
 
 async fn view(State(fixture): State<Arc<Fixture>>, Path(view): Path<String>) -> Response {
+    if view == "nested" {
+        return raw_json(NESTED_VIEW);
+    }
     if view == "broken" {
         return raw_json(BROKEN_VIEW);
     }

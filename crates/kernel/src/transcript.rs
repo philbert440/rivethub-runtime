@@ -3,11 +3,16 @@ use async_trait::async_trait;
 use chrono::DateTime;
 use chrono::Utc;
 use thiserror::Error;
-use wire::gateway::sessions::HarnessToolOutput;
-use wire::gateway::sessions::HarnessTranscriptTurn;
-use wire::harness::HarnessId;
-use wire::message::Role;
-use wire::session_id::SessionId;
+use values::HarnessId;
+use values::Role;
+use values::SessionId;
+
+mod turn;
+
+pub use turn::{
+    HarnessToolOutput, HarnessTranscriptTool, HarnessTranscriptTurn, MessageUsage,
+    SessionMessageRole, TranscriptAttachment, TranscriptBlock, TranscriptToolStatus,
+};
 
 const SUBAGENTS: &str = "/subagents/";
 
@@ -230,6 +235,14 @@ pub trait SessionLister: Send + Sync {
         harness: HarnessId,
         native: &str,
     ) -> Result<Option<String>, TranscriptReaderError>;
+
+    async fn permission_mode(
+        &self,
+        _harness: HarnessId,
+        _native: &str,
+    ) -> Result<Option<String>, TranscriptReaderError> {
+        Ok(None)
+    }
 
     async fn transcript(
         &self,

@@ -69,55 +69,6 @@ fn hook_in(
     ))
 }
 
-fn transcript_char_lengths() -> Result<Vec<(String, usize)>, Box<dyn std::error::Error>> {
-    let text = std::fs::read_to_string(testkit::recording("capture/claude-hook/transcript.jsonl"))?;
-    Ok(capture::transcript::parse_lines(&text)
-        .lines
-        .iter()
-        .filter_map(|line| Some((line.uuid.clone()?, line.text()?.chars().count())))
-        .collect())
-}
-
-fn as_rust_behaviour(
-    entry: &testkit::capture::EntryRecord,
-    char_lengths: &[(String, usize)],
-) -> Result<testkit::capture::EntryRecord, Box<dyn std::error::Error>> {
-    let mut entry = entry.clone();
-    for file in &mut entry.files {
-        if let Some(rest) = file.path.strip_prefix(".rivetos/") {
-            file.path = format!(".rivethub/{rest}");
-        }
-    }
-    for post in &mut entry.posts {
-        let mut body: testkit::Json = serde_json::from_str(&post.body)?;
-        let messages = body
-            .get_mut("messages")
-            .and_then(testkit::Json::as_array_mut)
-            .into_iter()
-            .flatten();
-        for message in messages {
-            let Some(metadata) = message.get_mut("metadata") else {
-                continue;
-            };
-            let uuid = metadata
-                .get("uuid")
-                .and_then(testkit::Json::as_str)
-                .map(str::to_owned);
-            let Some(recorded_length) = metadata.get_mut("full_content_length") else {
-                continue;
-            };
-            let uuid = uuid.ok_or("capped message has no uuid")?;
-            let (_, chars) = char_lengths
-                .iter()
-                .find(|(line, _)| *line == uuid)
-                .ok_or("capped message has no transcript line")?;
-            *recorded_length = testkit::Json::from(*chars);
-        }
-        post.body = serde_json::to_string(&body)?;
-    }
-    Ok(entry)
-}
-
 fn prepare_store(root: &Path) -> std::io::Result<PathBuf> {
     let store = root.join("store").join("projects").join("-work-demo");
     std::fs::create_dir_all(&store)?;
@@ -129,31 +80,9 @@ fn prepare_store(root: &Path) -> std::io::Result<PathBuf> {
     Ok(target)
 }
 
-fn pretty(bodies: &[String]) -> String {
-    bodies
-        .iter()
-        .map(|body| {
-            serde_json::from_str::<testkit::Json>(body).map_or_else(
-                |_| body.clone(),
-                |value| serde_json::to_string_pretty(&value).unwrap_or_else(|_| body.clone()),
-            )
-        })
-        .collect::<Vec<_>>()
-        .join("\n")
-}
-
-fn pretty_files(files: &[HookFile]) -> String {
-    files
-        .iter()
-        .map(|file| format!("{} | {} | {:?}", file.path, file.mode, file.content))
-        .collect::<Vec<_>>()
-        .join("\n")
-}
-
 struct EntryRun {
     outcome: HookOutcome,
     exit: i64,
-    stderr: String,
 }
 
 async fn run_entry(
@@ -195,67 +124,7 @@ async fn run_entry(
             files,
         },
         exit: run.exit,
-        stderr: run.stderr,
     })
-}
-
-#[tokio::test]
-async fn claude_hook_replays_recorded_batches() -> Result<(), Box<dyn std::error::Error>> {
-    let recording = testkit::recording("capture/claude-hook/hook-ts.json");
-    let session_entries = entries(&recording)?;
-    let skipped: std::collections::BTreeMap<String, String> =
-        serde_json::from_str(include_str!("../fixtures/hook-skipped.json"))?;
-    let outer = tempfile::tempdir()?;
-    let transcript = prepare_store(outer.path())?;
-    let transcript_text = transcript.to_string_lossy().to_string();
-    let now: DateTime<Utc> = NOW_TEXT.parse()?;
-    let failures = Mutex::new(Vec::new());
-    let char_lengths = transcript_char_lengths()?;
-    for recorded in &session_entries {
-        if skipped.contains_key(&format!("hook/{}", recorded.index)) {
-            continue;
-        }
-        let entry = &as_rust_behaviour(recorded, &char_lengths)?;
-        let run = run_entry(entry, &transcript_text, now).await?;
-        let outcome = run.outcome.clone();
-        let outcome = testkit::capture::replay(entry, |_, _| outcome.clone());
-        if let Err(mismatch) = outcome {
-            let detail = format!(
-                "{}: recorded posts:\n{}\nactual posts:\n{}\nrecorded files:\n{}\nactual files:\n{}\nstderr: {}\nexit: {}",
-                mismatch.detail,
-                pretty(
-                    &entry
-                        .posts
-                        .iter()
-                        .map(|p| p.body.clone())
-                        .collect::<Vec<_>>()
-                ),
-                pretty(
-                    &run.outcome
-                        .posts
-                        .iter()
-                        .map(|p| p.body.clone())
-                        .collect::<Vec<_>>()
-                ),
-                entry
-                    .files
-                    .iter()
-                    .map(|f| format!("{} | {} | {}", f.path, f.mode, f.content))
-                    .collect::<Vec<_>>()
-                    .join("\n"),
-                pretty_files(&run.outcome.files),
-                run.stderr,
-                run.exit,
-            );
-            failures.lock().push(format!("{}: {}", mismatch.id, detail));
-        }
-    }
-    let collected = failures.lock().join("\n");
-    if collected.is_empty() {
-        Ok(())
-    } else {
-        Err(format!("replay failure(s):\n{collected}").into())
-    }
 }
 
 #[tokio::test]
@@ -274,28 +143,16 @@ async fn malformed_payloads_exit_cleanly() -> Result<(), Box<dyn std::error::Err
 }
 
 #[tokio::test]
-async fn missing_prompt_records_the_fallback_title() -> Result<(), Box<dyn std::error::Error>> {
+async fn an_empty_prompt_is_not_held() -> Result<(), Box<dyn std::error::Error>> {
     let inner = tempfile::tempdir()?;
     let transport = FakeTransport::new();
     let hook = hook_in(inner.path(), &transport)?;
     let now: DateTime<Utc> = NOW_TEXT.parse()?;
-    let stdin = r#"{"session_id":"33333333-3333-3333-3333-333333333333","hook_event_name":"UserPromptSubmit"}"#;
+    let stdin = r#"{"session_id":"33333333-3333-3333-3333-333333333333","hook_event_name":"UserPromptSubmit","prompt":"  "}"#;
     let run = hook.run(stdin, now, "1791656243919-30e4c5d70").await;
-    assert_eq!(run.exit, 0);
-    let posts = transport.posts.lock().clone();
-    let body = posts.first().ok_or("expected one post")?;
-    let parsed: testkit::Json = serde_json::from_str(body)?;
-    assert_eq!(
-        parsed.get("title").and_then(testkit::Json::as_str),
-        Some("Claude Code session")
-    );
-    let content = parsed
-        .get("messages")
-        .and_then(testkit::Json::as_array)
-        .and_then(|messages| messages.first())
-        .and_then(|message| message.get("content"))
-        .and_then(testkit::Json::as_str);
-    assert_eq!(content, Some(""));
+    assert_eq!((run.exit, run.stderr.as_str()), (0, ""));
+    assert!(transport.posts.lock().is_empty());
+    assert!(!inner.path().join(".rivethub/claude-pending").exists());
     Ok(())
 }
 
@@ -306,27 +163,11 @@ async fn a_failed_log_write_does_not_fail_the_run() -> Result<(), Box<dyn std::e
     let transport = FakeTransport::new();
     let hook = hook_in(inner.path(), &transport)?;
     let now: DateTime<Utc> = NOW_TEXT.parse()?;
-    let stdin = r#"{"session_id":"33333333-3333-3333-3333-333333333333","hook_event_name":"UserPromptSubmit","prompt":"list the files"}"#;
+    let stdin = r#"{"session_id":"33333333-3333-3333-3333-333333333333","hook_event_name":"PostToolUse","tool_name":"Bash","tool_input":{"command":"ls"},"tool_use_id":"toolu_1"}"#;
     let run = hook.run(stdin, now, "1791656243919-30e4c5d70").await;
     assert_eq!(run.exit, 0);
     assert_eq!(run.stderr, "");
     assert_eq!(transport.posts.lock().len(), 1);
-    Ok(())
-}
-
-#[test]
-fn hook_exclusions_name_existing_recordings() -> Result<(), Box<dyn std::error::Error>> {
-    let skipped: std::collections::BTreeMap<String, String> =
-        serde_json::from_str(include_str!("../fixtures/hook-skipped.json"))?;
-    let rows = entries(&testkit::recording("capture/claude-hook/hook-ts.json"))?;
-    assert_eq!(skipped.len(), 3);
-    for (name, reason) in skipped {
-        assert_ne!(reason, "");
-        assert!(
-            rows.iter()
-                .any(|entry| format!("hook/{}", entry.index) == name)
-        );
-    }
     Ok(())
 }
 
@@ -377,5 +218,96 @@ async fn transcript_tool_arguments_preserve_input_values() -> Result<(), Box<dyn
         }
         assert_eq!(actual, expected, "hook/{index}");
     }
+    Ok(())
+}
+
+fn store_with_thinking(root: &Path) -> std::io::Result<PathBuf> {
+    let transcript = prepare_store(root)?;
+    let mut lines = std::fs::read_to_string(&transcript)?;
+    lines.push_str(r#"{"type":"assistant","uuid":"a3","timestamp":"2026-10-10T12:00:05.000Z","message":{"role":"assistant","content":[{"type":"thinking","thinking":"Counting done.","signature":"x"}]}}"#);
+    lines.push('\n');
+    std::fs::write(&transcript, lines)?;
+    Ok(transcript)
+}
+
+#[tokio::test]
+async fn a_turn_end_keys_rows_by_transcript_uuid_and_flushes_held_prompts()
+-> Result<(), Box<dyn std::error::Error>> {
+    let outer = tempfile::tempdir()?;
+    let transcript = store_with_thinking(outer.path())?;
+    let transport = FakeTransport::new();
+    let hook = hook_in(outer.path(), &transport)?;
+    let now: DateTime<Utc> = NOW_TEXT.parse()?;
+    let session = "33333333-3333-3333-3333-333333333333";
+    for (prompt, key) in [
+        ("list the files", "k1"),
+        ("<task-notification>done</task-notification>", "k2"),
+    ] {
+        let held = format!(
+            r#"{{"session_id":"{session}","hook_event_name":"UserPromptSubmit","prompt":"{prompt}"}}"#
+        );
+        assert_eq!(hook.run(&held, now, key).await.stderr, "");
+    }
+    assert!(transport.posts.lock().is_empty());
+    let stop = format!(
+        r#"{{"session_id":"{session}","hook_event_name":"Stop","transcript_path":"{}"}}"#,
+        transcript.display()
+    );
+    assert_eq!(hook.run(&stop, now, "k3").await.stderr, "");
+    let posts = transport.posts.lock().clone();
+    let [body] = posts.as_slice() else {
+        return Err(format!("expected one post, got {}", posts.len()).into());
+    };
+    let batch: wire::capture::CaptureBatchRequest = serde_json::from_str(body)?;
+    let prefix = format!("claude-code:{session}:");
+    let mut ids: Vec<String> = batch
+        .messages
+        .iter()
+        .map(|message| message.event_id.replace(&prefix, ""))
+        .map(|id| {
+            if id.starts_with("occ:") {
+                "occ".to_owned()
+            } else {
+                id
+            }
+        })
+        .collect();
+    ids.sort();
+    assert_eq!(
+        ids,
+        ["a1", "a2", "a3", "hook:k2", "occ", "tool:toolu_1", "u1"]
+    );
+    let content = |id: &str| {
+        batch
+            .messages
+            .iter()
+            .find(|message| message.event_id == format!("{prefix}{id}"))
+            .map(|message| (message.content.clone(), message.tool_result.clone()))
+    };
+    assert_eq!(
+        content("a3"),
+        Some(("[thinking] Counting done.".to_owned(), None))
+    );
+    assert_eq!(
+        content("tool:toolu_1"),
+        Some((
+            "[tool call] Bash".to_owned(),
+            Some("a.txt\nb.txt".to_owned())
+        ))
+    );
+    assert_eq!(
+        content("hook:k2"),
+        Some((
+            "<task-notification>done</task-notification>".to_owned(),
+            None
+        ))
+    );
+    assert!(
+        !outer
+            .path()
+            .join(".rivethub/claude-pending")
+            .join(format!("{session}.jsonl"))
+            .exists()
+    );
     Ok(())
 }

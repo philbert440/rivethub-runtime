@@ -6,10 +6,12 @@ use chrono::DateTime;
 use chrono::Utc;
 use futures::executor::block_on;
 use kernel::ToolContext;
+use kernel::harness::ApprovalDecision as Decision;
 use kernel::harness::Command;
 use kernel::harness::HarnessAdapter;
 use kernel::harness::PlanEntry;
 use kernel::harness::PlanPriority;
+use kernel::harness::PlanStatus;
 use kernel::harness::SessionEvent;
 use kernel::harness::SessionOption;
 use kernel::harness::SessionSpec;
@@ -18,7 +20,11 @@ use kernel::harness::ToolCallStatus;
 use kernel::harness::ToolCallUpdate;
 use kernel::harness::TurnInput;
 use kernel::memory::BrowseFilter;
+use kernel::memory::BrowseWindow;
 use kernel::memory::Limit;
+use kernel::memory::MemoryBrowseOrder;
+use kernel::memory::MemoryEntry;
+use kernel::memory::MemoryScope;
 use kernel::memory::MemoryStore;
 use kernel::memory::SearchMode;
 use kernel::memory::SearchQuery;
@@ -26,10 +32,14 @@ use kernel::memory::TagAdd;
 use kernel::memory::TagCountsQuery;
 use kernel::memory::TagDecision;
 use kernel::memory::TagEntity;
+use kernel::memory::TagEntityType;
+use kernel::memory::TagEntryPair;
 use kernel::memory::TagId;
 use kernel::memory::TagListQuery;
 use kernel::memory::TagLookup;
+use kernel::memory::TagState;
 use kernel::memory::TagTaxonomyDecision;
+use kernel::memory::TagTaxonomyMerge;
 use kernel::memory::TagTaxonomyQuery;
 use kernel::memory::TagTaxonomyUpsert;
 use kernel::model::ModelChunk;
@@ -56,17 +66,7 @@ use testkit::FakeTool;
 use testkit::MemoryRequest;
 use testkit::Script;
 use uuid::Uuid;
-use wire::gateway::memory::BrowseWindow;
-use wire::gateway::memory::MemoryBrowseOrder;
-use wire::gateway::memory::MemoryScope;
-use wire::gateway::memory::TagEntityType;
-use wire::gateway::memory::TagEntryPair;
-use wire::gateway::memory::TagState;
-use wire::gateway::memory::TagTaxonomyMerge;
-use wire::harness::ApprovalDecision as Decision;
 use wire::harness::HarnessId;
-use wire::harness::PlanStatus;
-use wire::memory::MemoryEntry;
 use wire::message::Role;
 use wire::session_id::SessionId;
 
@@ -127,7 +127,10 @@ fn memory_store_roundtrip() {
         let store: Arc<dyn MemoryStore> = Arc::new(FakeMemoryStore::default());
         let now = Utc::now();
         let inserted = store
-            .append(vec![memory_entry("claude-code:abc", "hello world", now)])
+            .append(
+                &testkit::owner().unwrap(),
+                vec![memory_entry("claude-code:abc", "hello world", now)],
+            )
             .await
             .unwrap();
         assert_eq!(inserted, 1);
@@ -598,7 +601,10 @@ fn fake_memory_assigns_ids_and_timestamps_when_appending() {
         let mut entry = memory_entry("claude-code:fresh", "fresh", Utc::now());
         entry.id = None;
         entry.created_at = None;
-        store.append(vec![entry]).await.expect("append");
+        store
+            .append(&testkit::owner().unwrap(), vec![entry])
+            .await
+            .expect("append");
         let outcome = store.search(search_query("fresh")).await.expect("search");
         let result = outcome.results.first().expect("inserted entry");
         assert!(Uuid::parse_str(&result.id).is_ok());

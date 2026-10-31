@@ -17,7 +17,7 @@ use wire::gateway::wiki::WikiTopicList;
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 
-fn slugs(topics: &[wire::gateway::wiki::WikiTopic]) -> Vec<&str> {
+fn slugs(topics: &[kernel::wiki::WikiTopic]) -> Vec<&str> {
     topics.iter().map(|topic| topic.slug.as_str()).collect()
 }
 
@@ -39,12 +39,12 @@ async fn seed(pool: &PgPool) -> TestResult {
         .execute(pool)
         .await?;
     sqlx::query(
-        "INSERT INTO rh_wiki_citations (topic_slug, summary_id, kind, note, cited_at)
-         VALUES ('release', '00000000-0000-4000-8000-000000000001', 'decision', 'Ship it', '2026-10-01T00:00:00Z')",
+        "INSERT INTO rh_wiki_citations (topic_slug, summary_id, kind, note, cited_at, owner_user_id)
+         VALUES ('release', '00000000-0000-4000-8000-000000000001', 'decision', 'Ship it', '2026-10-01T00:00:00Z', 'owner')",
     ).execute(pool).await?;
     sqlx::query(
-        "INSERT INTO rh_wiki_provenance (topic_slug, source_kind, source_id, conversation_id)
-         VALUES ('release', 'summary', '00000000-0000-4000-8000-000000000001', '00000000-0000-4000-8000-000000000002')",
+        "INSERT INTO rh_wiki_provenance (topic_slug, source_kind, source_id, conversation_id, owner_user_id)
+         VALUES ('release', 'summary', '00000000-0000-4000-8000-000000000001', '00000000-0000-4000-8000-000000000002', 'owner')",
     ).execute(pool).await?;
     Ok(())
 }
@@ -144,7 +144,13 @@ async fn wiki_routes_read_pages_and_metadata_from_postgres(pool: PgPool) -> Test
     let response = get(&client, &base, "/api/wiki/_gaps?limit=5").await?;
     assert_eq!(response.status().as_u16(), 200);
     let gaps: WikiGapsResponse = response.json().await?;
-    assert_eq!(slugs(&gaps.stalest), ["release", "known"]);
+    assert_eq!(
+        gaps.stalest
+            .iter()
+            .map(|topic| topic.slug.as_str())
+            .collect::<Vec<_>>(),
+        ["release", "known"]
+    );
     for retired in ["/api/wiki/page/release", "/api/wiki/gaps"] {
         assert_eq!(get(&client, &base, retired).await?.status().as_u16(), 404);
     }

@@ -3,12 +3,12 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use async_trait::async_trait;
-use kernel::plugins::{PluginToolError, PluginTools};
+use kernel::plugins::{
+    self, PluginToolCall, PluginToolError, PluginToolHint, PluginToolList, PluginToolResult,
+    PluginTools,
+};
 use rmcp::model::{CallToolResult, ContentBlock, Tool, ToolAnnotations};
-use wire::plugin::host::PluginToolList;
-use wire::plugin::manifest::PluginToolHint;
-use wire::plugin::process::{PluginToolCall, PluginToolResult};
-use wire::plugin::{PluginId, ToolName};
+use wire::plugin::{PluginId, ToolName, host, manifest, process};
 
 const LONG_POLL: Duration = Duration::from_secs(90);
 const CALL_TIMEOUT: Duration = Duration::from_secs(130);
@@ -132,8 +132,9 @@ impl SocketTools {
             )));
         }
         response
-            .json::<PluginToolList>()
+            .json::<host::PluginToolList>()
             .await
+            .map(plugin_tool_list)
             .map_err(|error| PluginToolError::Unreachable(error.to_string()))
     }
 }
@@ -157,7 +158,7 @@ impl PluginTools for SocketTools {
             .post(format!("http://plugins/tools/{name}"))
             .bearer_auth(self.bearer().await?)
             .timeout(CALL_TIMEOUT)
-            .json(&call);
+            .json(&plugin_tool_call(call));
         let request = match tool_use {
             Some(id) => request.header(TOOL_USE_HEADER, id),
             None => request,
@@ -168,8 +169,9 @@ impl PluginTools for SocketTools {
             .map_err(|error| PluginToolError::Unreachable(error.to_string()))?;
         if response.status().is_success() {
             return response
-                .json::<PluginToolResult>()
+                .json::<process::PluginToolResult>()
                 .await
+                .map(plugin_tool_result)
                 .map_err(|error| PluginToolError::Unreachable(error.to_string()));
         }
         let status = response.status();
@@ -191,5 +193,52 @@ impl PluginTools for SocketTools {
                 return Ok(list.version);
             }
         }
+    }
+}
+
+fn plugin_tool_list(value: host::PluginToolList) -> plugins::PluginToolList {
+    plugins::PluginToolList {
+        version: value.version,
+        tools: value.tools.into_iter().map(plugin_tool_entry).collect(),
+    }
+}
+
+fn plugin_tool_entry(value: host::PluginToolEntry) -> plugins::PluginToolEntry {
+    plugins::PluginToolEntry {
+        plugin: value.plugin,
+        tool: plugin_tool(value.tool),
+    }
+}
+
+fn plugin_tool(value: manifest::PluginTool) -> plugins::PluginTool {
+    plugins::PluginTool {
+        name: value.name,
+        title: value.title,
+        description: value.description,
+        input_schema: value.input_schema,
+        hints: value.hints.into_iter().map(plugin_tool_hint).collect(),
+    }
+}
+
+const fn plugin_tool_hint(value: manifest::PluginToolHint) -> plugins::PluginToolHint {
+    match value {
+        manifest::PluginToolHint::ReadOnly => plugins::PluginToolHint::ReadOnly,
+        manifest::PluginToolHint::Destructive => plugins::PluginToolHint::Destructive,
+        manifest::PluginToolHint::Idempotent => plugins::PluginToolHint::Idempotent,
+        manifest::PluginToolHint::OpenWorld => plugins::PluginToolHint::OpenWorld,
+    }
+}
+
+fn plugin_tool_result(value: process::PluginToolResult) -> plugins::PluginToolResult {
+    plugins::PluginToolResult {
+        text: value.text,
+        is_error: value.is_error,
+    }
+}
+
+fn plugin_tool_call(value: plugins::PluginToolCall) -> process::PluginToolCall {
+    process::PluginToolCall {
+        arguments: value.arguments,
+        session_id: value.session_id,
     }
 }

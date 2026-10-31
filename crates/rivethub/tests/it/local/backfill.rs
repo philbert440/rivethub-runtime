@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use wire::stream::openai::{EmbeddingRequest, EmbeddingResponse, EmbeddingRow};
 
-use super::{TestResult, free_port, provider_base, start, stop, write_config};
+use super::{TestResult, provider_base, start, stop, write_config};
 
 const CONVERSATION: &str = "0199e2a0-7b3c-7a00-8000-0000000000d1";
 const MESSAGE: &str = "0199e2a0-7b3c-7a00-8000-0000000000d2";
@@ -80,7 +80,7 @@ fn embeddings() -> axum::Router {
 async fn local_workers_embed_rows_that_were_never_queued() -> TestResult {
     let server = testkit::stub_server(embeddings()).await?;
     let home = tempfile::tempdir()?;
-    let port = free_port()?;
+    let port = testkit::ports::claim()?;
     let database = home.path().join(".rivethub").join("memory.sqlite");
     seed_unembedded(&database)?;
     write_config(

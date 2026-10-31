@@ -297,6 +297,47 @@ async fn the_first_leaf_titles_only_conversations_without_a_real_title(pool: PgP
     Ok(())
 }
 
+#[sqlx::test(migrator = "migrate::POSTGRES")]
+async fn model_titles_replace_only_weak_or_missing_titles(pool: PgPool) -> TestResult {
+    let memory = PostgresMemory::new(pool.clone());
+    let weak = seed_conversation(&pool, "cli:weak", "Session cli:weak").await?;
+    let named = seed_conversation(&pool, "cli:named", "Named by the hook").await?;
+    let sandbox = seed_conversation(
+        &pool,
+        "grokbot-run-sand-subagent-00000000-0000-4000-8000-000000000001",
+        "Session grokbot-run-sand-subagent-00000000-0000-4000-8000-000000000001",
+    )
+    .await?;
+    let bare = seed_untitled(&pool, "cli:bare").await?;
+    for (id, content) in [
+        (weak, "**Kimi Code session start**\n- Began."),
+        (weak, "A second leaf."),
+        (named, "Moved the build."),
+        (sandbox, "Ran a sandbox check."),
+    ] {
+        seed_leaf(&pool, id, content).await?;
+    }
+    let untitled = memory.untitled(1).await?;
+    let listed: Vec<(Uuid, usize)> = untitled
+        .iter()
+        .map(|item| (item.head.id, item.leaves.len()))
+        .collect();
+    assert_eq!(listed, [(weak, 1)]);
+    assert!(memory.retitle(weak, "Port the AcmeKit parser").await?);
+    assert!(!memory.retitle(named, "Something else").await?);
+    assert!(memory.retitle(bare, "Rotate the AcmeKit keys").await?);
+    assert_eq!(
+        stored_title(&pool, weak).await?.as_deref(),
+        Some("Port the AcmeKit parser")
+    );
+    assert_eq!(
+        stored_title(&pool, named).await?.as_deref(),
+        Some("Named by the hook")
+    );
+    assert!(!memory.retitle(weak, "A second model title").await?);
+    Ok(())
+}
+
 fn titled_leaf(conversation: Uuid, content: &str) -> NewSummary {
     NewSummary {
         id: Uuid::new_v4(),
@@ -318,8 +359,8 @@ fn titled_leaf(conversation: Uuid, content: &str) -> NewSummary {
 async fn seed_untitled(pool: &PgPool, session: &str) -> Result<Uuid, sqlx::Error> {
     let mut tx = deferred(pool).await?;
     let id = sqlx::query_scalar(
-        "insert into rh_conversations (session_key, agent, channel)
-         values ($1, 'rivet', 'cli') returning id",
+        "insert into rh_conversations (session_key, agent, channel, owner_user_id)
+         values ($1, 'rivet', 'cli', 'owner') returning id",
     )
     .bind(session)
     .fetch_one(&mut *tx)
@@ -339,8 +380,8 @@ async fn stored_title(pool: &PgPool, id: Uuid) -> Result<Option<String>, sqlx::E
 async fn seed_conversation(pool: &PgPool, session: &str, title: &str) -> Result<Uuid, sqlx::Error> {
     let mut tx = deferred(pool).await?;
     let id = sqlx::query_scalar(
-        "insert into rh_conversations (session_key, agent, channel, title)
-         values ($1, 'rivet', 'cli', $2) returning id",
+        "insert into rh_conversations (session_key, agent, channel, title, owner_user_id)
+         values ($1, 'rivet', 'cli', $2, 'owner') returning id",
     )
     .bind(session)
     .bind(title)
@@ -358,8 +399,8 @@ async fn seed_message(
 ) -> Result<Uuid, sqlx::Error> {
     let mut tx = deferred(pool).await?;
     let id = sqlx::query_scalar(
-        "insert into rh_messages (conversation_id, agent, channel, role, content, created_at)
-         values ($1, 'rivet', 'cli', 'user', $2, $3) returning id",
+        "insert into rh_messages (conversation_id, agent, channel, role, content, created_at, owner_user_id)
+         values ($1, 'rivet', 'cli', 'user', $2, $3, 'owner') returning id",
     )
     .bind(conversation)
     .bind(content)
@@ -368,6 +409,19 @@ async fn seed_message(
     .await?;
     tx.commit().await?;
     Ok(id)
+}
+
+async fn seed_leaf(pool: &PgPool, conversation: Uuid, content: &str) -> Result<(), sqlx::Error> {
+    let mut tx = deferred(pool).await?;
+    sqlx::query(
+        "insert into rh_summaries (conversation_id, content, kind, earliest_at, latest_at, owner_user_id)
+         values ($1, $2, 'leaf', clock_timestamp(), clock_timestamp(), 'owner')",
+    )
+    .bind(conversation)
+    .bind(content)
+    .execute(&mut *tx)
+    .await?;
+    tx.commit().await
 }
 
 async fn deferred(

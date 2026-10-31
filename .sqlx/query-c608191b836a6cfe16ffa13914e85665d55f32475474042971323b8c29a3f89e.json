@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO rh_session_keeps (session_key, kept_at, kept_by) VALUES ($1, $2, $3)\n             ON CONFLICT (session_key) DO UPDATE\n                SET kept_at = EXCLUDED.kept_at, kept_by = EXCLUDED.kept_by",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Timestamptz",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "c608191b836a6cfe16ffa13914e85665d55f32475474042971323b8c29a3f89e"
+}

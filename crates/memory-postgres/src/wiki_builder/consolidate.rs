@@ -32,7 +32,9 @@ impl WikiConsolidateStore for PostgresMemory {
         let rows = sqlx::query_as::<_, StatsRow>(
             "SELECT t.slug, t.title, t.history_count, t.created_at, t.topic_id IS NOT NULL AS bound,
                     (SELECT count(*) FROM rh_wiki_citations c WHERE c.topic_slug = t.slug) AS citations
-               FROM rh_wiki_topics t ORDER BY t.slug",
+               FROM rh_wiki_topics t
+              WHERE t.scope IS NULL OR t.scope = (SELECT s.scope FROM rh_wiki_scopes s WHERE s.directory = '')
+              ORDER BY t.slug",
         )
         .fetch_all(&self.pool)
         .await
@@ -115,7 +117,7 @@ impl PostgresMemory {
             fold.parent,
             folded.join(", ")
         );
-        let git_sha = repository.fold(&page, &folded, &message).await?;
+        let git_sha = repository.fold(&mut page, &folded, &message, now).await?;
         topics::store_topic(&mut tx, &page, &git_sha, now).await?;
         for child in &folded {
             retire(&mut tx, child, &fold.parent, now).await?;
@@ -166,11 +168,13 @@ async fn retire(
     now: DateTime<Utc>,
 ) -> Result<(), WikiStoreError> {
     for statement in [
-        "INSERT INTO rh_wiki_citations (topic_slug, summary_id, kind, note, cited_at)
-         SELECT $2, summary_id, kind, note, cited_at FROM rh_wiki_citations WHERE topic_slug = $1
+        "INSERT INTO rh_wiki_citations (topic_slug, summary_id, kind, note, cited_at, owner_user_id)
+         SELECT $2, summary_id, kind, note, cited_at, owner_user_id
+           FROM rh_wiki_citations WHERE topic_slug = $1
          ON CONFLICT DO NOTHING",
-        "INSERT INTO rh_wiki_provenance (topic_slug, source_kind, source_id, conversation_id, git_sha, created_at)
-         SELECT $2, source_kind, source_id, conversation_id, git_sha, created_at
+        "INSERT INTO rh_wiki_provenance
+             (topic_slug, source_kind, source_id, conversation_id, git_sha, created_at, owner_user_id)
+         SELECT $2, source_kind, source_id, conversation_id, git_sha, created_at, owner_user_id
            FROM rh_wiki_provenance WHERE topic_slug = $1
          ON CONFLICT DO NOTHING",
         "UPDATE rh_wiki_redirects SET to_slug = $2 WHERE to_slug = $1",

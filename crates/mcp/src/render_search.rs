@@ -2,9 +2,9 @@ use std::collections::BTreeMap;
 use std::fmt::Write as _;
 
 use chrono::{DateTime, Utc};
+use kernel::memory::{MemoryEntry, MemorySearchResult};
+use kernel::memory::{MemoryHitSource, TagWire};
 use kernel::memory::{SearchOutcome, SearchQuery, SummaryDetail};
-use wire::gateway::memory::{MemoryHitSource, TagWire};
-use wire::memory::{MemoryEntry, MemorySearchResult};
 
 use crate::{Error, render_memory, render_tags};
 

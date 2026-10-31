@@ -1,5 +1,5 @@
 mod devices;
-mod identities;
+pub(crate) mod identities;
 mod mesh;
 mod models;
 pub(crate) mod plugins;
@@ -31,6 +31,7 @@ use memory_sqlite::SqliteStore;
 use thiserror::Error;
 use tokio::task::JoinSet;
 use tokio_util::sync::CancellationToken;
+use wire::gateway::hub_state::HubState;
 
 #[derive(Debug, Error)]
 pub enum ComposeError {
@@ -58,8 +59,6 @@ pub enum ComposeError {
     Agent(#[from] agent_loop::Error),
     #[error(transparent)]
     Hook(#[from] agent_loop::hooks::HookError),
-    #[error(transparent)]
-    V1(#[from] gateway::routes::v1::Error),
     #[error("gateway configuration JSON is invalid: {0}")]
     Json(#[from] serde_json::Error),
     #[error(transparent)]
@@ -91,14 +90,14 @@ pub async fn agent_presets(
 
 pub async fn hub_state(
     memory: &PostgresMemory,
-) -> Result<Option<Arc<dyn HubStateStore>>, ComposeError> {
+) -> Result<Option<Arc<dyn HubStateStore<HubState>>>, ComposeError> {
     let store = memory.hub_state().await?;
     if store.is_none() {
         tracing::warn!(
             "rh_hub_state is missing on the memory database; hub state stays on this node until `rh db migrate` runs"
         );
     }
-    Ok(store.map(|store| Arc::new(store) as Arc<dyn HubStateStore>))
+    Ok(store.map(|store| Arc::new(store) as Arc<dyn HubStateStore<HubState>>))
 }
 
 #[expect(
@@ -107,7 +106,6 @@ pub async fn hub_state(
 )]
 pub struct Composition {
     gateway: Arc<Gateway>,
-    v1: Option<Arc<gateway::routes::v1::Service>>,
     audit_tasks: JoinSet<Result<(), agent_loop::hooks::HookError>>,
     audit_cancel: CancellationToken,
     tasks: JoinSet<Result<(), ComposeError>>,
@@ -129,15 +127,17 @@ fn gateway_settings(config: &Config, env: &Environment) -> Result<gateway::Setti
 #[derive(Default)]
 struct Backing {
     presets: Option<Arc<dyn AgentPresetStore>>,
-    hub_state: Option<Arc<dyn HubStateStore>>,
+    hub_state: Option<Arc<dyn HubStateStore<HubState>>>,
     export: Option<Arc<dyn MemoryExport>>,
     topics: Option<(Arc<dyn TopicStore>, Arc<dyn FilingStore>)>,
     decisions: Option<Arc<dyn DecisionStore>>,
     startup: Option<(Arc<dyn TopicPageStore>, Arc<dyn StartupStore>)>,
     tidy: Option<(Arc<dyn TidyStore>, Arc<dyn UpkeepStore>)>,
+    flagged: Option<Arc<dyn kernel::flagged::FlaggedJobs>>,
     summaries: Option<Arc<dyn kernel::memory::SummaryWatch>>,
     deletions: Option<Arc<dyn kernel::memory::SessionDeletion>>,
     tasks: Option<tasks::TaskPorts>,
+    tenancy: Option<Arc<dyn kernel::tenancy::TenancyStore>>,
 }
 
 fn with_backing(gateway: Gateway, backing: &Backing) -> Gateway {
@@ -165,12 +165,20 @@ fn with_backing(gateway: Gateway, backing: &Backing) -> Gateway {
         Some((tidy, upkeep)) => gateway.with_tidy(tidy, upkeep),
         None => gateway,
     };
+    let gateway = match backing.flagged.clone() {
+        Some(flagged) => gateway.with_flagged(flagged),
+        None => gateway,
+    };
     let gateway = match backing.summaries.clone() {
         Some(watch) => gateway.with_summary_watch(watch),
         None => gateway,
     };
     let gateway = match backing.deletions.clone() {
         Some(deletions) => gateway.with_session_deletion(deletions),
+        None => gateway,
+    };
+    let gateway = match backing.tenancy.clone() {
+        Some(store) => gateway.with_tenancy_store(store),
         None => gateway,
     };
     match backing.startup.clone() {
@@ -206,13 +214,6 @@ impl Composition {
     pub async fn validate_users(config: &Config, env: &Environment) -> Result<(), ComposeError> {
         identities::load(config, env).await?;
         Ok(())
-    }
-
-    pub(crate) async fn node_owner(
-        config: &Config,
-        env: &Environment,
-    ) -> Result<gateway::tenancy::UserId, ComposeError> {
-        Ok(identities::load(config, env).await?.owner)
     }
 
     pub async fn failed(&mut self) -> Result<(), ComposeError> {
@@ -266,9 +267,13 @@ impl Composition {
             decisions: Some(memory.clone()),
             startup: Some((memory.clone(), memory.clone())),
             tidy: Some((memory.clone(), memory.clone())),
+            flagged: Some(memory.clone()),
             deletions: Some(memory.clone()),
             summaries: Some(memory.clone()),
             tasks: Some(ports),
+            tenancy: Some(Arc::new(memory_postgres::PostgresTenancy::new(
+                memory.pool().clone(),
+            ))),
         };
         let factory = crate::models::ModelFactory::from_config(config, env, shutdown)
             .await?
@@ -299,9 +304,11 @@ impl Composition {
             decisions: Some(store.clone()),
             startup: Some((store.clone(), store.clone())),
             tidy: Some((store.clone(), store.clone())),
+            flagged: Some(store.clone()),
             deletions: Some(store.clone()),
             summaries: Some(store.clone()),
             tasks: Some(tasks::TaskPorts::of(store.as_ref())),
+            tenancy: Some(store.clone()),
         };
         let factory = crate::models::ModelFactory::from_config(config, env, shutdown)
             .await?
@@ -343,6 +350,7 @@ impl Composition {
         })
         .await?;
         let identity = identities::load(config, env).await?;
+        let owner_scope = identity.owner_scope();
         let sessions = Arc::new(
             session_registry(
                 gateway::sessions::owners_file(&settings.state_dir),
@@ -358,10 +366,11 @@ impl Composition {
             .with_identity_required()
             .with_client_certificate_required(bind.require_client)
             .with_sessions(sessions.clone());
-        gateway = crate::service::with_voice_and_audio(gateway, config, env)?;
+        gateway = crate::service::with_voice(gateway, env)?;
         gateway = with_backing(with_session_stores(gateway, env), &backing);
         gateway = devices::attach(gateway, config, env, &identity.owner, shutdown).await?;
         let tracker = tokio_util::task::TaskTracker::new();
+        identities::keep_spaces(&tracker, backing.tenancy.clone(), &identity, shutdown);
         if config.terminal_enabled() {
             let owner = identity.tenancy.local_user().cloned().ok_or_else(|| {
                 ComposeError::Invalid("a local user is required for terminals".into())
@@ -372,29 +381,25 @@ impl Composition {
         }
         let audit_cancel = shutdown.child_token();
         let mut audit_tasks = JoinSet::new();
-        let configured =
-            models::build(config, env, factory, &audit_cancel, &mut audit_tasks).await?;
-        let mut agents = std::collections::BTreeMap::new();
-        let v1 = if let Some(configured) = configured {
-            agents = configured.agents;
-            Some(configured.service)
+        let agents = if mesh::enabled(config) {
+            models::build(config, env, factory, &audit_cancel, &mut audit_tasks).await?
         } else {
-            None
+            std::collections::BTreeMap::new()
         };
-        let mut background = mesh::start(config, env, agents, identity.tenancy, shutdown).await?;
+        let mesh = mesh::start(config, env, agents, identity.tenancy, shutdown);
+        let mut background = Box::pin(owner_scope.clone().run(mesh)).await?;
         let delegating = backing.tasks.is_some();
         if let Some(ports) = backing.tasks {
             let files_root = gateway.settings().files_root.clone();
             gateway = tasks::attach(gateway, ports, config, env, files_root).await?;
         }
-        let gateway =
-            plugins::started(gateway, env, plugins::node_ports(config, bind.port)).await?;
+        let started = plugins::started(gateway, env, plugins::node_ports(config, bind.port));
+        let gateway = Box::pin(owner_scope.clone().run(started)).await?;
         if delegating && gateway.has_tasks() {
-            tasks::serve(&gateway, shutdown, &mut background);
+            owner_scope.enter(|| tasks::serve(&gateway, shutdown, &mut background));
         }
         Ok(Self {
             gateway,
-            v1,
             audit_tasks,
             audit_cancel,
             tasks: background,
@@ -410,18 +415,12 @@ impl Composition {
     }
 
     pub fn router(&self, secure: bool) -> axum::Router {
-        match &self.v1 {
-            Some(service) => service.router(&self.gateway, secure),
-            None => self.gateway.router(secure),
-        }
+        self.gateway.router(secure)
     }
 
     pub async fn close(mut self) -> Result<(), ComposeError> {
         self.cancel.cancel();
         self.gateway.close().await;
-        if let Some(service) = &self.v1 {
-            service.shutdown().await;
-        }
         self.audit_cancel.cancel();
         while let Some(result) = self.audit_tasks.join_next().await {
             result??;

@@ -8,12 +8,13 @@ use std::time::Duration;
 
 use cli_support::{Action, Fault, Harness, Plan, TestResult, action, items, provider, request};
 use config::provider::CliProvider;
+use kernel::harness::ApprovalDecision;
 use kernel::harness::{PermissionRequest, SessionEvent, ToolCallInfo, TurnInput};
+use kernel::model::LlmResponseKind;
 use kernel::model::{ModelChunk, ModelProvider};
 use tokio::sync::Notify;
 use tokio_util::sync::CancellationToken;
-use wire::harness::ApprovalDecision;
-use wire::stream::{LlmResponseKind, LlmUsage, ThinkingLevel};
+use wire::stream::{LlmUsage, ThinkingLevel};
 
 fn text(text: &str) -> SessionEvent {
     SessionEvent::AgentMessageChunk { text: text.into() }

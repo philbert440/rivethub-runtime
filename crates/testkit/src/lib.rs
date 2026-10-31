@@ -14,6 +14,7 @@ mod memory_request;
 pub mod naming;
 pub mod paths;
 pub mod pgdump;
+pub mod ports;
 pub mod provider;
 pub mod session_delete;
 pub mod sqlite;
@@ -24,6 +25,7 @@ pub mod tasks;
 pub mod tidy;
 pub mod topic_pages;
 pub mod topics;
+pub mod wiki_bounded;
 pub mod wiki_golden;
 pub mod wiki_lineage;
 pub mod wiki_mentions;
@@ -159,4 +161,10 @@ where
     T: serde::de::DeserializeOwned,
 {
     serde_json::from_str(text).map_err(|error| Error::format(path, error.to_string()))
+}
+
+pub const OWNER: &str = "owner";
+
+pub fn owner() -> Result<kernel::owner::Owner, kernel::owner::InvalidOwner> {
+    kernel::owner::Owner::new(OWNER.to_owned())
 }

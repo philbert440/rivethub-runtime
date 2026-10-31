@@ -258,6 +258,31 @@ pub(crate) fn fail_open(
     Ok(failed_ids)
 }
 
+pub(crate) fn expire(conn: &Connection, now: DateTime<Utc>) -> Result<Vec<Uuid>, TaskError> {
+    ensure(conn, "expire unclaimed tasks")?;
+    let mut statement = conn
+        .prepare(
+            "UPDATE rh_tasks SET status = 'timeout', completed_at = ?1, error = ?2
+             WHERE status = 'queued'
+             AND json_extract(budget, '$.maxWallClockMs') IS NOT NULL
+             AND round((julianday(?1) - julianday(created_at)) * 86400000.0)
+                 >= json_extract(budget, '$.maxWallClockMs')
+             RETURNING id",
+        )
+        .map_err(failed("expire unclaimed tasks"))?;
+    let ids = statement
+        .query_map(
+            params![stamp(now), kernel::tasks::UNCLAIMED_PAST_DEADLINE],
+            |row| row.get::<_, String>(0),
+        )
+        .map_err(failed("expire unclaimed tasks"))?;
+    let mut expired = Vec::new();
+    for id in ids {
+        expired.push(parse_uuid(&id.map_err(failed("expire unclaimed tasks"))?)?);
+    }
+    Ok(expired)
+}
+
 pub(crate) fn stamp(at: DateTime<Utc>) -> String {
     crate::time::stamp(at)
 }

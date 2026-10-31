@@ -4,15 +4,15 @@ use std::collections::BTreeSet;
 use config::Config;
 use config::Effort;
 use config::ModelsMode;
+use kernel::harness::EffortOption;
+use kernel::harness::HarnessCapabilities;
+use kernel::harness::HarnessControlCapabilities;
+use kernel::harness::HarnessModelOption;
+use kernel::harness::HarnessModelsSource;
+use kernel::harness::HarnessObservationCapabilities;
+use kernel::harness::HarnessOffering;
 use thiserror::Error;
-use wire::harness::EffortOption;
-use wire::harness::HarnessCapabilities;
-use wire::harness::HarnessControlCapabilities;
 use wire::harness::HarnessId;
-use wire::harness::HarnessModelOption;
-use wire::harness::HarnessModelsSource;
-use wire::harness::HarnessObservationCapabilities;
-use wire::harness::HarnessOffering;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct SheetInput {

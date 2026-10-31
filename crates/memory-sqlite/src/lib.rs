@@ -6,6 +6,7 @@ mod deletion;
 mod embed_store;
 pub mod error;
 pub mod export;
+mod flagged;
 mod health;
 pub mod import;
 mod insert;
@@ -29,6 +30,7 @@ mod task_rows;
 mod task_store;
 mod task_watch;
 mod taxonomy;
+mod tenancy;
 mod tidy;
 mod time;
 mod title;
@@ -94,7 +96,7 @@ impl SharedClock {
     }
 }
 
-pub const SCHEMA_VERSION: i64 = 27;
+pub const SCHEMA_VERSION: i64 = 30;
 
 const FILE_PRAGMAS: &str = "PRAGMA journal_mode = wal;\nPRAGMA foreign_keys = ON;";
 
@@ -108,7 +110,6 @@ struct ClaimIds {
 pub struct SqliteStore {
     conn: Arc<Mutex<Connection>>,
     pending: tokio_util::task::TaskTracker,
-    owner: Option<String>,
     logs: Arc<Mutex<Vec<String>>>,
     embed: Arc<AtomicBool>,
     claims: Arc<ClaimIds>,
@@ -170,18 +171,6 @@ impl SqliteStore {
             clock: SharedClock::new(clock),
             ..self
         }
-    }
-
-    #[must_use]
-    pub fn with_owner(mut self, owner: &str) -> Self {
-        let owner = owner.trim();
-        self.owner = (!owner.is_empty()).then(|| owner.to_owned());
-        self
-    }
-
-    #[must_use]
-    pub fn owner(&self) -> Option<&str> {
-        self.owner.as_deref()
     }
 
     pub async fn with_conn<T, F>(&self, f: F) -> Result<T, SqliteError>
@@ -273,7 +262,6 @@ fn from_conn(
     SqliteStore {
         conn: Arc::new(Mutex::new(conn)),
         pending: tokio_util::task::TaskTracker::new(),
-        owner: None,
         logs: Arc::new(Mutex::new(Vec::new())),
         embed: Arc::new(AtomicBool::new(false)),
         claims: Arc::new(ClaimIds::default()),
@@ -358,7 +346,7 @@ mod tests {
             })
             .await
             .unwrap();
-        assert_eq!(state, (crate::SCHEMA_VERSION, 65));
+        assert_eq!(state, (crate::SCHEMA_VERSION, 70));
     }
 
     #[tokio::test]

@@ -8,6 +8,7 @@ use wire::harness::{
 
 use kernel::harness::ToolCallUpdate;
 use kernel::preview::{LiveActivity, Preview};
+use kernel::terminal::PaneTurn;
 use wire::plugin::process::PluginEvent;
 use wire::session_id::SessionId;
 
@@ -50,6 +51,14 @@ impl TerminalService {
         self.summaries.read().get(key).cloned()
     }
 
+    pub(crate) fn chat_at_rest(&self, key: &str) -> bool {
+        self.chats.read().contains_key(key)
+            && !self.pty_running(key)
+            && self.summaries.read().get(key).is_none_or(|summary| {
+                summary.blocked != Some(true) && summary.status != HarnessSessionStatus::Active
+            })
+    }
+
     pub(crate) fn is_live(&self, key: &str) -> bool {
         let running = self
             .summaries
@@ -65,7 +74,7 @@ impl TerminalService {
                 .state
                 .borrow()
                 .as_ref()
-                .is_none_or(|state| state.state == wire::gateway::term::PtyState::Running)
+                .is_some_and(|state| state.state == wire::gateway::term::PtyState::Running)
         });
         spawned
             || self.adopted.read().values().any(|(owner, info)| {
@@ -363,6 +372,24 @@ impl TerminalService {
                     summary.effort = Some(level.to_string());
                 }
                 kernel::harness::SessionOption::Mode(_) => {}
+            }
+        }
+    }
+
+    pub(crate) fn pane_changed(&self, key: &str, session: &SessionId, change: PaneTurn) {
+        let live = self
+            .summaries
+            .read()
+            .get(key)
+            .map(|summary| summary.session_id.clone());
+        match (live, change) {
+            (Some(live), PaneTurn::Waiting(waiting)) => self.set_blocked(key, &live, waiting),
+            (Some(_), PaneTurn::Ended) => {}
+            (None, PaneTurn::Waiting(waiting)) => {
+                self.publish_update(key, session, HarnessSessionStatus::Active, Some(waiting));
+            }
+            (None, PaneTurn::Ended) => {
+                self.publish_update(key, session, HarnessSessionStatus::Idle, Some(false));
             }
         }
     }

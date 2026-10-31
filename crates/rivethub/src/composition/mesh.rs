@@ -13,6 +13,13 @@ use wire::mesh::{MeshNode, MeshNodeStatus};
 
 use super::ComposeError;
 
+pub(super) fn enabled(config: &Config) -> bool {
+    config
+        .mesh
+        .as_ref()
+        .is_some_and(|mesh| mesh.enabled == Some(true))
+}
+
 pub(super) async fn start(
     config: &Config,
     env: &Environment,
@@ -21,11 +28,7 @@ pub(super) async fn start(
     shutdown: &CancellationToken,
 ) -> Result<JoinSet<Result<(), ComposeError>>, ComposeError> {
     let mut tasks = JoinSet::new();
-    if config
-        .mesh
-        .as_ref()
-        .is_none_or(|mesh| mesh.enabled != Some(true))
-    {
+    if !enabled(config) {
         return Ok(tasks);
     }
     let (port, settings, name) = channel_settings(config, env).await?;
@@ -36,13 +39,13 @@ pub(super) async fn start(
     for (id, binding) in agents {
         let (send, receive) = mpsc::channel(32);
         mailboxes.insert(id.clone(), send);
-        tasks.spawn(listen(
+        tasks.spawn(kernel::tenancy::Scope::carry(listen(
             id,
             binding.model,
             binding.runner,
             receive,
             shutdown.child_token(),
-        ));
+        )));
     }
     let channel_port = settings.agent_channel_port;
     let channel = AgentChannel::bind(settings, mailboxes, shutdown.child_token())
@@ -159,7 +162,12 @@ async fn listen(
             },
             call = calls.recv() => {
                 let Some(call) = call else { break };
-                turns.spawn(run_call(id.clone(), model.clone(), runner.clone(), call));
+                turns.spawn(kernel::tenancy::Scope::carry(run_call(
+                    id.clone(),
+                    model.clone(),
+                    runner.clone(),
+                    call,
+                )));
             }
         }
     }
@@ -186,7 +194,7 @@ async fn run_call(id: String, model: String, runner: Arc<dyn TurnRunner>, call: 
             thinking: None,
             max_tokens: None,
         },
-        context: wire::hooks::HookContextBase {
+        context: kernel::agent::TurnContext {
             agent_id: Some(id.clone()),
             session_id: session.clone(),
             timestamp: Utc::now(),

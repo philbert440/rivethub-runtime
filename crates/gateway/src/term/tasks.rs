@@ -8,6 +8,7 @@ use crate::sessions::control::ChatHandle;
 use crate::tenancy::UserId;
 
 pub(crate) const BYPASS_PERMISSIONS: &str = "bypassPermissions";
+const DEFAULT_PERMISSIONS: &str = "default";
 
 impl TerminalService {
     pub(crate) fn remember_requested(&self, requested: &SessionId, canonical: &SessionId) {
@@ -35,13 +36,34 @@ impl TerminalService {
         }
     }
 
-    pub(crate) fn permission_mode(&self, session: &str) -> Option<String> {
-        self.live_chat_of(session)?;
-        match session.parse::<SessionId>() {
-            Ok(canonical) => self.harness.as_ref()?.mode(&canonical),
+    pub(crate) async fn permission_mode(&self, session: &str) -> Option<String> {
+        let canonical = match session.parse::<SessionId>() {
+            Ok(canonical) => canonical,
             Err(error) => {
-                tracing::debug!(%error, "a live chat without a canonical session id");
-                None
+                tracing::debug!(%error, "a parent session without a canonical session id");
+                return None;
+            }
+        };
+        if self.pty_running(canonical.native()) {
+            return Some(self.terminal_mode(&canonical).await);
+        }
+        self.live_chat_of(session)?;
+        self.harness.as_ref()?.mode(&canonical)
+    }
+
+    async fn terminal_mode(&self, session: &SessionId) -> String {
+        let Some(lister) = &self.session_lister else {
+            return DEFAULT_PERMISSIONS.to_owned();
+        };
+        match lister
+            .permission_mode(session.harness(), session.native())
+            .await
+        {
+            Ok(Some(mode)) => mode,
+            Ok(None) => DEFAULT_PERMISSIONS.to_owned(),
+            Err(error) => {
+                tracing::debug!(%error, "the terminal's permission mode could not be read");
+                DEFAULT_PERMISSIONS.to_owned()
             }
         }
     }

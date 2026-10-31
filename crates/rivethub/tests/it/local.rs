@@ -22,6 +22,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use kernel::ToolContext;
+use kernel::memory::MemoryEntry;
 use kernel::tool::Tool;
 use mcp::client::Client;
 use rmcp::transport::StreamableHttpClientTransport;
@@ -31,7 +32,6 @@ use tokio::process::Command;
 use tokio_util::sync::CancellationToken;
 use wire::gateway::HealthzResponse;
 use wire::gateway::memory::MemoryBrowseResponse;
-use wire::memory::MemoryEntry;
 use wire::message::Role;
 
 const SUMMARY_ID: &str = "0199e2a0-7b3c-7a00-8000-000000000001";
@@ -141,9 +141,7 @@ fn write_config(home: &std::path::Path, body: &str) -> TestResult {
 #[tokio::test]
 async fn local_serves_health_and_sqlite_memory_then_stops_on_sigterm() -> TestResult {
     let home = tempfile::tempdir()?;
-    let probe = std::net::TcpListener::bind(("127.0.0.1", 0))?;
-    let port = probe.local_addr()?.port();
-    drop(probe);
+    let port = testkit::ports::claim()?;
     let port_text = port.to_string();
     let started = start(
         home.path(),
@@ -181,6 +179,7 @@ async fn local_serves_health_and_sqlite_memory_then_stops_on_sigterm() -> TestRe
                     metadata: None,
                     created_at: Some(now),
                 }],
+                &testkit::owner()?,
                 now,
             )
             .await?;
@@ -214,7 +213,7 @@ async fn local_serves_health_and_sqlite_memory_then_stops_on_sigterm() -> TestRe
 #[tokio::test]
 async fn sqlite_builds_a_wiki_topic_from_a_seeded_summary() -> TestResult {
     let home = tempfile::tempdir()?;
-    let port = free_port()?;
+    let port = testkit::ports::claim()?;
     let stub = model_stub().await?;
     let database = home.path().join(".rivethub").join("memory.sqlite");
     let wiki = home.path().join("wiki");
@@ -257,9 +256,7 @@ async fn wiki_topic(home: &Path, database: &Path) -> TestResult {
 #[tokio::test]
 async fn sqlite_worker_roles_and_mcp_share_the_process() -> TestResult {
     let home = tempfile::tempdir()?;
-    let probe = std::net::TcpListener::bind(("127.0.0.1", 0))?;
-    let port = probe.local_addr()?.port();
-    drop(probe);
+    let port = testkit::ports::claim()?;
     let database = home.path().join(".rivethub").join("memory.sqlite");
     let socket = home.path().join("mcp.sock");
     write_config(
@@ -296,20 +293,18 @@ async fn sqlite_worker_roles_and_mcp_share_the_process() -> TestResult {
 async fn mcp_delegate_task_refuses_an_agent_without_a_harness() -> TestResult {
     let home = tempfile::tempdir()?;
     let stub = model_stub().await?;
-    let probe = std::net::TcpListener::bind(("127.0.0.1", 0))?;
-    let gateway = probe.local_addr()?.port();
-    let mcp_port = free_port()?;
-    drop(probe);
+    let gateway = testkit::ports::claim()?;
+    let mcp_port = testkit::ports::claim()?;
     let database = home.path().join(".rivethub").join("memory.sqlite");
     write_config(
         home.path(),
         &provider_base(
             home.path(),
             &format!("http://{}", stub.address),
-            &mcp_config(&database, gateway, mcp_port),
+            &mcp_config(&database, gateway.number(), mcp_port.number()),
         ),
     )?;
-    let ran = delegated(home.path(), &database, mcp_port).await;
+    let ran = delegated(home.path(), &database, mcp_port.number()).await;
     let closed = stub.close().await;
     ran?;
     closed
@@ -341,13 +336,6 @@ async fn delegated(home: &Path, database: &Path, mcp_port: u16) -> TestResult {
     )?;
     assert_eq!(rows, 0);
     Ok(())
-}
-
-fn free_port() -> TestResult<u16> {
-    let probe = std::net::TcpListener::bind(("127.0.0.1", 0))?;
-    let port = probe.local_addr()?.port();
-    drop(probe);
-    Ok(port)
 }
 
 #[derive(serde::Serialize)]
@@ -462,7 +450,7 @@ async fn wait_running(database: &Path) -> Result<(), String> {
 #[tokio::test]
 async fn local_blocked_on_a_provider_releases_the_job_on_sigint() -> TestResult {
     let home = tempfile::tempdir()?;
-    let port = free_port()?;
+    let port = testkit::ports::claim()?;
     let (provider, hold) = blackhole().await?;
     let database = home.path().join(".rivethub").join("memory.sqlite");
     write_config(
@@ -557,8 +545,8 @@ fn seed_summary(path: &Path) -> TestResult {
         (topic, &now),
     )?;
     conn.execute(
-        "INSERT INTO rh_session_placements (session_id, topic_id, placed_by, placed_at)
-         VALUES (?1, ?2, 'you', ?3)",
+        "INSERT INTO rh_session_placements (session_id, topic_id, placed_by, placed_at, owner_user_id)
+         VALUES (?1, ?2, 'you', ?3, 'owner')",
         (&session, topic, &now),
     )?;
     Ok(())
@@ -617,7 +605,7 @@ async fn complete(
     } else {
         DELEGATE_TEXT
     };
-    let payload = event_stream(content).map_err(|error| {
+    let payload = crate::process::provider::event_stream(content, None).map_err(|error| {
         (
             axum::http::StatusCode::INTERNAL_SERVER_ERROR,
             error.to_string(),
@@ -626,27 +614,6 @@ async fn complete(
     Ok((
         [(axum::http::header::CONTENT_TYPE, "text/event-stream")],
         payload,
-    ))
-}
-
-fn event_stream(content: &str) -> TestResult<String> {
-    let chunk = wire::gateway::v1::CompletionChunk {
-        id: "c".to_owned(),
-        created: 0,
-        model: "m".to_owned(),
-        choices: vec![wire::gateway::v1::ChunkChoice {
-            index: 0,
-            delta: wire::gateway::v1::CompletionDelta {
-                content: Some(content.to_owned()),
-                ..wire::gateway::v1::CompletionDelta::default()
-            },
-            finish_reason: None,
-        }],
-        usage: None,
-    };
-    Ok(format!(
-        "data: {}\n\ndata: [DONE]\n\n",
-        serde_json::to_string(&chunk)?
     ))
 }
 

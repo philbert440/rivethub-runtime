@@ -5,18 +5,18 @@ use std::str::FromStr as _;
 use chrono::DateTime;
 use chrono::TimeZone;
 use chrono::Utc;
+use kernel::memory::MemoryDegraded;
+use kernel::memory::MemoryHitSource;
+use kernel::memory::MemoryScope;
+use kernel::memory::MemorySearchResult;
 use kernel::memory::SearchMode;
 use kernel::memory::SearchOutcome;
 use kernel::memory::SearchQuery;
+use kernel::memory::TagEntityType;
 use kernel::memory::TagLiteral;
 use kernel::memory_core::hybrid_pool;
 use rusqlite::Connection;
 use rusqlite::params;
-use wire::gateway::memory::MemoryDegraded;
-use wire::gateway::memory::MemoryHitSource;
-use wire::gateway::memory::MemoryScope;
-use wire::gateway::memory::TagEntityType;
-use wire::memory::MemorySearchResult;
 use wire::message::Role;
 
 use crate::SqliteStore;
@@ -35,7 +35,8 @@ const SUMMARY_AGENT: &str = "summary";
 
 const MESSAGE_SQL: &str = "SELECT m.id, m.content, m.role, m.agent, m.created_at, m.conversation_id, \
      ros_messages_fts.rank, \
-     (SELECT c.session_key FROM ros_conversations c WHERE c.id = m.conversation_id) \
+     (SELECT c.session_key FROM ros_conversations c WHERE c.id = m.conversation_id), \
+     (SELECT c.channel FROM ros_conversations c WHERE c.id = m.conversation_id) \
      FROM ros_messages_fts \
      JOIN ros_messages m ON m.id = ros_messages_fts.id \
      WHERE ros_messages_fts MATCH ?1 \
@@ -50,7 +51,8 @@ const MESSAGE_SQL: &str = "SELECT m.id, m.content, m.role, m.agent, m.created_at
 
 const SUMMARY_SQL: &str = "SELECT s.id, s.content, s.created_at, s.conversation_id, \
      ros_summaries_fts.rank, \
-     (SELECT c.session_key FROM ros_conversations c WHERE c.id = s.conversation_id) \
+     (SELECT c.session_key FROM ros_conversations c WHERE c.id = s.conversation_id), \
+     (SELECT c.channel FROM ros_conversations c WHERE c.id = s.conversation_id) \
      FROM ros_summaries_fts \
      JOIN ros_summaries s ON s.id = ros_summaries_fts.id \
      WHERE ros_summaries_fts MATCH ?1 \
@@ -351,6 +353,7 @@ struct SummaryRow {
 }
 
 fn read_message(row: &rusqlite::Row<'_>) -> rusqlite::Result<MessageRow> {
+    let channel: Option<String> = row.get(8)?;
     Ok(MessageRow {
         id: row.get(0)?,
         content: row.get(1)?,
@@ -359,18 +362,23 @@ fn read_message(row: &rusqlite::Row<'_>) -> rusqlite::Result<MessageRow> {
         created_at: row.get(4)?,
         conversation_id: row.get(5)?,
         rank: row.get(6)?,
-        session_id: row.get(7)?,
+        session_id: row
+            .get::<_, Option<String>>(7)?
+            .map(|key| kernel::filing::session_key(channel.as_deref(), &key)),
     })
 }
 
 fn read_summary(row: &rusqlite::Row<'_>) -> rusqlite::Result<SummaryRow> {
+    let channel: Option<String> = row.get(6)?;
     Ok(SummaryRow {
         id: row.get(0)?,
         content: row.get(1)?,
         created_at: row.get(2)?,
         conversation_id: row.get(3)?,
         rank: row.get(4)?,
-        session_id: row.get(5)?,
+        session_id: row
+            .get::<_, Option<String>>(5)?
+            .map(|key| kernel::filing::session_key(channel.as_deref(), &key)),
     })
 }
 

@@ -1223,5 +1223,105 @@
   {
     "id": "ws-main/upgrade-unknown-path",
     "reason": "B1 hardening: unowned sessions are refused and unknown upgrade routes return HTTP errors"
+  },
+  {
+    "id": "plain-main/layout-bad-key-slash",
+    "reason": "B1: note 90 removed this route; the recording keeps the den's answer."
+  },
+  {
+    "id": "plain-main/layout-bad-key-empty",
+    "reason": "B1: note 90 removed this route; the recording keeps the den's answer."
+  },
+  {
+    "id": "plain-main/layout-bad-key-65",
+    "reason": "B1: note 90 removed this route; the recording keeps the den's answer."
+  },
+  {
+    "id": "plain-main/layout-missing",
+    "reason": "B1: note 90 removed this route; the recording keeps the den's answer."
+  },
+  {
+    "id": "plain-main/layout-missing-default",
+    "reason": "B1: note 90 removed this route; the recording keeps the den's answer."
+  },
+  {
+    "id": "plain-main/layout-post-invalid-json",
+    "reason": "B1: note 90 removed this route; the recording keeps the den's answer."
+  },
+  {
+    "id": "plain-main/layout-post-bad-key",
+    "reason": "B1: note 90 removed this route; the recording keeps the den's answer."
+  },
+  {
+    "id": "plain-main/layout-post-valid",
+    "reason": "B1: note 90 removed this route; the recording keeps the den's answer."
+  },
+  {
+    "id": "plain-main/layout-get-written",
+    "reason": "B1: note 90 removed this route; the recording keeps the den's answer."
+  },
+  {
+    "id": "plain-main/layout-post-default",
+    "reason": "B1: note 90 removed this route; the recording keeps the den's answer."
+  },
+  {
+    "id": "plain-main/layout-get-fallback",
+    "reason": "B1: note 90 removed this route; the recording keeps the den's answer."
+  },
+  {
+    "id": "plain-main/layout-key-dots",
+    "reason": "B1: note 90 removed this route; the recording keeps the den's answer."
+  },
+  {
+    "id": "plain-main/layout-put",
+    "reason": "B1: note 90 removed this route; the recording keeps the den's answer."
+  },
+  {
+    "id": "plain-main/body-too-large-layout",
+    "reason": "B1: note 90 removed this route; the recording keeps the den's answer."
+  },
+  {
+    "id": "plain-main/capabilities",
+    "reason": "B1: note 90 removed this route; the recording keeps the den's answer."
+  },
+  {
+    "id": "plain-main/capabilities-post",
+    "reason": "B1: note 90 removed this route; the recording keeps the den's answer."
+  },
+  {
+    "id": "plain-nostatic/capabilities-no-mesh",
+    "reason": "B1: note 90 removed this route; the recording keeps the den's answer."
+  },
+  {
+    "id": "plain-main/static-audio-nested",
+    "reason": "B1: note 90 removed this route; the recording keeps the den's answer."
+  },
+  {
+    "id": "plain-main/alias-api-audio",
+    "reason": "B1: note 90 removed this route; the recording keeps the den's answer."
+  },
+  {
+    "id": "plain-main/alias-api-audio-status",
+    "reason": "B1: note 90 removed this route; the recording keeps the den's answer."
+  },
+  {
+    "id": "plain-main/alias-api-audio-health",
+    "reason": "B1: note 90 removed this route; the recording keeps the den's answer."
+  },
+  {
+    "id": "plain-main/alias-api-audio-mic-http",
+    "reason": "B1: note 90 removed this route; the recording keeps the den's answer."
+  },
+  {
+    "id": "plain-main/audio-disabled",
+    "reason": "B1: note 90 removed this route; the recording keeps the den's answer."
+  },
+  {
+    "id": "ws-main/upgrade-audio-mic-disabled",
+    "reason": "B1: note 90 removed this route; the recording keeps the den's answer."
+  },
+  {
+    "id": "ws-main/upgrade-alias-audio-mic",
+    "reason": "B1: note 90 removed this route; the recording keeps the den's answer."
   }
 ]

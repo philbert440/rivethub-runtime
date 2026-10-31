@@ -77,6 +77,44 @@ async fn backfill_titles_rejects_unknown_options() {
     assert_eq!(report.stderr, "Error: Unknown option: --frob\n");
 }
 
+#[tokio::test]
+async fn model_titles_need_a_model_url_and_postgres() {
+    let directory = tempfile::tempdir().expect("directory");
+    let database = migrated(directory.path());
+    let path = database.to_string_lossy().to_string();
+    let home = support::home();
+    let environment = support::environment(&home);
+    let half = support::run(
+        &["memory", "backfill-titles", "--model", "fake-chat"],
+        &environment,
+    )
+    .await;
+    assert_eq!(half.exit, Exit::Failure);
+    assert_eq!(
+        half.stderr,
+        "Error: rh memory backfill-titles names titles with both --model <name> and --model-url <url>\n"
+    );
+    let sqlite = support::run(
+        &[
+            "memory",
+            "backfill-titles",
+            "--sqlite",
+            &path,
+            "--model",
+            "fake-chat",
+            "--model-url",
+            "http://127.0.0.1:9/v1",
+        ],
+        &environment,
+    )
+    .await;
+    assert_eq!(sqlite.exit, Exit::Failure);
+    assert_eq!(
+        sqlite.stderr,
+        "Error: rh memory backfill-titles --model runs on Postgres memory only\n"
+    );
+}
+
 fn migrated(directory: &Path) -> PathBuf {
     let path = directory.join("memory.sqlite");
     migrate::sqlite(&path).expect("migrate");

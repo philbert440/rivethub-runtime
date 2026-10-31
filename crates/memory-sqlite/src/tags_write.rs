@@ -2,14 +2,14 @@ use kernel::memory::MemoryStoreError;
 use kernel::memory::TagAdd;
 use kernel::memory::TagDecision;
 use kernel::memory::TagEntity;
+use kernel::memory::TagEntityType;
 use kernel::memory::TagId;
+use kernel::memory::TagState;
+use kernel::memory::TagWire;
 use rusqlite::Connection;
 use rusqlite::params_from_iter;
 use rusqlite::types::Value;
 use uuid::Uuid;
-use wire::gateway::memory::TagEntityType;
-use wire::gateway::memory::TagState;
-use wire::gateway::memory::TagWire;
 
 use crate::SqliteStore;
 use crate::error::SqliteError;

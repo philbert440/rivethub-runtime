@@ -24,7 +24,7 @@ local owner identity, verified device names, the Claude transcript reader,
 configured OpenAI-compatible providers and agent loops, the file-backed agent
 presets, the device runtime with the node's certificate authority, and optional
 terminal and mesh services. HTTP routes use the gateway router, including capture,
-memory/tags, sessions, terminal/harness sessions, wiki and v1. Every request to
+memory/tags, sessions, terminal/harness sessions and wiki. Every request to
 the composed router requires a resolved identity. A verified device leaf is
 looked up before loopback ownership, so an unknown device cannot inherit the
 owner identity merely by connecting over loopback.
@@ -65,7 +65,7 @@ Under the `gateway` configuration section (`den` is its deprecated alias):
 Mesh requires `enabled`, `node_name`, `advertise_host`, `agent_channel_port`,
 and TLS with a client CA. It writes `mesh.json` beneath the configured shared
 root. Every configured agent receives a bounded mailbox and independent turns.
-Every configured agent is reachable at `/v1` by its id, and the default agent's runner serves the session wait path. All agents use the common audit pipeline.
+All agents use the common audit pipeline.
 Registry heartbeats, listeners, turns and terminal maintenance belong to the
 shutdown tree. SIGTERM/SIGINT cancel these services under the same 10 second grace.
 
@@ -140,7 +140,7 @@ available.
 
 Recording notes are at `../testkit/tests/fixtures/roots/README.md` and
 `../testkit/tests/fixtures/gateway/README.md`. Binary integration tests cover TLS,
-revocation, identity refusal, websocket snapshots, memory, v1 turns, mesh turns,
+revocation, identity refusal, websocket snapshots, memory, mesh turns,
 configuration checking and signal shutdown. Existing route recordings remain
 covered by their workspace replay suites; they are not all replayed through the
 binary. Real installed herdr/ACP execution remains in the adapter smoke suites.

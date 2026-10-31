@@ -2,8 +2,14 @@ use crate::embed::EmbedAttempt;
 use crate::error::Error;
 use chrono::DateTime;
 use chrono::Utc;
+use kernel::memory::MemoryChunkMatch;
+use kernel::memory::MemoryFallback;
+use kernel::memory::MemoryHitSource;
+use kernel::memory::MemoryScope;
 use kernel::memory::SearchMode;
+use kernel::memory::SummaryKind;
 use kernel::memory::TagLiteral;
+use kernel::memory::TagWire;
 use kernel::memory_core::FusionItem;
 use kernel::memory_core::HYBRID_RRF_K;
 use kernel::memory_core::fusion_score;
@@ -12,10 +18,6 @@ use kernel::memory_core::passes_fusion_gate;
 use kernel::memory_core::reciprocal_rank_fusion;
 use kernel::memory_core::should_trigram_fallback;
 use uuid::Uuid;
-use wire::gateway::memory::MemoryFallback;
-use wire::gateway::memory::MemoryHitSource;
-use wire::gateway::memory::MemoryScope;
-use wire::gateway::memory::MemorySearchHit;
 use wire::message::Role;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -51,6 +53,24 @@ impl SearchOptions {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct MemorySearchHit {
+    pub chunk: Option<MemoryChunkMatch>,
+    pub id: String,
+    pub source: MemoryHitSource,
+    pub content: String,
+    pub created_at: DateTime<Utc>,
+    pub score: f64,
+    pub role: Option<Role>,
+    pub agent: Option<String>,
+    pub kind: Option<SummaryKind>,
+    pub tool_name: Option<String>,
+    pub conversation_id: Option<String>,
+    pub session_id: Option<String>,
+    pub fallback: Option<MemoryFallback>,
+    pub tags: Option<Vec<TagWire>>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct SearchOutcome {
     pub hits: Vec<MemorySearchHit>,
     pub degraded: Option<String>,
@@ -59,7 +79,7 @@ pub struct SearchOutcome {
 
 #[derive(Debug, Clone)]
 pub(crate) struct ArmRow {
-    pub(crate) chunk: Option<wire::memory::MemoryChunkMatch>,
+    pub(crate) chunk: Option<kernel::memory::MemoryChunkMatch>,
     pub(crate) id: String,
     pub(crate) source: MemoryHitSource,
     pub(crate) content: String,
@@ -347,19 +367,31 @@ impl crate::PostgresMemory {
         tag_filter: Option<&TagFilter>,
     ) -> Result<SearchOutcome, Error> {
         let embed = self.embed_query(&options.text).await;
-        let query = embed.vector().cloned();
+        let query = embed.vector().map(Vec::as_slice);
         let literal = literal_scan(&options.text);
-        let fts_rows = self
-            .arm_rows(options, ArmKind::Fts, tag_filter, query.as_deref())
-            .await?;
-        let trigram_rows = if literal {
-            Some(
-                self.arm_rows(options, ArmKind::Trigram, tag_filter, query.as_deref())
-                    .await?,
-            )
-        } else {
-            None
+        let trigram = async {
+            if literal {
+                self.arm_rows(options, ArmKind::Trigram, tag_filter, query)
+                    .await
+                    .map(Some)
+            } else {
+                Ok(None)
+            }
         };
+        let vector = async {
+            match &embed {
+                EmbedAttempt::Embedded { vector, ef_search } => self
+                    .vector_arm_rows(options, tag_filter, vector, *ef_search)
+                    .await
+                    .map(Some),
+                EmbedAttempt::NotWired | EmbedAttempt::Failed { .. } => Ok(None),
+            }
+        };
+        let (fts_rows, trigram_rows, vector_rows) = tokio::try_join!(
+            Box::pin(self.arm_rows(options, ArmKind::Fts, tag_filter, query)),
+            Box::pin(trigram),
+            Box::pin(vector)
+        )?;
 
         let mut fallback = None;
         let trigram_rows = match trigram_rows {
@@ -367,7 +399,7 @@ impl crate::PostgresMemory {
             None => {
                 if fts_rows.is_empty() && should_trigram_fallback(&options.text) {
                     let recovered = self
-                        .arm_rows(options, ArmKind::Trigram, tag_filter, query.as_deref())
+                        .arm_rows(options, ArmKind::Trigram, tag_filter, query)
                         .await?;
                     if !recovered.is_empty() {
                         fallback = Some(MemoryFallback::Trigram);
@@ -379,21 +411,15 @@ impl crate::PostgresMemory {
             }
         };
 
-        let mut degraded = None;
-        let vector_rows = match embed {
-            EmbedAttempt::NotWired => None,
-            EmbedAttempt::Embedded { vector, ef_search } => Some(
-                self.vector_arm_rows(options, tag_filter, &vector, ef_search)
-                    .await?,
-            ),
-            EmbedAttempt::Failed {
-                failure,
-                elapsed_ms,
-            } => {
-                self.vector_dropped(&failure, elapsed_ms);
-                degraded = Some(failure.reason());
-                None
-            }
+        let degraded = if let EmbedAttempt::Failed {
+            failure,
+            elapsed_ms,
+        } = &embed
+        {
+            self.vector_dropped(failure, *elapsed_ms);
+            Some(failure.reason())
+        } else {
+            None
         };
 
         let fused = fuse(&fts_rows, vector_rows.as_deref(), trigram_rows.as_deref());
@@ -434,4 +460,23 @@ pub(crate) fn hit_uuids(
             })
         })
         .collect()
+}
+
+const ITERATIVE_SCAN: &str = "SELECT set_config('hnsw.iterative_scan', 'strict_order', true) \
+     WHERE (SELECT string_to_array(extversion, '.')::int[] FROM pg_extension WHERE extname = 'vector') \
+           >= ARRAY[0, 8]";
+
+pub(crate) async fn tune_hnsw(tx: &mut sqlx::PgConnection, ef_search: u64) -> Result<(), Error> {
+    sqlx::query_scalar!(
+        r#"select set_config('hnsw.ef_search', $1, true) as "ok!""#,
+        ef_search.to_string()
+    )
+    .fetch_one(&mut *tx)
+    .await
+    .map_err(|source| Error::operation("vector search", source))?;
+    sqlx::query(ITERATIVE_SCAN)
+        .execute(&mut *tx)
+        .await
+        .map_err(|source| Error::operation("vector search", source))?;
+    Ok(())
 }

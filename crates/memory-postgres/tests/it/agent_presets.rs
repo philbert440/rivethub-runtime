@@ -2,15 +2,14 @@
 
 use chrono::DateTime;
 use chrono::Utc;
+use kernel::agent_presets::AgentPreset;
 use kernel::agent_presets::AgentPresetStore;
 use kernel::agent_presets::AgentPresetStoreError;
+use kernel::agent_presets::AgentPresetUpdate;
+use kernel::agent_presets::AgentStoreBackend;
 use memory_postgres::PostgresMemory;
 use memory_postgres::PostgresPresets;
 use sqlx::PgPool;
-use wire::gateway::agents::AgentPreset;
-use wire::gateway::agents::AgentPresetUpdate;
-use wire::gateway::agents::AgentStoreBackend;
-use wire::gateway::agents::KnownHarness;
 use wire::harness::HarnessId;
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
@@ -236,7 +235,7 @@ async fn update_clears_and_sets_the_nullable_fields(pool: PgPool) -> TestResult 
         .update(
             "p-000000000002",
             AgentPresetUpdate {
-                harness_id: Some(Some(KnownHarness::from(HarnessId::KimiCode))),
+                harness_id: Some(Some(HarnessId::KimiCode)),
                 ..AgentPresetUpdate::default()
             },
         )

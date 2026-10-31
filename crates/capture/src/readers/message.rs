@@ -4,6 +4,9 @@ use kernel::transcript::TranscriptReaderError;
 use kernel::transcript::Turn;
 use serde::Deserialize;
 use serde::Serialize;
+use serde_json::value::RawValue;
+use serde_with::DefaultOnError;
+use serde_with::serde_as;
 use wire::JsonObject;
 use wire::capture::CaptureMessage;
 use wire::harness::HarnessId;
@@ -275,6 +278,51 @@ pub(crate) fn parse_json<T: for<'de> Deserialize<'de>>(
 
 pub(crate) fn arguments(position: u64, text: &str) -> Result<JsonObject, SkippedRecord> {
     parse_json(position, text)
+}
+
+#[serde_as]
+#[derive(Debug, Deserialize)]
+#[serde(transparent, bound = "T: Deserialize<'de>")]
+struct Lenient<T>(#[serde_as(as = "DefaultOnError")] Option<T>);
+
+#[derive(Debug, Serialize)]
+struct Wrapped<'a> {
+    input: &'a RawValue,
+}
+
+pub(crate) fn lenient<T: for<'de> Deserialize<'de>>(
+    raw: &RawValue,
+) -> Result<Option<T>, TranscriptReaderError> {
+    serde_json::from_str::<Lenient<T>>(raw.get())
+        .map(|lenient| lenient.0)
+        .map_err(json_failed)
+}
+
+pub(crate) fn tool_input(raw: &RawValue) -> Result<JsonObject, TranscriptReaderError> {
+    if let Some(object) = lenient::<JsonObject>(raw)? {
+        return Ok(object);
+    }
+    if let Some(text) = lenient::<String>(raw)? {
+        #[cfg_attr(
+            dylint_lib = "rr_lints",
+            expect(
+                fallback,
+                reason = "CONTRACT B3: a tool input that is not a JSON object is kept whole as the call's input, as the kit keeps it"
+            )
+        )]
+        let parsed = serde_json::from_str::<JsonObject>(&text).ok();
+        if let Some(object) = parsed {
+            return Ok(object);
+        }
+    }
+    JsonObject::from_serialize(&Wrapped { input: raw }).map_err(json_failed)
+}
+
+fn json_failed(error: serde_json::Error) -> TranscriptReaderError {
+    TranscriptReaderError::Read {
+        message: format!("capture JSON failed: {error}"),
+        source: Box::new(error),
+    }
 }
 
 #[derive(Serialize)]

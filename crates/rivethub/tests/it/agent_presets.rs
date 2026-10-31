@@ -82,7 +82,10 @@ async fn a_migrated_database_serves_presets_from_postgres(pool: PgPool) -> TestR
     let presets = agent_presets(&memory)
         .await?
         .ok_or("the preset table was not selected")?;
-    assert_eq!(presets.backend(), AgentStoreBackend::Postgres);
+    assert_eq!(
+        presets.backend(),
+        kernel::agent_presets::AgentStoreBackend::Postgres
+    );
     sqlx::query(
         "INSERT INTO rh_agent_presets (id, name, node, directory, created_at)
          VALUES ('p-remote', 'Remote', 'node-b', '/home/user/remote', '2026-09-01T00:00:00Z')",

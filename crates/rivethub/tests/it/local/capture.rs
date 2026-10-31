@@ -8,7 +8,7 @@ use std::time::Duration;
 
 use tokio::io::AsyncWriteExt as _;
 
-use super::{TestResult, free_port, provider_base, start, stop, write_config};
+use super::{TestResult, provider_base, start, stop, write_config};
 
 const SESSION: &str = "capture-resend";
 
@@ -46,7 +46,7 @@ fn batch(title: &str) -> CaptureBatchRequest {
 #[tokio::test]
 async fn resent_capture_batches_skip_stored_events_and_keep_the_title() -> TestResult {
     let home = tempfile::tempdir()?;
-    let port = free_port()?;
+    let port = testkit::ports::claim()?;
     let port_text = port.to_string();
     let started = start(
         home.path(),
@@ -105,11 +105,20 @@ struct PromptHook<'a> {
 }
 
 async fn run_hook(home: &std::path::Path, payload: &str) -> TestResult<std::process::Output> {
+    run_hook_with(home, payload, &[]).await
+}
+
+async fn run_hook_with(
+    home: &std::path::Path,
+    payload: &str,
+    vars: &[(&str, &str)],
+) -> TestResult<std::process::Output> {
     let mut child = tokio::process::Command::new(env!("CARGO_BIN_EXE_rh"))
         .args(["capture", "hook"])
         .env_clear()
         .env("HOME", home)
         .env("RIVETHUB_CAPTURE_REDACTION", "1")
+        .envs(vars.iter().copied())
         .current_dir(home)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -123,23 +132,28 @@ async fn run_hook(home: &std::path::Path, payload: &str) -> TestResult<std::proc
 }
 
 #[tokio::test]
-async fn the_capture_hook_command_posts_a_prompt_to_the_local_gateway() -> TestResult {
+async fn the_capture_hook_command_posts_a_held_prompt_to_the_local_gateway() -> TestResult {
     let home = tempfile::tempdir()?;
-    let port_text = free_port()?.to_string();
+    let port = testkit::ports::claim()?;
+    let port_text = port.to_string();
     let started = start(
         home.path(),
         &["local", "--no-lan", "--port", &port_text],
         &["gateway listening on "],
     )
     .await?;
-    let payload = serde_json::to_string(&PromptHook {
-        session_id: HOOK_SESSION,
-        cwd: "/work/demo",
-        hook_event_name: "UserPromptSubmit",
-        prompt: "deploy with Bearer abcdefghijklmnop1234",
-    })?;
-    let output = run_hook(home.path(), &payload).await;
+    let payload = |hook_event_name| {
+        serde_json::to_string(&PromptHook {
+            session_id: HOOK_SESSION,
+            cwd: "/work/demo",
+            hook_event_name,
+            prompt: "deploy with Bearer abcdefghijklmnop1234",
+        })
+    };
+    let held = run_hook(home.path(), &payload("UserPromptSubmit")?).await;
+    let output = run_hook(home.path(), &payload("Stop")?).await;
     stop(started).await?;
+    assert!(held?.status.success());
     let output = output?;
     let stderr = String::from_utf8(output.stderr)?;
     assert!(output.status.success(), "{stderr}");
@@ -153,14 +167,30 @@ async fn the_capture_hook_command_posts_a_prompt_to_the_local_gateway() -> TestR
     )?;
     assert_eq!(content, "deploy with [REDACTED:bearer]");
     let log = std::fs::read_to_string(home.path().join(".rivethub").join("claude-capture.log"))?;
-    assert!(log.contains("UserPromptSubmit"), "{log}");
+    assert!(log.contains("Stop"), "{log}");
+    Ok(())
+}
+
+#[tokio::test]
+async fn the_capture_hook_leaves_a_model_providers_own_runs_alone() -> TestResult {
+    let home = tempfile::tempdir()?;
+    let payload = serde_json::to_string(&PromptHook {
+        session_id: HOOK_SESSION,
+        cwd: "/work/demo",
+        hook_event_name: "Stop",
+        prompt: "summarize this batch",
+    })?;
+    let output = run_hook_with(home.path(), &payload, &[(config::MODEL_RUN_VARIABLE, "1")]).await?;
+    assert!(output.status.success());
+    assert_eq!(String::from_utf8(output.stderr)?, "");
+    assert!(!home.path().join(".rivethub").exists());
     Ok(())
 }
 
 const NODE_OWNER: &str = "node-owner";
 
 async fn capture_on_node(home: &Path, sqlite: &str) -> TestResult<MemoryHealthResponse> {
-    let port = free_port()?;
+    let port = testkit::ports::claim()?;
     let database = home.join(".rivethub").join("memory.sqlite");
     if let Some(parent) = database.parent() {
         std::fs::create_dir_all(parent)?;

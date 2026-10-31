@@ -5,18 +5,18 @@ use chrono::DateTime;
 use chrono::Utc;
 use kernel::memory::Limit;
 use kernel::memory::MemoryStoreError;
+use kernel::memory::PendingTagWire;
+use kernel::memory::TagCount;
 use kernel::memory::TagCountsQuery;
+use kernel::memory::TagEntityType;
 use kernel::memory::TagListQuery;
 use kernel::memory::TagLookup;
+use kernel::memory::TagState;
+use kernel::memory::TagWire;
 use rusqlite::Connection;
 use rusqlite::Row;
 use rusqlite::params_from_iter;
 use rusqlite::types::Value;
-use wire::gateway::memory::PendingTagWire;
-use wire::gateway::memory::TagCount;
-use wire::gateway::memory::TagEntityType;
-use wire::gateway::memory::TagState;
-use wire::gateway::memory::TagWire;
 
 use crate::SqliteStore;
 use crate::error::SqliteError;
@@ -161,7 +161,7 @@ fn pending_tags(conn: &Connection, limit: Limit) -> Result<Vec<PendingTagWire>, 
                 tag,
                 action: parts
                     .removal
-                    .then_some(wire::gateway::memory::PendingTagAction::Remove),
+                    .then_some(kernel::memory::PendingTagAction::Remove),
                 session_key: parts.session_key,
                 title: parts.title,
                 agent: parts.agent,

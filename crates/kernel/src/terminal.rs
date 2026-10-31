@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 use std::fmt;
 use thiserror::Error;
 use tokio::sync::mpsc::Receiver;
-use wire::session_id::SessionId;
+use values::SessionId;
 
 #[derive(Debug, Error)]
 pub enum TerminalMuxError {
@@ -18,6 +18,12 @@ pub enum TerminalMuxError {
     UnknownTerminal(TerminalId),
     #[error("terminal exited: {0}")]
     Exited(TerminalId),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PaneTurn {
+    Ended,
+    Waiting(bool),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -86,6 +92,10 @@ pub trait TerminalMux: Send + Sync {
 
     async fn wait(&self, _id: &TerminalId) -> Result<i32, TerminalMuxError> {
         Err(TerminalMuxError::Unsupported("wait"))
+    }
+
+    async fn turn_ends(&self, _id: &TerminalId) -> Result<Receiver<PaneTurn>, TerminalMuxError> {
+        Err(TerminalMuxError::Unsupported("turn_ends"))
     }
     async fn spawn(
         &self,

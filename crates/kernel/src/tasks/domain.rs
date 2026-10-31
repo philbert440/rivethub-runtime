@@ -10,14 +10,8 @@ use uuid::Uuid;
 pub const MAX_DEPTH: u8 = 3;
 pub const LIVENESS: Duration = Duration::from_secs(30);
 pub const REAP_AFTER_SECS: i64 = 90;
+pub const UNCLAIMED_PAST_DEADLINE: &str = "no node started it before its maxWallClockMs ran out";
 
-#[cfg_attr(
-    dylint_lib = "rr_lints",
-    expect(
-        duptype,
-        reason = "KERNELWIRE: the kernel owns a task's lifecycle; wire::task::TaskStatus is the contract's copy, translated by the gateway's task routes"
-    )
-)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, strum::Display, strum::EnumString)]
 #[strum(serialize_all = "kebab-case")]
 pub enum TaskStatus {
@@ -56,13 +50,6 @@ impl TaskStatus {
     }
 }
 
-#[cfg_attr(
-    dylint_lib = "rr_lints",
-    expect(
-        duptype,
-        reason = "KERNELWIRE: the kernel owns how a task ended; wire::task::TaskVerdict is the contract's copy, translated by the gateway's task routes"
-    )
-)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum Verdict {
@@ -208,6 +195,21 @@ pub struct Task {
     pub started_at: Option<DateTime<Utc>>,
     pub completed_at: Option<DateTime<Utc>>,
     pub alive_at: Option<DateTime<Utc>>,
+}
+
+impl Task {
+    #[must_use]
+    pub fn unclaimed_past_deadline(&self, now: DateTime<Utc>) -> bool {
+        let waited = now
+            .signed_duration_since(self.created_at)
+            .num_milliseconds();
+        self.status == TaskStatus::Queued
+            && waited >= 0
+            && self
+                .budget
+                .wall_clock
+                .is_some_and(|wall| u128::from(waited.unsigned_abs()) >= wall.as_millis())
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

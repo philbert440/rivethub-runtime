@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use kernel::harness::SessionSpec;
+use kernel::terminal::PaneTurn;
 use wire::events::{AgentEvent, AgentEventKind, ProtocolVersion};
 use wire::harness::{
     ApprovalDecision, ApprovalOutcome, HarnessEvent, HarnessId, HarnessSessionStatus,
@@ -296,7 +297,7 @@ impl TerminalService {
             .clone()
             .ok_or_else(|| ApiError::Unavailable("chat harness unavailable".into()))?;
         harness
-            .answer_permission(session, request_id, decision)
+            .answer_permission(session, request_id, approval(decision))
             .await?;
         self.publish_harness(
             &key,
@@ -347,6 +348,35 @@ impl TerminalService {
         Ok(())
     }
 
+    pub(crate) fn follow_turn_ends(
+        self: &Arc<Self>,
+        key: String,
+        session: SessionId,
+        mut ends: tokio::sync::mpsc::Receiver<PaneTurn>,
+    ) {
+        let service = Arc::clone(self);
+        self.track(async move {
+            loop {
+                tokio::select! {
+                    () = service.shutdown.cancelled() => return,
+                    end = ends.recv() => match end {
+                        None => return,
+                        Some(change @ PaneTurn::Waiting(_)) => service.pane_changed(&key, &session, change),
+                        Some(PaneTurn::Ended) => {
+                            service.pane_changed(&key, &session, PaneTurn::Ended);
+                            let chat = service.chats.read().get(&key).cloned();
+                            if let Some(chat) = chat
+                                && let Err(error) = chat.signal(TerminalSignal::TurnEnded).await
+                            {
+                                tracing::debug!(%error, "a terminal turn ended after its session actor stopped");
+                            }
+                        }
+                    },
+                }
+            }
+        });
+    }
+
     pub(crate) fn terminal_exited(&self, key: &str) {
         let chat = self.chats.read().get(key).cloned();
         if let Some(chat) = chat {
@@ -364,5 +394,13 @@ async fn existing_directory(directory: std::path::PathBuf) -> Result<std::path::
         Ok(_) | Err(_) => Err(ApiError::BadRequest(
             "the session's working directory is gone".into(),
         )),
+    }
+}
+
+const fn approval(decision: ApprovalDecision) -> kernel::harness::ApprovalDecision {
+    match decision {
+        ApprovalDecision::Allow => kernel::harness::ApprovalDecision::Allow,
+        ApprovalDecision::Deny => kernel::harness::ApprovalDecision::Deny,
+        ApprovalDecision::AllowSession => kernel::harness::ApprovalDecision::AllowSession,
     }
 }

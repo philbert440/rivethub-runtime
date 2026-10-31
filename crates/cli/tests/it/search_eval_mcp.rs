@@ -2,8 +2,8 @@ use std::path::Path;
 use std::process::Command;
 use std::process::Output;
 
+use kernel::memory::SummaryKind;
 use serde::Serialize;
-use wire::gateway::memory::SummaryKind;
 use wire::message::Role;
 
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;

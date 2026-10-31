@@ -416,7 +416,7 @@ fn fail_one(
     };
     let attempts = u32::try_from(attempts).map_err(SqliteError::Count)?;
     let max_attempts = u32::try_from(max_attempts).map_err(SqliteError::Count)?;
-    let outcome = if attempts >= max_attempts {
+    let outcome = if attempts >= max_attempts.min(kernel::flagged::FLAG_AFTER_FAILURES) {
         FailOutcome::Dead
     } else {
         FailOutcome::Retry

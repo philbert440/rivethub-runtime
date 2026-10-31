@@ -2,12 +2,12 @@ use agent_client_protocol::schema::v1 as acp;
 use kernel::harness::Command;
 use kernel::harness::PlanEntry;
 use kernel::harness::PlanPriority;
+use kernel::harness::PlanStatus;
 use kernel::harness::SessionEvent;
 use kernel::harness::ToolCallInfo;
 use kernel::harness::ToolCallStatus;
 use kernel::harness::ToolCallUpdate;
 use serde::Deserialize as _;
-use wire::harness::PlanStatus;
 use wire::json::JsonObject;
 use wire::stream::LlmUsage;
 

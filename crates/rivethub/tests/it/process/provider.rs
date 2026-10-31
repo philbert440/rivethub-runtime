@@ -2,9 +2,9 @@ use std::net::SocketAddr;
 use std::time::Duration;
 
 use super::TestResult;
-use wire::gateway::v1::{ChatRequest, ChunkChoice, Completion, CompletionChunk, CompletionDelta};
-use wire::message::Role;
-use wire::stream::openai::{ChatCompletionRequest, FinishReason, Message};
+use wire::stream::openai::{
+    ChatCompletionChunk, ChatCompletionRequest, Choice, Delta, FinishReason,
+};
 
 #[derive(Debug)]
 pub struct Provider {
@@ -17,24 +17,7 @@ impl Provider {
     pub async fn start() -> TestResult<Self> {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
         let address = listener.local_addr()?;
-        let chunk = CompletionChunk {
-            id: "test-completion".into(),
-            created: 0,
-            model: "test".into(),
-            choices: vec![ChunkChoice {
-                index: 0,
-                delta: CompletionDelta {
-                    content: Some("hello back".into()),
-                    ..CompletionDelta::default()
-                },
-                finish_reason: Some(FinishReason::Stop),
-            }],
-            usage: None,
-        };
-        let body = format!(
-            "data: {}\n\ndata: [DONE]\n\n",
-            serde_json::to_string(&chunk)?
-        );
+        let body = event_stream("hello back", Some(FinishReason::Stop))?;
         let router = axum::Router::new().route(
             "/v1/chat/completions",
             axum::routing::post(
@@ -71,39 +54,38 @@ impl Provider {
     }
 }
 
-pub async fn turns(client: &reqwest::Client, address: SocketAddr, channel_port: u16) -> TestResult {
-    let request = ChatRequest {
-        model: "main".into(),
-        messages: vec![Message {
-            role: Role::User,
-            content: Some("hello".into()),
-            reasoning_content: None,
-            tool_calls: None,
-            tool_call_id: None,
+pub fn event_stream(
+    content: &str,
+    finish_reason: Option<FinishReason>,
+) -> Result<String, serde_json::Error> {
+    let chunk = ChatCompletionChunk {
+        id: "test-completion".into(),
+        object: "chat.completion.chunk".into(),
+        created: 0,
+        model: "test".into(),
+        system_fingerprint: None,
+        choices: vec![Choice {
+            index: Some(0),
+            delta: Delta {
+                role: None,
+                content: Some(content.into()),
+                reasoning_content: None,
+                tool_calls: None,
+            },
+            logprobs: None,
+            finish_reason,
+            stop_reason: None,
         }],
-        stream: None,
-        max_tokens: None,
-        stream_options: None,
+        usage: None,
+        timings: None,
     };
-    let response: Completion = client
-        .post(format!("https://{address}/v1/chat/completions"))
-        .json(&request)
-        .send()
-        .await?
-        .error_for_status()?
-        .json()
-        .await?;
-    assert_eq!(response.model, "main");
-    assert_eq!(
-        response
-            .choices
-            .first()
-            .ok_or("missing choice")?
-            .message
-            .content
-            .as_deref(),
-        Some("hello back")
-    );
+    Ok(format!(
+        "data: {}\n\ndata: [DONE]\n\n",
+        serde_json::to_string(&chunk)?
+    ))
+}
+
+pub async fn channel_turn(client: &reqwest::Client, channel_port: u16) -> TestResult {
     let request = wire::mesh_channel::AgentMessage {
         agent_id: "main".into(),
         content: "hello".into(),
