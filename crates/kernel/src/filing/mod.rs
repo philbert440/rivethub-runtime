@@ -28,3 +28,5 @@ pub use target::LeftOut;
 pub use target::Target;
 pub use target::bare_session_prefix;
 pub use target::conversation_keys;
+pub use target::session_key;
+pub use target::stored_keys;
