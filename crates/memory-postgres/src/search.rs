@@ -181,7 +181,7 @@ impl From<&TagLiteral> for TagFilter {
 }
 
 fn finish_rows(rows: Vec<ArmRow>, limit: u32) -> Result<Vec<MemorySearchHit>, Error> {
-    let mut hits: Vec<MemorySearchHit> = rows
+    let hits: Vec<MemorySearchHit> = rows
         .into_iter()
         .map(|row| {
             let score =
@@ -204,8 +204,23 @@ fn finish_rows(rows: Vec<ArmRow>, limit: u32) -> Result<Vec<MemorySearchHit>, Er
             }
         })
         .collect();
+    let mut hits = distinct(hits);
     hits.truncate(usize::try_from(limit.max(1))?);
     Ok(hits)
+}
+
+fn distinct(hits: Vec<MemorySearchHit>) -> Vec<MemorySearchHit> {
+    let mut seen = std::collections::BTreeSet::new();
+    hits.into_iter()
+        .filter(|hit| {
+            seen.insert((
+                hit.source == MemoryHitSource::Summary,
+                hit.session_id.clone(),
+                hit.created_at,
+                hit.content.clone(),
+            ))
+        })
+        .collect()
 }
 
 impl crate::PostgresMemory {
@@ -424,13 +439,14 @@ impl crate::PostgresMemory {
 
         let fused = fuse(&fts_rows, vector_rows.as_deref(), trigram_rows.as_deref());
         let top = fused.first().map(|entry| entry.hit.score);
-        let mut hits: Vec<MemorySearchHit> = fused
+        let hits: Vec<MemorySearchHit> = fused
             .into_iter()
             .filter(|entry| {
                 top.is_some_and(|top| passes_fusion_gate(entry.arm_count, entry.hit.score, top))
             })
             .map(|entry| entry.hit)
             .collect();
+        let mut hits = distinct(hits);
         hits.truncate(usize::try_from(options.limit.max(1))?);
         self.record_access(&hits)?;
         Ok(SearchOutcome {

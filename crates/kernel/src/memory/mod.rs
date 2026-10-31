@@ -259,6 +259,26 @@ pub struct SummaryDag {
     pub messages: MemoryMessageTally,
 }
 
+pub const SUMMARY_PREVIEW_BYTES: usize = 320;
+
+impl SummaryDag {
+    #[must_use]
+    pub fn outline(mut self) -> Self {
+        for node in &mut self.summaries {
+            node.source_message_ids.clear();
+            if node.content.len() > SUMMARY_PREVIEW_BYTES {
+                let mut end = SUMMARY_PREVIEW_BYTES;
+                while !node.content.is_char_boundary(end) {
+                    end -= 1;
+                }
+                node.content.truncate(end);
+                node.truncated = true;
+            }
+        }
+        self
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum SummaryOwner {
     Session(String),
@@ -429,6 +449,23 @@ pub trait MemoryStore: Send + Sync {
     async fn context(&self, session: &str, now: DateTime<Utc>) -> Result<String, MemoryStoreError>;
 
     async fn summary_dag(&self, owner: &SummaryOwner) -> Result<SummaryDag, MemoryStoreError>;
+
+    async fn summary_outline(&self, owner: &SummaryOwner) -> Result<SummaryDag, MemoryStoreError> {
+        Ok(self.summary_dag(owner).await?.outline())
+    }
+
+    async fn summary_node(
+        &self,
+        owner: &SummaryOwner,
+        id: &str,
+    ) -> Result<Option<MemorySummaryNode>, MemoryStoreError> {
+        Ok(self
+            .summary_dag(owner)
+            .await?
+            .summaries
+            .into_iter()
+            .find(|node| node.id == id))
+    }
 
     async fn list_tags(&self, query: TagListQuery) -> Result<Vec<TagWire>, MemoryStoreError>;
 
