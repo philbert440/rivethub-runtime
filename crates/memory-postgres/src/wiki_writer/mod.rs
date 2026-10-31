@@ -363,6 +363,7 @@ async fn write_page(temporary: &Path, path: &Path, markdown: &[u8]) -> Result<()
 pub(super) async fn git(root: &Path, args: &[&str]) -> Result<String, WikiWriteError> {
     let output = Command::new("git")
         .current_dir(root)
+        .args(["-c", "gc.auto=0", "-c", "maintenance.auto=false"])
         .arg("--literal-pathspecs")
         .args(args)
         .env_remove("GIT_AUTHOR_NAME")

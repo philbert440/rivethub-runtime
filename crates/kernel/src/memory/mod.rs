@@ -402,8 +402,9 @@ pub trait MemoryStore: Send + Sync {
     async fn wiki_archive(
         &self,
         slug: &crate::wiki::page::WikiSlug,
+        month: Option<&str>,
     ) -> Result<Option<String>, MemoryStoreError> {
-        let _: &crate::wiki::page::WikiSlug = slug;
+        let _: (&crate::wiki::page::WikiSlug, Option<&str>) = (slug, month);
         Ok(None)
     }
 
