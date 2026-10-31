@@ -48,7 +48,7 @@ pub(crate) async fn apply(conn: &mut PgConnection) -> Result<(), sqlx::Error> {
     let context = context(Scope::current());
     sqlx::query(
         "SELECT set_config('rh.principal', $1, false), set_config('rh.spaces', $2, false), \
-                set_config('rh.maintenance', $3, false)",
+                set_config('rh.maintenance', $3, false), set_config('jit', 'off', false)",
     )
     .bind(context.principal)
     .bind(context.spaces)

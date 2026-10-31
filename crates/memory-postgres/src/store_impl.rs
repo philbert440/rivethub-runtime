@@ -320,7 +320,13 @@ impl MemoryStore for crate::PostgresMemory {
     }
 
     async fn stats(&self) -> Result<kernel::memory::MemoryStatsResponse, MemoryStoreError> {
-        self.memory_stats().await.map_err(MemoryStoreError::from)
+        if let Some(answer) = self.stats_cache.fresh() {
+            self.probe().await?;
+            return Ok(answer);
+        }
+        let answer = self.memory_stats().await.map_err(MemoryStoreError::from)?;
+        self.stats_cache.keep(&answer);
+        Ok(answer)
     }
 
     async fn get_full(&self, id: &str) -> Result<Option<MemoryEntry>, MemoryStoreError> {

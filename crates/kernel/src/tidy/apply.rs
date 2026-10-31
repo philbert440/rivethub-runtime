@@ -109,11 +109,32 @@ async fn approve_pending(
     now: DateTime<Utc>,
 ) -> Result<Proposal, TidyError> {
     proposal.pending()?;
-    apply(ports, &proposal.change, now).await?;
+    match apply(ports, &proposal.change, now).await {
+        Ok(()) => {}
+        Err(error) if stale(&error) => {
+            ports
+                .tidy
+                .decide(proposal.id, ProposalState::Rejected, now)
+                .await?;
+            return Err(TidyError::Stale {
+                id: proposal.id,
+                reason: error.to_string(),
+            });
+        }
+        Err(error) => return Err(error),
+    }
     ports
         .tidy
         .decide(proposal.id, ProposalState::Approved, now)
         .await
+}
+
+const fn stale(error: &TidyError) -> bool {
+    matches!(
+        error,
+        TidyError::Wiki(crate::wiki::builder::WikiStoreError::TopicMissing(_))
+            | TidyError::Topic(crate::topics::TopicError::NotFound { .. })
+    )
 }
 
 async fn apply(

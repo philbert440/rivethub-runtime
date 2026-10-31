@@ -91,10 +91,11 @@ impl PostgresMemory {
             "SELECT m.id::text AS id, c.session_key, m.agent, m.channel, m.role AS role_text,
                     m.content, m.tool_name, m.tool_args::text AS tool_args, m.tool_result,
                     m.metadata::text AS metadata, m.created_at
-             FROM rh_messages m JOIN rh_conversations c ON c.id = m.conversation_id
-             WHERE EXISTS (SELECT 1 FROM rh_summary_sources ss WHERE ss.message_id = m.id
-               AND (ss.summary_id = $1 OR ss.summary_id IN (SELECT id FROM rh_summaries WHERE parent_id = $1)))
-             AND m.role <> 'tool' AND length(m.content) > 50
+             FROM (SELECT DISTINCT ss.message_id FROM rh_summary_sources ss
+                    WHERE ss.summary_id = ANY (ARRAY(SELECT $1::uuid UNION SELECT id FROM rh_summaries WHERE parent_id = $1))) sources
+             JOIN rh_messages m ON m.id = sources.message_id
+             JOIN rh_conversations c ON c.id = m.conversation_id
+             WHERE m.role <> 'tool' AND length(m.content) > 50
              AND ($2::text IS NULL OR m.agent = $2)
              AND ($3::timestamptz IS NULL OR m.created_at >= $3)
              AND ($4::timestamptz IS NULL OR m.created_at < $4)

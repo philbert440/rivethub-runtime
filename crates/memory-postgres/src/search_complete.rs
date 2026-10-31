@@ -197,12 +197,13 @@ impl crate::PostgresMemory {
             "SELECT m.id::text AS id, c.session_key, m.agent, m.channel, m.role AS role_text,
                     m.content, m.tool_name, m.tool_args::text AS tool_args, m.tool_result,
                     m.metadata::text AS metadata, m.created_at
-             FROM rh_messages m JOIN rh_conversations c ON c.id = m.conversation_id
-             WHERE EXISTS (SELECT 1 FROM rh_summary_sources ss
-                           WHERE ss.message_id = m.id AND ss.summary_id = ANY(",
+             FROM (SELECT DISTINCT ss.message_id FROM rh_summary_sources ss WHERE ss.summary_id = ANY(",
         );
         statement.push_bind(ids);
-        statement.push("))");
+        statement.push(
+            ")) sources JOIN rh_messages m ON m.id = sources.message_id \
+             JOIN rh_conversations c ON c.id = m.conversation_id WHERE true",
+        );
         if let Some(since) = query.since {
             statement.push(" AND m.created_at >= ").push_bind(since);
         }

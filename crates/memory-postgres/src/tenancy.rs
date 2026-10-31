@@ -66,14 +66,14 @@ fn session_row(row: SessionRow) -> Result<(SessionId, SessionVisibility), Tenanc
     ))
 }
 
-const SESSIONS: &str = "SELECT k.key AS session,
-        (SELECT c.owner_user_id FROM rh_conversations c WHERE c.session_key = k.key
-          ORDER BY c.created_at LIMIT 1) AS owner,
-        (SELECT m.visibility FROM rh_session_marks m WHERE m.session_key = k.key AND m.owner_user_id = $2) AS mark,
-        coalesce((SELECT c.visibility FROM rh_conversations c WHERE c.session_key = k.key
-                   ORDER BY c.created_at LIMIT 1),
-                 rh_session_visibility(k.key, $2, now())) AS effective
-   FROM unnest($1::text[]) AS k(key)";
+const SESSIONS: &str = "WITH keys AS (SELECT DISTINCT key FROM unnest($1::text[]) AS k(key)),
+     convs AS (SELECT DISTINCT ON (session_key) session_key, owner_user_id, visibility
+                 FROM rh_conversations WHERE session_key = ANY ($1::text[]) ORDER BY session_key, created_at),
+     marks AS (SELECT session_key, visibility FROM rh_session_marks
+                WHERE owner_user_id = $2 AND session_key = ANY ($1::text[]))
+SELECT k.key AS session, c.owner_user_id AS owner, m.visibility AS mark,
+       coalesce(c.visibility, rh_session_visibility(k.key, $2, now())) AS effective
+  FROM keys k LEFT JOIN convs c ON c.session_key = k.key LEFT JOIN marks m ON m.session_key = k.key";
 
 #[async_trait]
 impl TenancyStore for PostgresTenancy {

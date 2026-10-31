@@ -73,7 +73,9 @@ fn error(error: TidyError) -> ApiError {
         TidyError::UnknownProposal { .. } | TidyError::UnknownBatch { .. } => {
             ApiError::Missing(error.to_string())
         }
-        TidyError::Decided { .. } => ApiError::Conflict(error.to_string()),
+        TidyError::Decided { .. } | TidyError::Stale { .. } => {
+            ApiError::Conflict(error.to_string())
+        }
         TidyError::EmptyReason => ApiError::BadRequest(error.to_string()),
         TidyError::Topic(error) => super::topics::topic_error(error),
         TidyError::Invalid { .. } => {
