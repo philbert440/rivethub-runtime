@@ -471,23 +471,13 @@ impl JobQueue for TaskMemory {
         Ok(())
     }
 
-    async fn revive_dead(
-        &self,
-        name: &JobName,
-        dead_before: DateTime<Utc>,
-    ) -> Result<u64, JobQueueError> {
+    async fn flag_stuck(&self) -> Result<u64, JobQueueError> {
         let mut inner = self.inner.lock();
-        let mut revived = 0_u64;
-        for job in inner.jobs.values_mut() {
-            if job.name == *name && job.attempts >= job.max_attempts && job.run_at < dead_before {
-                job.attempts = 0;
-                job.locked = false;
-                job.last_error = None;
-                revived = revived.saturating_add(1);
-            }
-        }
+        let before = inner.jobs.len();
+        inner.jobs.retain(|_, job| job.attempts < job.max_attempts);
+        let flagged = before - inner.jobs.len();
         drop(inner);
-        Ok(revived)
+        u64::try_from(flagged).map_err(|_| JobQueueError::Stored("flagged".to_owned()))
     }
 
     async fn read(&self, id: JobId) -> Result<Option<StoredJob>, JobQueueError> {

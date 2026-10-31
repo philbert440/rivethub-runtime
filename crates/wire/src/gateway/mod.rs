@@ -2,6 +2,7 @@ pub mod agents;
 pub mod catalog;
 pub mod devices;
 pub mod files;
+pub mod flagged;
 pub mod hub_state;
 pub mod memory;
 pub mod notifications;

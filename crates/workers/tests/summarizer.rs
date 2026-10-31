@@ -242,7 +242,7 @@ struct Held {
 struct Seen {
     notifications: tokio::sync::watch::Sender<()>,
     jobs: Mutex<Vec<Held>>,
-    dead: Mutex<Vec<(JobName, DateTime<Utc>)>>,
+    dead: Mutex<Vec<JobName>>,
     next_id: std::sync::atomic::AtomicI64,
 }
 

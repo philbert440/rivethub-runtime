@@ -7626,6 +7626,104 @@
         "pendingProposals"
       ]
     },
+    "FlaggedJob": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "task": {
+          "type": "string"
+        },
+        "key": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "payload": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "error": {
+          "type": "string"
+        },
+        "failures": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "firstFailedAt": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64"
+        },
+        "lastFailedAt": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "flaggedAt": {
+          "type": "integer",
+          "format": "int64"
+        }
+      },
+      "required": [
+        "id",
+        "task",
+        "payload",
+        "error",
+        "failures",
+        "lastFailedAt",
+        "flaggedAt"
+      ]
+    },
+    "FlaggedGroup": {
+      "type": "object",
+      "properties": {
+        "task": {
+          "type": "string"
+        },
+        "cause": {
+          "type": "string"
+        },
+        "count": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "lastFailedAt": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "sample": {
+          "$ref": "#/$defs/FlaggedJob"
+        }
+      },
+      "required": [
+        "task",
+        "cause",
+        "count",
+        "lastFailedAt",
+        "sample"
+      ]
+    },
+    "FlaggedJobs": {
+      "type": "object",
+      "properties": {
+        "groups": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/FlaggedGroup"
+          }
+        }
+      },
+      "required": [
+        "groups"
+      ]
+    },
     "TopicDirectory": {
       "oneOf": [
         {

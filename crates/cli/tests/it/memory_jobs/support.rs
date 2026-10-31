@@ -1,5 +1,4 @@
 use async_trait::async_trait;
-use chrono::{DateTime, Utc};
 use kernel::model::{LlmResponse, LlmResponseKind};
 use kernel::queue::{
     ClaimSelector, ClaimedJob, Job, JobId, JobName, JobNotifications, JobQueue, JobQueueError,
@@ -92,12 +91,8 @@ impl JobQueue for RecordingQueue {
     async fn release(&self, id: JobId) -> Result<(), JobQueueError> {
         self.inner.release(id).await
     }
-    async fn revive_dead(
-        &self,
-        name: &JobName,
-        before: DateTime<Utc>,
-    ) -> Result<u64, JobQueueError> {
-        self.inner.revive_dead(name, before).await
+    async fn flag_stuck(&self) -> Result<u64, JobQueueError> {
+        self.inner.flag_stuck().await
     }
     async fn read(&self, id: JobId) -> Result<Option<StoredJob>, JobQueueError> {
         self.inner.read(id).await

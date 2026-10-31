@@ -181,11 +181,12 @@ pub async fn handle_enqueue_stale_wiki(
         () = cancel.cancelled() => return Err(WorkerError::Cancelled),
         result = store.missing_wiki(missing_cap) => result?,
     };
+    let now = chrono::Utc::now();
     for job in &jobs {
         let added = tokio::select! {
             biased;
             () = cancel.cancelled() => return Err(WorkerError::Cancelled),
-            result = queue.enqueue(crate::wiki_builder::extract_wiki_job(job)?) => result,
+            result = queue.enqueue(crate::wiki_builder::missing_wiki_job(job, now)?) => result,
         };
         if let Err(error) = added {
             tracing::warn!(

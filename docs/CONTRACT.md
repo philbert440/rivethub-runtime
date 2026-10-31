@@ -1124,6 +1124,28 @@ rename,delete}` under the folder its `root` setting names, and RivetHub web's Fi
 there; through the proxy an upload must be answered within note 55's 60 s, and a download carries the `sandbox` policy.
 The routes stay until the installed Electron and Android builds are past the release that moved their updates.
 Naming: no bare "RivetHub clients" anywhere — the clients are RivetHub web / Android / Electron; the product is RivetHub.
+(97) Flagged jobs (Phil, 2026-10-30): a job that keeps failing leaves the queue as a flagged record, so the jobs behind it
+run. Postgres counts every failure of a job in `rh_job_failures` under its key (`job:<id>` without one), so the count
+survives re-enqueueing a key, which resets graphile's attempts; a job is flagged when its count reaches
+`RIVETHUB_FLAG_AFTER_FAILURES` (default 5), when it fails its last allowed attempt, or when its key is already flagged.
+A retry-later answer (a throttled or unreachable model) pauses the job without counting a failure, and `extract-wiki`
+writes no failed extraction for it. Flagging deletes the job and writes `rh_flagged_jobs` (migration 0047): task, key, payload, priority, max attempts,
+failures, last error, first and last failure. A job that later completes under the same key clears its count and its
+flagged record. The hourly `reap-dead-jobs` sweep flags every job already out of attempts or past the count, instead of
+reviving dead `compact-conversation` jobs; `run-task` jobs are never flagged (tasks keep their own failed state). The wiki
+backfill and `stale-wiki-sweep` skip summaries whose `wiki-ext-` key is flagged, dismissed or not. `GET
+/api/memory/flagged` answers `{ groups: [{ task, cause, count, lastFailedAt, sample }] }`, newest failure first: open
+records grouped by task and cause (the error's first line with uuids as `…` and digit runs as `N`), `sample` the group's
+newest record `{ id, task, key?, payload, error, failures, firstFailedAt?, lastFailedAt, flaggedAt }`. `POST
+/api/memory/flagged/{id}/retry` deletes the record and its count and enqueues the job again with fresh attempts; `POST
+/api/memory/flagged/{id}/dismiss` hides it (a dismissed key stays flagged for the sweeps that skip it, and a new failure
+shows it again). Both answer `204`, `404` for a record that is not open, and the three routes are the node owner's
+(`403` otherwise, `503` without the store). The upkeep `failing` counts (44) add each task's open records. SQLite has
+no new tables: a job is dead at its last attempt or the fifth, `reap-dead-jobs` marks queued jobs past five attempts
+dead, its dead jobs are the flagged records (no `firstFailedAt`; retry requeues the row, dismiss deletes it), and
+re-enqueueing a key still revives its dead job. Wiki order: `stale-wiki-sweep` re-adds missing leaves newest first, and
+one summarized within the last 24 hours is enqueued at priority -10 instead of 10, so new sessions reach the wiki ahead
+of the backlog.
 
 ## 4. Gaps to close before building the affected slice
 

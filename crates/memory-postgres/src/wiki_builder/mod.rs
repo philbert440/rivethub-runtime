@@ -55,8 +55,9 @@ impl WikiBuilderStore for PostgresMemory {
         let rows = sqlx::query_as::<_, BackfillRow>(
             "SELECT s.id, s.conversation_id FROM rh_summaries s
              LEFT JOIN rh_wiki_extractions e ON e.summary_id = s.id
-             WHERE e.summary_id IS NULL OR e.status = 'failed'
-                OR (e.status = 'done' AND (e.pipeline_version < $1 OR (cardinality(e.topics_touched) > 0 AND e.git_sha IS NULL)))
+             WHERE (e.summary_id IS NULL OR e.status = 'failed'
+                OR (e.status = 'done' AND (e.pipeline_version < $1 OR (cardinality(e.topics_touched) > 0 AND e.git_sha IS NULL))))
+               AND NOT EXISTS (SELECT 1 FROM rh_flagged_jobs f WHERE f.job_key = 'wiki-ext-' || s.id::text)
              ORDER BY s.created_at, s.id LIMIT $2",
         )
         .bind(WIKI_PIPELINE_VERSION)

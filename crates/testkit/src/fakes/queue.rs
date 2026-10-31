@@ -142,34 +142,17 @@ impl JobQueue for FakeJobQueue {
         outcome
     }
 
-    async fn revive_dead(
-        &self,
-        name: &JobName,
-        _dead_before: chrono::DateTime<chrono::Utc>,
-    ) -> Result<u64, JobQueueError> {
+    async fn flag_stuck(&self) -> Result<u64, JobQueueError> {
         let mut jobs = self.jobs.lock().await;
-        let mut revived = 0_u64;
-        let mut failure = None;
-        for held in jobs.values_mut() {
-            let Some(max_attempts) = held.job.max_attempts else {
-                continue;
-            };
-            let Ok(attempts) = i32::try_from(held.attempts) else {
-                failure = Some(JobQueueError::Stored("attempts".to_owned()));
-                break;
-            };
-            if held.job.name == *name && attempts >= max_attempts {
-                held.attempts = 0;
-                held.claimed = false;
-                held.last_error = None;
-                revived = revived.saturating_add(1);
-            }
-        }
+        let before = jobs.len();
+        jobs.retain(|_, held| {
+            held.job
+                .max_attempts
+                .is_none_or(|max| i64::from(held.attempts) < i64::from(max))
+        });
+        let flagged = before - jobs.len();
         drop(jobs);
-        match failure {
-            Some(error) => Err(error),
-            None => Ok(revived),
-        }
+        u64::try_from(flagged).map_err(|_| JobQueueError::Stored("flagged".to_owned()))
     }
 
     async fn read(&self, id: JobId) -> Result<Option<StoredJob>, JobQueueError> {

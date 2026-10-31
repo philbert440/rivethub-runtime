@@ -14,6 +14,7 @@ fn unconfigured_sweeps_use_the_datahub_defaults() -> Result<(), WorkerError> {
         chunk_backfill_limit: 200,
         sweep_max_attempts: 5,
         wiki_sweep_limit: 20,
+        flag_after: 5,
     };
     assert_eq!(MemoryJobSettings::standard(), expected);
     assert_eq!(
@@ -36,6 +37,7 @@ fn environment_overrides_are_typed_and_the_wiki_cap_is_clamped() -> Result<(), W
         with("RIVETHUB_EMBED_SWEEP_MAX_ATTEMPTS", "9")?.sweep_max_attempts,
         9
     );
+    assert_eq!(with("RIVETHUB_FLAG_AFTER_FAILURES", "3")?.flag_after, 3);
     assert_eq!(
         with("RIVETHUB_WIKI_SWEEP_LIMIT", "500")?.wiki_sweep_limit,
         200

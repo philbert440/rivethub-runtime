@@ -50,7 +50,11 @@ RETURNING j.id, t.identifier, j.payload, j.attempts::bigint";
 pub(crate) const COMPLETE: &str = "WITH removed AS (
     DELETE FROM graphile_worker._private_jobs
     WHERE id = $1 AND starts_with(locked_by, $2)
-    RETURNING job_queue_id, locked_by, task_id
+    RETURNING id, key, job_queue_id, locked_by, task_id
+), cleared AS (
+    DELETE FROM rh_job_failures c USING removed r WHERE c.job_key = coalesce(r.key, 'job:' || r.id)
+), resolved AS (
+    DELETE FROM rh_flagged_jobs f USING removed r WHERE f.job_key = r.key
 ), unlocked AS (
     UPDATE graphile_worker._private_job_queues q
     SET locked_at = NULL, locked_by = NULL

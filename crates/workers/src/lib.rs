@@ -59,7 +59,6 @@ pub use runner::Runner;
 pub use runner::RunnerConfig;
 pub use runner::WorkerDeps;
 pub use summarize::BRANCH_SYSTEM_PROMPT;
-pub use summarize::DEAD_REST;
 pub use summarize::LEAF_SYSTEM_PROMPT;
 pub use summarize::Named;
 pub use summarize::ROOT_SYSTEM_PROMPT;

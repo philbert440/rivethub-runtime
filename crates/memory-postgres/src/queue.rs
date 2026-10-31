@@ -1,8 +1,6 @@
 use crate::error::Error;
 use crate::graphile::GraphileQueue;
 use async_trait::async_trait;
-use chrono::DateTime;
-use chrono::Utc;
 use kernel::queue::ClaimSelector;
 use kernel::queue::ClaimedJob;
 use kernel::queue::Job;
@@ -42,6 +40,13 @@ impl PostgresQueue {
             })
         } else {
             Err(Error::QueueAbsent)
+        }
+    }
+
+    #[must_use]
+    pub fn flagging_after(self, failures: u32) -> Self {
+        Self {
+            inner: self.inner.flagging_after(failures),
         }
     }
 
@@ -124,15 +129,8 @@ impl JobQueue for PostgresQueue {
         }
     }
 
-    async fn revive_dead(
-        &self,
-        name: &JobName,
-        dead_before: DateTime<Utc>,
-    ) -> Result<u64, JobQueueError> {
-        self.inner
-            .revive_before(name, dead_before)
-            .await
-            .map_err(JobQueueError::from)
+    async fn flag_stuck(&self) -> Result<u64, JobQueueError> {
+        self.inner.flag_stuck().await.map_err(JobQueueError::from)
     }
 
     async fn read(&self, id: JobId) -> Result<Option<kernel::queue::StoredJob>, JobQueueError> {

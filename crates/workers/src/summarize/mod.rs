@@ -14,7 +14,6 @@ use kernel::queue::JobQueue;
 use tokio_util::sync::CancellationToken;
 use wire::JsonObject;
 
-pub use settings::DEAD_REST;
 pub use settings::SummaryParts;
 pub use settings::SummarySettings;
 pub use settings::SummaryTrigger;

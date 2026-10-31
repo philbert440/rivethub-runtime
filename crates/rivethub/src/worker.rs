@@ -134,7 +134,12 @@ async fn run(
     crate::identity::announce_resolved("worker", &config, env).map_err(StartupError::from)?;
     let memory = Arc::new(postgres(&config, env, &shutdown, activities).await?);
     let result = async {
-        let queue = memory.queue().await.map_err(StartupError::from)?;
+        let settings = workers::MemoryJobSettings::from_environment(env)?;
+        let queue = memory
+            .queue()
+            .await
+            .map_err(StartupError::from)?
+            .flagging_after(settings.flag_after);
         let targets: Arc<dyn EmbeddingStore> = memory.clone();
         let summaries: Arc<dyn SummaryStore> = memory.clone();
         let wiki: Arc<dyn WikiBuilderStore> = memory.clone();
@@ -170,7 +175,7 @@ async fn run(
             .with_memory_jobs(memory.clone())
             .with_unembedded(memory.clone())
             .with_session_deletion(memory.clone())
-            .with_job_settings(workers::MemoryJobSettings::from_environment(env)?)
+            .with_job_settings(settings)
             .with_schedules(wiki_extraction(env));
         runner.runner = runner.runner.tuned(env)?;
         if let Some(concurrency) = workers::worker_concurrency(env)? {

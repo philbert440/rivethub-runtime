@@ -5,6 +5,7 @@ pub mod capture_schema;
 pub mod chat;
 pub mod devices;
 pub mod files;
+mod flagged;
 pub mod harnesses;
 mod history;
 pub(crate) mod hub_state;

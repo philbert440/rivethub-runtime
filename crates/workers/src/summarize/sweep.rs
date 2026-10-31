@@ -15,7 +15,6 @@ use wire::JsonObject;
 use super::SummarizeEnv;
 use super::leaf::count_of;
 use super::llm::cancelled;
-use super::settings::DEAD_REST;
 use super::settings::SummaryTrigger;
 use crate::error::WorkerError;
 
@@ -122,14 +121,11 @@ async fn sweep(
 
 pub async fn handle_reap(env: &SummarizeEnv<'_>) -> Result<u64, WorkerError> {
     cancelled(env)?;
-    let cutoff = env
-        .now
-        .checked_sub_signed(DEAD_REST)
-        .ok_or(WorkerError::Clock)?;
-    env.queue
-        .revive_dead(&JobName::Fixed(FixedJob::SummarizeConversation), cutoff)
-        .await
-        .map_err(WorkerError::queue)
+    let flagged = env.queue.flag_stuck().await.map_err(WorkerError::queue)?;
+    if flagged > 0 {
+        tracing::warn!("[reap-dead-jobs] flagged {flagged} job(s) that ran out of attempts");
+    }
+    Ok(flagged)
 }
 
 pub(super) async fn enqueue_again(

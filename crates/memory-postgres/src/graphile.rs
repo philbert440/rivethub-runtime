@@ -1,6 +1,4 @@
 use crate::error::Error;
-use chrono::DateTime;
-use chrono::Utc;
 use kernel::queue::ClaimedJob;
 use kernel::queue::FixedJob;
 use kernel::queue::Job;
@@ -74,6 +72,7 @@ struct ClaimedRow {
 pub(crate) struct GraphileQueue {
     pool: PgPool,
     worker: String,
+    flag_after: u32,
 }
 
 impl GraphileQueue {
@@ -81,7 +80,13 @@ impl GraphileQueue {
         Self {
             pool,
             worker: uuid::Uuid::new_v4().to_string(),
+            flag_after: kernel::flagged::FLAG_AFTER_FAILURES,
         }
+    }
+
+    pub(crate) fn flagging_after(mut self, failures: u32) -> Self {
+        self.flag_after = failures;
+        self
     }
 
     pub(crate) async fn subscribe(
@@ -188,14 +193,18 @@ impl GraphileQueue {
     }
 
     pub(crate) async fn fail(&self, id: JobId, error: &str) -> Result<(), Error> {
-        sqlx::query(crate::graphile_sql::FAIL)
-            .bind(i64::from(id))
-            .bind(error)
-            .bind(format!("{}-", self.worker))
-            .execute(&self.pool)
-            .await
-            .map_err(|source| Error::operation("fail", source))?;
-        Ok(())
+        crate::flagged::fail(
+            &self.pool,
+            i64::from(id),
+            error,
+            &format!("{}-", self.worker),
+            self.flag_after,
+        )
+        .await
+    }
+
+    pub(crate) async fn flag_stuck(&self) -> Result<u64, Error> {
+        crate::flagged::flag_stuck(&self.pool, self.flag_after).await
     }
 
     pub(crate) async fn dead_job_ids(
@@ -253,39 +262,6 @@ impl GraphileQueue {
         .fetch_one(&self.pool)
         .await
         .map_err(|source| Error::operation("reschedule dead", source))?;
-        count(rescheduled.rescheduled)
-    }
-
-    pub(crate) async fn revive_before(
-        &self,
-        task: &JobName,
-        dead_before: DateTime<Utc>,
-    ) -> Result<u64, Error> {
-        let rows: Vec<DeadJob> = sqlx::query_as(
-            "select j.id from graphile_worker._private_jobs j
-             join graphile_worker._private_tasks t on t.id = j.task_id
-             where t.identifier = $1 and j.attempts >= j.max_attempts
-               and j.key is not null
-               and j.updated_at < $2
-               and (j.locked_at is null or j.locked_at < now() - interval '4 hours')
-             order by j.run_at asc limit 200",
-        )
-        .bind(task.to_string())
-        .bind(dead_before)
-        .fetch_all(&self.pool)
-        .await
-        .map_err(|source| Error::operation("revive dead jobs", source))?;
-        if rows.is_empty() {
-            return Ok(0);
-        }
-        let raw: Vec<i64> = rows.iter().map(|job| job.id).collect();
-        let rescheduled: RescheduledJobs = sqlx::query_as(
-            "select count(*)::bigint as rescheduled from graphile_worker.reschedule_jobs($1::bigint[], now(), 0, 0)",
-        )
-        .bind(&raw)
-        .fetch_one(&self.pool)
-        .await
-        .map_err(|source| Error::operation("revive dead jobs", source))?;
         count(rescheduled.rescheduled)
     }
 

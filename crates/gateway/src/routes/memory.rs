@@ -83,6 +83,18 @@ pub(crate) fn router() -> Router<Arc<Gateway>> {
             routing::get(super::tidy::upkeep).fallback(super::method_not_allowed),
         )
         .route(
+            "/flagged",
+            routing::get(super::flagged::list).fallback(super::method_not_allowed),
+        )
+        .route(
+            "/flagged/{id}/retry",
+            routing::post(super::flagged::retry).fallback(super::method_not_allowed),
+        )
+        .route(
+            "/flagged/{id}/dismiss",
+            routing::post(super::flagged::dismiss).fallback(super::method_not_allowed),
+        )
+        .route(
             "/summaries/{session}",
             routing::get(super::memory_archive::summaries).fallback(super::method_not_allowed),
         )

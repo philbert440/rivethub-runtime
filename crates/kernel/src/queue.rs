@@ -247,11 +247,7 @@ pub trait JobQueue: std::fmt::Debug + Send + Sync {
 
     async fn release(&self, id: JobId) -> Result<(), JobQueueError>;
 
-    async fn revive_dead(
-        &self,
-        name: &JobName,
-        dead_before: DateTime<Utc>,
-    ) -> Result<u64, JobQueueError>;
+    async fn flag_stuck(&self) -> Result<u64, JobQueueError>;
 
     async fn read(&self, id: JobId) -> Result<Option<StoredJob>, JobQueueError>;
 }
