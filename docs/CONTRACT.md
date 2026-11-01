@@ -1425,6 +1425,12 @@ catch-up reads `latest=1` for each session it shows.
 (116) The agent catalog for plug-ins (Phil, 2026-11-01; plug-in QA): `GET /api/catalog/agents`, every agent a task can
 be delegated to (note 74), is open to a plug-in holding `agents.read`, so a plug-in that delegates can check an agent name
 before it runs. `sessions.read` no longer names `/api/catalog`, which note 74 removed; the bare `/api/catalog` is refused.
+(118) A model server that cannot be reached is an outage (Phil, 2026-11-01; failing-jobs triage): a model call that
+fails to connect at all (refused, no route to host, the name not resolving, the connection timing out) is
+`ModelCallFailure::Unreachable`, and every worker treats it as note 97's retry-later answer: the job is held and retried
+as the server comes back, spending no attempt and counting no failure, where before only a refused connection did and
+a datahub network drop on 2026-10-31 failed and flagged 30 jobs (20 wiki extractions in one minute). A call that
+connected and then broke stays a transport failure and fails the job as before.
 
 ## 4. Gaps to close before building the affected slice
 
