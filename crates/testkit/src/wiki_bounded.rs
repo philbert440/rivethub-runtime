@@ -14,6 +14,7 @@ use parking_lot::Mutex;
 use crate::topics::Outcome;
 use crate::topics::new_topic;
 use crate::topics::same;
+use crate::wiki_routes::HOST;
 use crate::wiki_routes::RouteStores;
 use crate::wiki_routes::host;
 use crate::wiki_routes::patch;
@@ -155,7 +156,7 @@ pub async fn an_entity_mention_is_merged_into_its_page(
     stores.mentioned_elsewhere(first, &mention).await?;
     stores.route(first, vec![mention]).await?;
     let entity = stores
-        .named(TopicKind::Entity, "AcmeKit build box")
+        .named(TopicKind::Entity, HOST)
         .await?
         .ok_or("the second mention creates the entity")?;
     let merger = RecordingMerger::default();
