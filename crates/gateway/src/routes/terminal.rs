@@ -8,6 +8,7 @@ use kernel::topics::StartupContext;
 use kernel::topics::render;
 use serde::Deserialize;
 use wire::gateway::term::{PtyList, TermConfig, TermSpawnRequest, TermSpawnResponse};
+use wire::session_id::SessionId;
 
 use super::sessions::Accepted;
 use crate::Gateway;
@@ -84,7 +85,16 @@ async fn spawn(
         .as_ref()
         .zip(context.as_ref())
         .and_then(|(topic, context)| render(context, topic.name.as_str()));
-    let spawned = service.spawn_from(&user, request, preset, rendered).await?;
+    let workdir = match (&preset, request.resume.as_deref()) {
+        (None, Some(resume)) => match resume.parse::<SessionId>() {
+            Ok(session) => crate::history::working_dir(&gateway, &session).await,
+            Err(_) => None,
+        },
+        _ => None,
+    };
+    let spawned = service
+        .spawn_from(&user, request, preset, rendered, workdir)
+        .await?;
     let mut response = spawned.response;
     if let Some(topic) = topic {
         super::topics::begin(

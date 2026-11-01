@@ -5,6 +5,7 @@ mod preview;
 mod rows;
 
 use std::collections::HashMap;
+use std::path::PathBuf;
 
 use chrono::Utc;
 use kernel::harness::HarnessCapabilities;
@@ -323,6 +324,22 @@ pub(crate) async fn store_summary(
         }
     }
     summary
+}
+
+pub(crate) async fn working_dir(gateway: &Gateway, session: &SessionId) -> Option<PathBuf> {
+    let recorded = match live_summary(gateway, session.native()).and_then(|live| live.cwd) {
+        Some(cwd) => cwd,
+        None => gateway
+            .session_lister()?
+            .store_cwd(session.harness(), session.native())
+            .await
+            .ok()??,
+    };
+    let directory = PathBuf::from(recorded);
+    tokio::fs::metadata(&directory)
+        .await
+        .is_ok_and(|found| found.is_dir())
+        .then_some(directory)
 }
 
 async fn recorded_cwd(gateway: &Gateway, row: &StoreSession) -> Option<String> {
