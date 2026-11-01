@@ -72,6 +72,7 @@ pub struct MemorySearchHit {
     pub session_id: Option<String>,
     pub fallback: Option<MemoryFallback>,
     pub tags: Option<Vec<TagWire>>,
+    pub title: Option<String>,
     pub(crate) content_key: String,
 }
 
@@ -158,6 +159,7 @@ fn fuse(fts: &[ArmRow], vector: Option<&[ArmRow]>, trigram: Option<&[ArmRow]>) -
                     fallback: None,
                     session_id: row.session_id.clone(),
                     tags: None,
+                    title: None,
                     content_key: row.content_key.clone(),
                 },
             }
@@ -208,6 +210,7 @@ fn finish_rows(rows: Vec<ArmRow>, limit: u32) -> Result<Vec<MemorySearchHit>, Er
                 fallback: None,
                 session_id: row.session_id,
                 tags: None,
+                title: None,
                 content_key: row.content_key,
             }
         })

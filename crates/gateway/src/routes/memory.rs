@@ -261,6 +261,7 @@ fn search_hit(result: kernel::memory::MemorySearchResult) -> MemorySearchHit {
         tool_name: None,
         conversation_id: None,
         session_id: result.session_id,
+        title: result.title,
         fallback: None,
         tags: None,
     }

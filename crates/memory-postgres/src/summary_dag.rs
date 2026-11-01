@@ -81,6 +81,22 @@ const PICKED_SQL: &str =
                 else 'pending' end as vector
     from rh_summaries s where s.id = any($1)";
 
+const LATEST_SQL: &str = "with picked as (
+        select p.id from rh_summaries p where p.conversation_id = $1
+        order by p.latest_at desc nulls last, (p.kind = 'leaf') desc, p.id desc
+        limit $2
+    )
+    select s.id::text as id, s.parent_id::text as parent_id, s.depth::bigint as level, s.kind,
+           convert_to(s.content, 'UTF8') as content, false as truncated,
+           s.message_count, s.earliest_at, s.latest_at, s.created_at,
+           '{}'::text[] as source_message_ids,
+           case when s.embedding is not null then 'embedded'
+                when s.embed_status = 'failed' then 'failed'
+                when s.embed_status = 'unembeddable' then 'skipped'
+                else 'pending' end as vector
+    from picked join rh_summaries s on s.id = picked.id
+    order by s.latest_at desc nulls last, (s.kind = 'leaf') desc, s.id desc";
+
 const OWNED_SQL: &str =
     "select exists(select 1 from rh_summaries where id = $1 and conversation_id = $2)";
 
@@ -184,6 +200,30 @@ impl PostgresMemory {
         owner: &SummaryOwner,
     ) -> Result<SummaryDag, MemoryStoreError> {
         self.dag(owner, Detail::Outline).await
+    }
+
+    pub(crate) async fn read_summary_latest(
+        &self,
+        owner: &SummaryOwner,
+        limit: usize,
+    ) -> Result<SummaryDag, MemoryStoreError> {
+        let Some((conversation, session_key)) = self.conversation_of(owner).await? else {
+            return Ok(SummaryDag::default());
+        };
+        let rows = sqlx::query_as::<_, DagRow>(LATEST_SQL)
+            .bind(conversation)
+            .bind(i64::try_from(limit).map_err(count_error)?)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|source| Error::operation("latest summaries", source))?;
+        Ok(SummaryDag {
+            session_key: Some(session_key),
+            summaries: rows
+                .into_iter()
+                .map(summary_node)
+                .collect::<Result<_, _>>()?,
+            messages: MemoryMessageTally::default(),
+        })
     }
 
     pub(crate) async fn read_summary_node(
