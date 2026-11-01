@@ -43,7 +43,7 @@ pub(crate) fn transcript(root: &Path, id: &str) -> Result<StoreTranscript, Trans
     report(FORMAT, &folder.skipped);
     Ok(StoreTranscript {
         turns: folder.turns,
-        truncated: false,
+        earlier: None,
     })
 }
 

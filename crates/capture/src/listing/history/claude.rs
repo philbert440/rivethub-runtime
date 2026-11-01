@@ -1,9 +1,7 @@
-use std::fs::File;
-use std::io::BufRead as _;
-use std::io::BufReader;
+mod output;
+
 use std::path::Path;
 
-use kernel::transcript::HarnessToolOutput;
 use kernel::transcript::HarnessTranscriptTool;
 use kernel::transcript::HarnessTranscriptTurn;
 use kernel::transcript::MessageUsage;
@@ -13,6 +11,7 @@ use kernel::transcript::TranscriptAttachment;
 use kernel::transcript::TranscriptBlock;
 use kernel::transcript::TranscriptReaderError;
 use kernel::transcript::TranscriptToolStatus;
+use kernel::transcript::TranscriptWindow;
 use serde::Deserialize;
 use wire::JsonObject;
 
@@ -20,8 +19,9 @@ use super::super::claude::transcript_file;
 use super::super::field::Field;
 use super::super::field::object_line;
 use super::super::field::text_of;
+use super::super::files::Span;
 use super::super::files::read_failure;
-use super::super::files::read_tail;
+use super::super::files::read_span;
 use super::super::text::human_turn;
 use super::super::text::strip_paste;
 use super::super::text::text_elements;
@@ -34,79 +34,57 @@ use super::tools::is_prompt_tool;
 use super::tools::keeps_input;
 use super::tools::kept_input;
 
-const OUTPUT_BYTES: usize = 64 * 1024;
+pub(crate) use output::tool_output;
 
-pub(crate) fn transcript(root: &Path, id: &str) -> Result<StoreTranscript, TranscriptReaderError> {
+pub(crate) fn transcript(
+    root: &Path,
+    id: &str,
+    wanted: TranscriptWindow,
+) -> Result<StoreTranscript, TranscriptReaderError> {
     let Some(path) = transcript_file(root, id)? else {
         return Ok(StoreTranscript::default());
     };
-    let window = read_tail(&path).map_err(|error| read_failure(&path, error))?;
-    let records: Vec<Record> = window.text.lines().filter_map(object_line).collect();
-    let sidechains = agent_file(&path) || (!window.truncated && all_sidechain(&records));
-    Ok(StoreTranscript {
-        turns: fold(&records, sidechains),
-        truncated: window.truncated,
-    })
-}
-
-pub(crate) fn tool_output(
-    root: &Path,
-    id: &str,
-    call: &str,
-) -> Result<Option<HarnessToolOutput>, TranscriptReaderError> {
-    let Some(path) = transcript_file(root, id)? else {
-        return Ok(None);
-    };
-    let file = File::open(&path).map_err(|error| read_failure(&path, error))?;
-    let mut reader = BufReader::new(file);
-    let mut line = Vec::new();
+    let failed = |error| read_failure(&path, error);
+    let mut span = Span::of(&path, wanted).map_err(failed)?;
     loop {
-        line.clear();
-        let read = reader
-            .read_until(b'\n', &mut line)
-            .map_err(|error| read_failure(&path, error))?;
-        if read == 0 {
-            return Ok(None);
+        let window = read_span(&path, span).map_err(failed)?;
+        let mut records = Vec::new();
+        let mut offsets = Vec::new();
+        let mut at = window.start;
+        for line in window.text.split_inclusive('\n') {
+            if let Some(record) = object_line::<Record>(line) {
+                records.push(record);
+                offsets.push(at);
+            }
+            at += line.len() as u64;
         }
-        let text = String::from_utf8_lossy(&line);
-        if !text.contains(call) {
-            continue;
+        let sidechains = agent_file(&path) || (window.start == 0 && all_sidechain(&records));
+        let first = if window.start == 0 || span.at_line {
+            Some(0)
+        } else {
+            records
+                .iter()
+                .position(|record| opens_turn(record, sidechains))
+        };
+        if let Some(first) = first {
+            let start = offsets.get(first).copied().unwrap_or(window.start);
+            return Ok(StoreTranscript {
+                turns: fold(records.get(first..).unwrap_or_default(), sidechains),
+                earlier: (start > 0).then_some(start),
+            });
         }
-        if let Some(output) = object_line::<Record>(&text)
-            .filter(|record| record.kind() == Kind::User)
-            .and_then(|record| record_output(&record, call))
-        {
-            return Ok(Some(output));
-        }
+        span = span.widened();
     }
 }
 
-fn record_output(record: &Record, call: &str) -> Option<HarnessToolOutput> {
-    let block = record
-        .body()?
-        .content?
-        .items()?
-        .iter()
-        .filter_map(Field::object::<Block>)
-        .find(|block| {
-            block.is("tool_result")
-                && block
-                    .tool_use_id
-                    .as_ref()
-                    .is_some_and(|id| id.is_text(call))
-        })?;
-    let text = result_text(record, &block).unwrap_or_default();
-    let truncated = text.len() > OUTPUT_BYTES;
-    Some(HarnessToolOutput {
-        text: if truncated { tail_bytes(&text) } else { text },
-        is_error: flagged(block.is_error.as_ref()),
-        truncated,
-    })
-}
-
-fn tail_bytes(text: &str) -> String {
-    let start = text.ceil_char_boundary(text.len().saturating_sub(OUTPUT_BYTES));
-    text.get(start..).unwrap_or_default().to_owned()
+fn opens_turn(record: &Record, sidechains: bool) -> bool {
+    record.kind() == Kind::User
+        && (sidechains || !record.sidechain())
+        && !record.skipped()
+        && record
+            .body()
+            .and_then(|body| body.content.as_ref().and_then(user_text))
+            .is_some()
 }
 
 fn agent_file(path: &Path) -> bool {

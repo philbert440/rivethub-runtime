@@ -104,6 +104,7 @@ pub struct HarnessSessionTranscriptResponse {
     pub compact_at: u64,
     pub context_source: ContextSource,
     pub redirected_to: Option<SessionId>,
+    pub earlier: Option<u64>,
 }
 
 #[serde_with::skip_serializing_none]
@@ -123,10 +124,12 @@ pub struct HarnessSessionTitleRequest {
     pub title: String,
 }
 
+#[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct HarnessSessionForkRequest {
     pub prompts: u32,
+    pub from: Option<u64>,
 }
 
 #[serde_with::skip_serializing_none]

@@ -357,6 +357,7 @@ pub enum HarnessEvent {
         turns: Vec<HarnessTranscriptTurn>,
         command: RosterCommand,
         truncated_before: Option<bool>,
+        earlier: Option<u64>,
         context_window: Option<u64>,
         compact_at: Option<u64>,
         context_source: Option<ContextSource>,

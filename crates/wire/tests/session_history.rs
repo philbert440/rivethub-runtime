@@ -520,6 +520,7 @@ fn transcript_event_carries_turns() {
         "turns": [{"role": "user", "text": "hi"}],
         "command": "claude",
         "truncatedBefore": true,
+        "earlier": 1_048_576,
         "contextWindow": 200_000,
         "compactAt": 165_000,
         "contextSource": "default"

@@ -14,7 +14,7 @@ use kernel::transcript::{
 };
 use kernel::transcript::{
     ListLimit, SessionLister, SessionRenameError, StoreSession, StoreTranscript, ToolOutputRead,
-    TranscriptRead, TranscriptReaderError,
+    TranscriptRead, TranscriptReaderError, TranscriptWindow,
 };
 use parking_lot::Mutex;
 use session_support::harness::Harness;
@@ -88,6 +88,7 @@ impl SessionLister for Stores {
         &self,
         harness: HarnessId,
         native: &str,
+        _window: TranscriptWindow,
     ) -> Result<TranscriptRead, TranscriptReaderError> {
         if matches!(harness, HarnessId::Cowork | HarnessId::Dsh) {
             return Ok(TranscriptRead::NoSource);
@@ -99,7 +100,7 @@ impl SessionLister for Stores {
                 .cloned()
                 .or_else(|| self.later.lock().get(native).cloned())
                 .unwrap_or_default(),
-            truncated: false,
+            earlier: None,
         }))
     }
 

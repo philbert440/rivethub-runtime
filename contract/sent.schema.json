@@ -5299,6 +5299,14 @@
               "type": "null"
             }
           ]
+        },
+        "earlier": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
         }
       },
       "required": [
@@ -5667,6 +5675,14 @@
         "prompts": {
           "type": "integer",
           "format": "uint32",
+          "minimum": 0
+        },
+        "from": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
           "minimum": 0
         }
       },
@@ -11912,6 +11928,14 @@
                 "boolean",
                 "null"
               ]
+            },
+            "earlier": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
             },
             "contextWindow": {
               "type": [
