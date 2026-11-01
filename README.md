@@ -43,7 +43,7 @@ Every merge to `main` publishes the next patch version as a beta prerelease; the
 ### Standalone on SQLite: `rh local`
 
 ```sh
-rh local --no-lan          # serve on 127.0.0.1:5174
+rh local                   # serve on 127.0.0.1:5174
 rh local --ensure          # start one in the background unless one already answers
 ```
 
@@ -58,9 +58,11 @@ runs the gateway, the plug-in host and the task engine, and adds, from `memory.s
 | `wiki_dir: <dir>` | the wiki builder, writing pages under that directory |
 | `embed_endpoint`, `embed_model` | vector and hybrid search; without them search answers keyword results, marked degraded |
 
-MCP is served in the same process when `transports.mcp` sets a `host` or a `socket`. The default bind is `0.0.0.0:5174`,
-which needs TLS (below); `--no-lan` binds `127.0.0.1`, and `--port` picks another port. A SQLite node serves one person:
-it stores visibility marks but does not filter reads by them.
+MCP is served in the same process when `transports.mcp` sets a `host` or a `socket`. A first run binds `127.0.0.1:5174`,
+or `0.0.0.0:5174` when TLS for a LAN bind is already set up (`RIVETHUB_TLS_CERT` and `RIVETHUB_TLS_KEY`). To serve the
+LAN later, set `gateway.host: 0.0.0.0` with `gateway.tls_cert` and `gateway.tls_key`; an off-loopback bind without TLS
+stops with the file and the ways out. `--no-lan` forces `127.0.0.1` and `--port` picks another port. A SQLite node
+serves one person: it stores visibility marks but does not filter reads by them.
 
 ### A node on Postgres
 
@@ -171,7 +173,8 @@ nothing, so the workers' own model calls never become conversations. `memory.cap
 `memory_browse`, `memory_get_full`, `memory_stats`, `memory_tags`, `wiki_search`, `wiki_read`, `list_agents`, and on stdio
 `delegate_task`; then the plug-in creator's four tools and every running plug-in's tools, named `<plugin>-<tool>`. It
 serves stdio by default and streamable HTTP at `/mcp` when `transports.mcp` names a host (bearer `auth_token` required) or
-a socket. `rh mcp` reads Postgres; on `rh local`, configure `transports.mcp` and connect to the node instead.
+a socket. On a SQLite node `rh mcp` opens the node's SQLite file and serves stdio; the network transports there are
+`rh local`'s own.
 
 ```json
 { "mcpServers": { "rivethub": { "command": "rh", "args": ["mcp"] } } }
