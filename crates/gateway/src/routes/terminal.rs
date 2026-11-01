@@ -85,12 +85,21 @@ async fn spawn(
         .as_ref()
         .zip(context.as_ref())
         .and_then(|(topic, context)| render(context, topic.name.as_str()));
-    let workdir = match (&preset, request.resume.as_deref()) {
-        (None, Some(resume)) => match resume.parse::<SessionId>() {
-            Ok(session) => crate::history::working_dir(&gateway, &session).await,
-            Err(_) => None,
-        },
+    #[cfg_attr(
+        dylint_lib = "rr_lints",
+        expect(
+            fallback,
+            reason = "CONTRACT B1 (note 112): a resume that names no harness keeps the roster command's folder"
+        )
+    )]
+    let resumed = match (&preset, request.resume.as_deref()) {
+        (None, Some(resume)) => resume.parse::<SessionId>().ok(),
         _ => None,
+    };
+    let workdir = if let Some(session) = resumed {
+        crate::history::working_dir(&gateway, &session).await
+    } else {
+        None
     };
     let spawned = service
         .spawn_from(&user, request, preset, rendered, workdir)

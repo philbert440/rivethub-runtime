@@ -327,19 +327,36 @@ pub(crate) async fn store_summary(
 }
 
 pub(crate) async fn working_dir(gateway: &Gateway, session: &SessionId) -> Option<PathBuf> {
-    let recorded = match live_summary(gateway, session.native()).and_then(|live| live.cwd) {
-        Some(cwd) => cwd,
-        None => gateway
-            .session_lister()?
-            .store_cwd(session.harness(), session.native())
-            .await
-            .ok()??,
+    let live = live_summary(gateway, session.native()).and_then(|live| live.cwd);
+    let recorded = if let Some(cwd) = live {
+        cwd
+    } else {
+        stored_cwd(gateway, session).await?
     };
     let directory = PathBuf::from(recorded);
     tokio::fs::metadata(&directory)
         .await
         .is_ok_and(|found| found.is_dir())
         .then_some(directory)
+}
+
+async fn stored_cwd(gateway: &Gateway, session: &SessionId) -> Option<String> {
+    let read = gateway
+        .session_lister()?
+        .store_cwd(session.harness(), session.native())
+        .await;
+    #[cfg_attr(
+        dylint_lib = "rr_lints",
+        expect(
+            fallback,
+            reason = "CONTRACT B1 (note 112): an unreadable store record leaves the terminal in the roster command's folder"
+        )
+    )]
+    let recorded = read.unwrap_or_else(|error| {
+        tracing::debug!(%error, session = %session, "the session's folder is unreadable");
+        None
+    });
+    recorded
 }
 
 async fn recorded_cwd(gateway: &Gateway, row: &StoreSession) -> Option<String> {
