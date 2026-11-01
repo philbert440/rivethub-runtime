@@ -1391,6 +1391,19 @@ is not proposed again, and is not listed as pending. `POST /api/tidy/batches/{ba
 named “g9”", "it is already there", "it is already closed", "the topic it merges into is gone", "the type already
 exists"); a proposal approved alone that has nothing left to do answers `409` with the same reason. An approval that
 stopped part way is finished by approving again: the changes it already made are skipped as done, the rest applied.
+(115) Search hits name their session; catch-up reads one summary (Phil, 2026-11-01; QA pass 2): every hit of
+`GET /api/memory/search` (and of the agent and MCP searches, which read the same store) carries `title`, the title of
+the hit's session: the conversation's title when it names the session (not a placeholder), else, for a conversation
+with no title, the title read from its newest summary, else from its first user message; absent when none names it.
+On Postgres the titles are read in one query beside the hits' text; SQLite answers no `title` yet. To open a hit at its
+match, a client opens `sessionId` and shows the transcript turn whose `startedAtMs`..`endedAtMs` holds the hit's
+`createdAt` (a message hit's `id` is its stored message id); when the transcript read answers `earlier` and the hit is
+older than its first turn, the client reads back with `before=<earlier>` (note 106) until a turn holds it.
+`GET /api/memory/summaries/{session}?latest=<n>` (`n` from 1 to 50; it takes precedence over `tree` and `outline`)
+answers the session's `n` summaries that end last, newest first and a leaf ahead of a rollup ending at the same time,
+each whole and without source message ids, with `messages` all zero (no tally is counted). It reads only those rows, so
+a session of 5,355 summaries answers in 11 to 26 ms where its outline took 376 to 583 ms and 3.5 MB; a topic's
+catch-up reads `latest=1` for each session it shows.
 
 ## 4. Gaps to close before building the affected slice
 

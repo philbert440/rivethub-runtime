@@ -369,6 +369,14 @@ impl MemoryStore for crate::PostgresMemory {
         self.read_summary_outline(owner).await
     }
 
+    async fn summary_latest(
+        &self,
+        owner: &kernel::memory::SummaryOwner,
+        limit: usize,
+    ) -> Result<kernel::memory::SummaryDag, MemoryStoreError> {
+        self.read_summary_latest(owner, limit).await
+    }
+
     async fn summary_node(
         &self,
         owner: &kernel::memory::SummaryOwner,

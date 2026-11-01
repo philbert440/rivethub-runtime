@@ -1995,6 +1995,12 @@
             "null"
           ]
         },
+        "title": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "fallback": {
           "anyOf": [
             {

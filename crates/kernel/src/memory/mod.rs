@@ -280,6 +280,21 @@ impl SummaryDag {
         }
         self
     }
+
+    #[must_use]
+    pub fn latest(mut self, limit: usize) -> Self {
+        self.summaries.sort_by(|left, right| {
+            right
+                .latest_at
+                .cmp(&left.latest_at)
+                .then_with(|| {
+                    (right.kind == SummaryKind::Leaf).cmp(&(left.kind == SummaryKind::Leaf))
+                })
+                .then_with(|| right.id.cmp(&left.id))
+        });
+        self.summaries.truncate(limit);
+        self
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -455,6 +470,14 @@ pub trait MemoryStore: Send + Sync {
 
     async fn summary_outline(&self, owner: &SummaryOwner) -> Result<SummaryDag, MemoryStoreError> {
         Ok(self.summary_dag(owner).await?.outline())
+    }
+
+    async fn summary_latest(
+        &self,
+        owner: &SummaryOwner,
+        limit: usize,
+    ) -> Result<SummaryDag, MemoryStoreError> {
+        Ok(self.summary_dag(owner).await?.latest(limit))
     }
 
     async fn summary_tree(
