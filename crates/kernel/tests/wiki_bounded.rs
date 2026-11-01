@@ -113,17 +113,23 @@ fn rebase_keeps_one_lead_when_a_concurrent_writer_reworded_it() {
 #[test]
 fn a_write_keeps_one_copy_of_a_repeated_paragraph() {
     let repeated = "The gateway cutover covers the mesh TLS client and the certificate authority.";
+    let lead = "Rivethub is the desktop app spanning workspace, memory, chat and terminal \
+        integration across the runtime and desktop repositories.";
+    let newer = format!("{lead} Currently, round 30 is deployed with six docs fixes.");
+    let older = format!("{lead} Currently, round 29 is deployed.");
+    let listed = "- Rivethub spans workspace, memory, chat and terminal integration across the \
+        runtime and desktop repositories.";
     let mut summary = String::new();
     let mut article = format!("{repeated}\n\n### Status\n\nShipped.\n\n{repeated}");
     let mut sections = vec![ArticleSection {
-        heading: "Gateway".to_owned(),
-        body: format!("{repeated}\n\n  {repeated}"),
+        heading: "Desktop App".to_owned(),
+        body: format!("{newer}\n\n### Round 30\n\nDeployed.\n\n  {older}\n\n{listed}"),
     }];
     bound_parts(&mut summary, &mut article, &mut sections, &[]);
     assert_eq!(article, format!("{repeated}\n\n### Status\n\nShipped."));
     assert_eq!(
-        sections.first().map(|section| section.body.as_str()),
-        Some(repeated)
+        sections.first().map(|section| section.body.clone()),
+        Some(format!("{newer}\n\n### Round 30\n\nDeployed.\n\n{listed}"))
     );
 }
 

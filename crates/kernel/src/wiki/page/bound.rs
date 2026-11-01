@@ -15,6 +15,8 @@ pub const ARCHIVED_TITLE: &str = "Archived";
 const ELLIPSIS: char = '…';
 const COVERED_PERCENT: usize = 60;
 const REPEAT_FLOOR: usize = 40;
+const REPEAT_WORDS: usize = 12;
+const REPEAT_PERCENT: usize = 80;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Archived {
@@ -234,8 +236,12 @@ pub(super) fn words(text: &str) -> BTreeSet<String> {
 }
 
 pub(super) fn covered(found: &BTreeSet<String>, pool: &BTreeSet<String>) -> bool {
+    overlaps(found, pool, COVERED_PERCENT)
+}
+
+fn overlaps(found: &BTreeSet<String>, pool: &BTreeSet<String>, percent: usize) -> bool {
     let shared = found.iter().filter(|word| pool.contains(*word)).count();
-    shared.saturating_mul(100) >= found.len().saturating_mul(COVERED_PERCENT)
+    shared.saturating_mul(100) >= found.len().saturating_mul(percent)
 }
 
 #[must_use]
@@ -341,16 +347,46 @@ pub fn bound_parts(
 
 fn drop_repeats(text: &mut String) {
     let found = blocks(text);
-    let mut seen = BTreeSet::new();
+    let mut seen = Repeats::default();
     let kept: Vec<&str> = found
         .iter()
-        .filter(|block| {
-            block.starts_with('#') || block.len() < REPEAT_FLOOR || seen.insert(normal(block))
-        })
+        .filter(|block| !seen.repeats(block))
         .map(String::as_str)
         .collect();
     if kept.len() < found.len() {
         *text = kept.join("\n\n");
+    }
+}
+
+#[derive(Default)]
+struct Repeats {
+    exact: BTreeSet<String>,
+    prose: Vec<BTreeSet<String>>,
+}
+
+impl Repeats {
+    fn repeats(&mut self, block: &str) -> bool {
+        if block.starts_with('#') || block.len() < REPEAT_FLOOR {
+            return false;
+        }
+        if !self.exact.insert(normal(block)) {
+            return true;
+        }
+        if block.starts_with(['-', '*', '|', '>', '`'])
+            || block.starts_with(|c: char| c.is_ascii_digit())
+        {
+            return false;
+        }
+        let found = words(block);
+        let repeated = found.len() >= REPEAT_WORDS
+            && self
+                .prose
+                .iter()
+                .any(|earlier| overlaps(&found, earlier, REPEAT_PERCENT));
+        if !repeated {
+            self.prose.push(found);
+        }
+        repeated
     }
 }
 
