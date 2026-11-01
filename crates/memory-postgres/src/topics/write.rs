@@ -32,6 +32,7 @@ fn written(operation: &'static str, topic: &Topic) -> impl FnOnce(sqlx::Error) -
         if violated(SLUG_INDEX) {
             TopicError::SlugTaken {
                 slug: topic.slug.clone(),
+                name: topic.name.as_str().to_owned(),
             }
         } else if violated(ALIAS_INDEX) {
             TopicError::AliasTaken {
@@ -61,6 +62,7 @@ pub(super) async fn claim_names(conn: &mut PgConnection, topic: &Topic) -> Resul
     if slug_taken {
         return Err(TopicError::SlugTaken {
             slug: topic.slug.clone(),
+            name: topic.name.as_str().to_owned(),
         });
     }
     let keys: Vec<String> = topic.aliases.iter().map(Alias::key).collect();

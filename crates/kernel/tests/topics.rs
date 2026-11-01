@@ -396,7 +396,7 @@ fn each_kind_nests_only_where_it_belongs() -> TestResult {
     );
     assert_eq!(
         refused(&tokio, &tokio).as_deref(),
-        Some("a topic cannot be its own parent")
+        Some("A topic can't be its own parent.")
     );
     let other = kinded(TopicKind::Entity, "serde", Some(&crates))?;
     assert_eq!(

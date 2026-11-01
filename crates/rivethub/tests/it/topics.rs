@@ -422,7 +422,7 @@ async fn taken_names_unknown_topics_and_empty_names_are_refused() -> TestResult 
             .await?,
         (
             StatusCode::CONFLICT,
-            "a topic with slug \"rivethub-desktop\" already exists".to_owned()
+            "There's already a topic called \"rivethub desktop\".".to_owned()
         )
     );
     assert_eq!(
@@ -434,7 +434,7 @@ async fn taken_names_unknown_topics_and_empty_names_are_refused() -> TestResult 
         .await?,
         (
             StatusCode::CONFLICT,
-            "alias \"Tauri\" belongs to another topic".to_owned()
+            "\"Tauri\" is already another topic's name.".to_owned()
         )
     );
     assert_eq!(
