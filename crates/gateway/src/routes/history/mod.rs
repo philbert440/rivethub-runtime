@@ -197,10 +197,12 @@ async fn summary(
     let resolved = gateway.history().resolve(&gateway, &segment).await?;
     authorize(&gateway, &user, &resolved).await?;
     let summary = described(&gateway, &resolved).await?;
+    let elsewhere = crate::history::running_elsewhere(&gateway, &resolved.session).await?;
     Ok(Json(HarnessSessionResponse {
         summary,
         switches: switches(&gateway, &resolved.session),
         redirected_to: resolved.redirected_to,
+        running_elsewhere: elsewhere.map(|_| true),
     }))
 }
 
@@ -339,6 +341,7 @@ async fn rename(
         summary,
         switches: switches(&gateway, &resolved.session),
         redirected_to: resolved.redirected_to,
+        running_elsewhere: None,
     }))
 }
 

@@ -253,6 +253,14 @@ pub trait SessionLister: Send + Sync {
         Ok(None)
     }
 
+    async fn running_elsewhere(
+        &self,
+        _harness: HarnessId,
+        _native: &str,
+    ) -> Result<Option<u32>, TranscriptReaderError> {
+        Ok(None)
+    }
+
     async fn transcript(
         &self,
         harness: HarnessId,

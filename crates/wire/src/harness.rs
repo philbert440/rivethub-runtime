@@ -165,6 +165,7 @@ pub enum HarnessCode {
     UnknownApproval,
     UnknownPrompt,
     TurnFailed,
+    SessionRunningElsewhere,
 }
 
 impl HarnessCode {
@@ -173,7 +174,7 @@ impl HarnessCode {
         match self {
             Self::InvalidSessionId | Self::BadRequest => 400,
             Self::UnknownApproval | Self::UnknownPrompt => 404,
-            Self::SessionIdCollision | Self::TurnInFlight => 409,
+            Self::SessionIdCollision | Self::TurnInFlight | Self::SessionRunningElsewhere => 409,
             Self::CapabilityUnsupported => 501,
             Self::TurnFailed => 502,
         }

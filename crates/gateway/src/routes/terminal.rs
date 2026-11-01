@@ -97,6 +97,7 @@ async fn spawn(
         _ => None,
     };
     let workdir = if let Some(session) = resumed {
+        crate::history::refuse_elsewhere(&gateway, &session).await?;
         crate::history::working_dir(&gateway, &session).await
     } else {
         None
