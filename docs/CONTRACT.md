@@ -1309,7 +1309,10 @@ so extracted one batch at a time, each reading what the last one wrote, instead 
 section from the same text and rebasing onto each other. Rebase (note 100): a block the other write added is kept only
 when fewer than 60% of its words (the archive rule's words) are already in this rewrite, so another writer's rewording
 of a paragraph this rewrite also rewrote is replaced, not kept beside it; recompile's "their new blocks first" follows
-the same rule. Summaries: the summarizer's prompts ask for the work itself (the leaf prompt in the third person) and
+the same rule. Every page write (Postgres and SQLite) keeps one copy of a repeated paragraph in the article and in
+each section: a later exact repeat of 40 or more bytes is dropped, and so is a later prose paragraph of 12 or more words
+80% of whose words an earlier prose paragraph in the same part already holds (a lead repeated with another "Currently"
+sentence); headings are never dropped, and lists, tables, quotes and code only as exact repeats. Summaries: the summarizer's prompts ask for the work itself (the leaf prompt in the third person) and
 never a description of the batch: no batch, leaf or message numbers, ids, channel names, timestamps or tool-call
 tallies. The leaf summarizer's input shows each tool call's input (first 600 bytes) and output (first 300 bytes) under
 its "[tool call] <name>" line, so a batch of tool calls is summarized by what they did. A branch or root summary cut off
