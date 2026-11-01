@@ -7,6 +7,7 @@ mod rows;
 use std::collections::HashMap;
 
 use chrono::Utc;
+use kernel::harness::HarnessCapabilities;
 use kernel::transcript::HarnessToolOutput;
 use kernel::transcript::{StoreSession, StoreTranscript, ToolOutputRead, TranscriptRead};
 use parking_lot::RwLock;
@@ -79,6 +80,35 @@ pub(crate) async fn offered(gateway: &Gateway) -> Result<Vec<HarnessOffering>, A
         }
     }
     Ok(harnesses)
+}
+
+pub(crate) async fn capabilities(
+    gateway: &Gateway,
+    harness: HarnessId,
+) -> Option<HarnessCapabilities> {
+    let adapter = gateway.terminal()?.adapter()?;
+    match adapter.offerings().await {
+        Ok(offerings) => offerings
+            .into_iter()
+            .find(|offering| offering.harness_id == harness)
+            .map(|offering| offering.capabilities),
+        Err(error) => {
+            tracing::debug!(%error, "harness offerings are unreadable; recorded models stand");
+            None
+        }
+    }
+}
+
+pub(crate) fn name_model(
+    capabilities: Option<&HarnessCapabilities>,
+    summary: &mut HarnessSessionSummary,
+) {
+    if let (Some(capabilities), Some(model)) = (capabilities, summary.model.as_mut()) {
+        let named = capabilities.offered_model(model);
+        if named != model.as_str() {
+            *model = named.to_owned();
+        }
+    }
 }
 
 async fn registered(gateway: &Gateway) -> Result<Vec<HarnessId>, ApiError> {
@@ -285,6 +315,9 @@ pub(crate) async fn store_summary(
         summary.blocked = live.blocked;
         summary.transport = live.transport;
         summary.effort.clone_from(&live.effort);
+        if live.model.is_some() {
+            summary.model.clone_from(&live.model);
+        }
     }
     summary
 }
