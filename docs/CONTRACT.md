@@ -1369,6 +1369,19 @@ job keeps its attempts, so it reaches the flagged list instead of being reset by
 row's `run_at` and raises its `rh_job_priorities` entry the same way. A compaction with nothing to take (fewer messages
 than its trigger's floor, too few leaves or branches to roll up) makes no model call, as before.
 
+(112) Sessions after QA pass 2 (Phil, 2026-11-01): a terminal that resumes a session (`POST /term` with `resume`, no
+agent) starts in the session's working directory, the live chat's or else the one its harness recorded, when that folder
+still exists; an agent launch keeps its agent's folder. The Claude Code capture hook captures only a transcript named
+for its session (`<session>.jsonl`, as Claude names them): Grok Build runs the hooks in Claude's settings too, and its
+sessions no longer leave a second `claude-code:` conversation of prompts and tool rows. rh's harness discovery starts
+each agent with `RIVETHUB_MODEL_RUN=1`, so its probe sessions capture nothing. A Claude turn's usage counts each model
+call's output once (Claude repeats a call's usage on every record of its content blocks), and a transcript read carries
+`contextUsed`, the context its last model call left (that call's prompt and reply), on the socket's `transcript` frame
+and the transcript route; a client's context meter shows it, falling back to the newest turn's prompt and reply.
+(113) Failed tasks are told (Phil, 2026-11-01): the `task.done` notification on `/api/notifications/ws` carries the
+task's `agent` and, when it has one, its `error`. A client following each node's notifications tells the person when a
+delegated task fails or runs out of time, with the agent and the reason, which shows even for a task that never
+started a session.
 ## 4. Gaps to close before building the affected slice
 
 - MCP `tools/list` and sample-call recording (B7); CLI golden transcripts (B9); ACP conformance runs against installed

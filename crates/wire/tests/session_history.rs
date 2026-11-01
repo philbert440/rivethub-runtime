@@ -521,6 +521,7 @@ fn transcript_event_carries_turns() {
         "command": "claude",
         "truncatedBefore": true,
         "earlier": 1_048_576,
+        "contextUsed": 52_640,
         "contextWindow": 200_000,
         "compactAt": 165_000,
         "contextSource": "default"

@@ -83,6 +83,7 @@ async fn text_turns(
     Ok(TranscriptRead::Read(StoreTranscript {
         turns: turns.into_iter().filter_map(text_turn).collect(),
         earlier: None,
+        context: None,
     }))
 }
 

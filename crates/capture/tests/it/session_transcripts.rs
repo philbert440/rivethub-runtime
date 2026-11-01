@@ -66,7 +66,7 @@ async fn dsh_has_no_transcript_source() {
     ));
 }
 
-async fn claude_turns(lines: &[&str]) -> Vec<HarnessTranscriptTurn> {
+async fn claude_read(lines: &[&str]) -> StoreTranscript {
     let dir = tempfile::tempdir().expect("store");
     write(
         dir.path(),
@@ -74,9 +74,11 @@ async fn claude_turns(lines: &[&str]) -> Vec<HarnessTranscriptTurn> {
         &lines.join("\n"),
     )
     .expect("transcript file");
-    read(&claude(dir.path()), HarnessId::ClaudeCode, U1)
-        .await
-        .turns
+    read(&claude(dir.path()), HarnessId::ClaudeCode, U1).await
+}
+
+async fn claude_turns(lines: &[&str]) -> Vec<HarnessTranscriptTurn> {
+    claude_read(lines).await.turns
 }
 
 fn first_tool(turns: &[HarnessTranscriptTurn]) -> kernel::transcript::HarnessTranscriptTool {
@@ -201,6 +203,25 @@ async fn a_boundary_after_a_user_turn_or_inside_an_open_turn_is_skipped() {
         Some("Conversation compacted")
     );
     assert_eq!(marked.get(2).and_then(|turn| turn.usage.as_ref()), None);
+}
+
+#[tokio::test]
+async fn a_turn_counts_each_model_call_once_and_its_last_call_is_the_context() {
+    let call = |id: &str, block: &str, input: u64, output: u64| {
+        format!(
+            r#"{{"type":"assistant","message":{{"id":"{id}","role":"assistant","content":[{block}],"usage":{{"input_tokens":{input},"cache_read_input_tokens":40000,"output_tokens":{output}}}}}}}"#
+        )
+    };
+    let read = claude_read(&[
+        &user("q"),
+        &call("m1", r#"{"type":"thinking","thinking":"t"}"#, 2, 400),
+        &call("m1", r#"{"type":"text","text":"a"}"#, 2, 400),
+        &call("m2", r#"{"type":"text","text":"b"}"#, 9000, 250),
+    ])
+    .await;
+    let usage = read.turns.get(1).and_then(|turn| turn.usage.as_ref());
+    assert_eq!(usage.map(|usage| usage.completion_tokens), Some(650));
+    assert_eq!(read.context, Some(49_250));
 }
 
 #[tokio::test]

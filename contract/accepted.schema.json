@@ -5298,6 +5298,14 @@
           ],
           "format": "uint64",
           "minimum": 0
+        },
+        "contextUsed": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
         }
       },
       "required": [
@@ -11841,6 +11849,14 @@
               "format": "uint64",
               "minimum": 0
             },
+            "contextUsed": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
             "contextWindow": {
               "type": [
                 "integer",
@@ -12783,6 +12799,18 @@
           ]
         },
         "childSessionId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "agent": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "error": {
           "type": [
             "string",
             "null"
