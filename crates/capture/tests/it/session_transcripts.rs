@@ -11,6 +11,7 @@ use kernel::transcript::StoreTranscript;
 use kernel::transcript::TranscriptBlock;
 use kernel::transcript::TranscriptRead;
 use kernel::transcript::TranscriptToolStatus;
+use kernel::transcript::TranscriptWindow;
 use wire::harness::HarnessId;
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
@@ -35,7 +36,20 @@ fn claude(root: &Path) -> StoreSessionLister {
 }
 
 async fn read(lister: &StoreSessionLister, harness: HarnessId, id: &str) -> StoreTranscript {
-    match lister.transcript(harness, id).await.expect("transcript") {
+    read_window(lister, harness, id, TranscriptWindow::Latest).await
+}
+
+async fn read_window(
+    lister: &StoreSessionLister,
+    harness: HarnessId,
+    id: &str,
+    window: TranscriptWindow,
+) -> StoreTranscript {
+    match lister
+        .transcript(harness, id, window)
+        .await
+        .expect("transcript")
+    {
         TranscriptRead::Read(read) => read,
         TranscriptRead::NoSource => panic!("{harness} has a transcript source"),
     }
@@ -45,7 +59,9 @@ async fn read(lister: &StoreSessionLister, harness: HarnessId, id: &str) -> Stor
 async fn dsh_has_no_transcript_source() {
     let lister = StoreSessionLister::new(StoreRoots::default());
     assert!(matches!(
-        lister.transcript(HarnessId::Dsh, U1).await,
+        lister
+            .transcript(HarnessId::Dsh, U1, TranscriptWindow::Latest)
+            .await,
         Ok(TranscriptRead::NoSource)
     ));
 }
@@ -215,11 +231,23 @@ async fn b5_7_a_large_file_reads_its_tail_and_drops_parent_sidechains() -> TestR
     )?;
     writeln!(file, "{}", user("late"))?;
     drop(file);
-    let read = read(&claude(dir.path()), HarnessId::ClaudeCode, U1).await;
-    assert!(read.truncated);
+    let lister = claude(dir.path());
+    let read = read(&lister, HarnessId::ClaudeCode, U1).await;
     assert_eq!(
         serde_json::to_string(&read.turns)?,
         r#"[{"role":"user","text":"late"}]"#
+    );
+    let before = read.earlier.ok_or("a tail read leaves earlier turns")?;
+    let page = read_window(
+        &lister,
+        HarnessId::ClaudeCode,
+        U1,
+        TranscriptWindow::Before(before),
+    )
+    .await;
+    assert_eq!(
+        (serde_json::to_string(&page.turns)?, page.earlier),
+        (r#"[{"role":"user","text":"early"}]"#.to_owned(), None)
     );
     Ok(())
 }
@@ -366,7 +394,9 @@ async fn b5_11_a_missing_store_file_is_an_empty_transcript() -> TestResult {
 async fn cowork_has_no_transcript_source() -> TestResult {
     let lister = StoreSessionLister::new(StoreRoots::default());
     assert_eq!(
-        lister.transcript(HarnessId::Cowork, "c1").await?,
+        lister
+            .transcript(HarnessId::Cowork, "c1", TranscriptWindow::Latest)
+            .await?,
         TranscriptRead::NoSource
     );
     Ok(())

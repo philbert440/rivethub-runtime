@@ -9,7 +9,9 @@ use std::collections::HashMap;
 use chrono::Utc;
 use kernel::harness::HarnessCapabilities;
 use kernel::transcript::HarnessToolOutput;
-use kernel::transcript::{StoreSession, StoreTranscript, ToolOutputRead, TranscriptRead};
+use kernel::transcript::{
+    StoreSession, StoreTranscript, ToolOutputRead, TranscriptRead, TranscriptWindow,
+};
 use parking_lot::RwLock;
 use wire::harness::{HarnessCode, HarnessId, HarnessOffering, HarnessSessionSummary};
 use wire::session_id::{SessionId, SessionRef, decode_segment};
@@ -187,12 +189,13 @@ impl History {
         &self,
         gateway: &Gateway,
         resolved: &Resolved,
+        window: TranscriptWindow,
     ) -> Result<Transcript, ApiError> {
         let lister = gateway
             .session_lister()
             .ok_or_else(|| no_source(resolved.harness))?;
         let mut read = match lister
-            .transcript(resolved.harness, &resolved.native)
+            .transcript(resolved.harness, &resolved.native, window)
             .await?
         {
             TranscriptRead::Read(read) => read,

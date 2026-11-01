@@ -28,6 +28,7 @@ use kernel::transcript::StoreSession;
 use kernel::transcript::ToolOutputRead;
 use kernel::transcript::TranscriptRead;
 use kernel::transcript::TranscriptReaderError;
+use kernel::transcript::TranscriptWindow;
 use wire::harness::HarnessId;
 
 pub use ancestors::with_ancestors;
@@ -380,8 +381,9 @@ impl SessionLister for StoreSessionLister {
         &self,
         harness: HarnessId,
         native: &str,
+        window: TranscriptWindow,
     ) -> Result<TranscriptRead, TranscriptReaderError> {
-        history::transcript(&self.roots, harness, native).await
+        history::transcript(&self.roots, harness, native, window).await
     }
 
     async fn rename(

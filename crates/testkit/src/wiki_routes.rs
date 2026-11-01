@@ -18,6 +18,7 @@ use kernel::transcript::StoreSession;
 use kernel::transcript::ToolOutputRead;
 use kernel::transcript::TranscriptRead;
 use kernel::transcript::TranscriptReaderError;
+use kernel::transcript::TranscriptWindow;
 use kernel::wiki::WikiLookup;
 use kernel::wiki::builder::ExtractWiki;
 use kernel::wiki::builder::HeldEntity;
@@ -86,6 +87,7 @@ impl SessionLister for NoParents {
         &self,
         _harness: HarnessId,
         _native: &str,
+        _window: TranscriptWindow,
     ) -> Result<TranscriptRead, TranscriptReaderError> {
         Ok(TranscriptRead::NoSource)
     }

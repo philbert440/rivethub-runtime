@@ -1297,6 +1297,26 @@ a config that binds off loopback without TLS stops before anything starts, namin
 `sqlite`) loads it as `rh local` does, opens the SQLite file it names (`memory.sqlite.path`) with the same query
 embedder, and serves B7 on stdio only (`rh local` serves the network transports); delegation and plug-in tools reach
 the running `rh local` as they reach a gateway.
+(106) Long transcripts read back a page at a time (Phil, 2026-11-01): a Claude Code transcript is read in windows of
+the JSONL file (`kernel::transcript::TranscriptWindow`): the latest part (its last 8 MiB), from a byte offset to the end,
+or the part ending at an offset. A window that starts partway through the file starts at the first prompt in it, read
+further back while it holds none, so a window never opens on half a turn; `StoreTranscript::earlier` (replacing
+`truncated`) is the offset it starts at, absent when it starts at the top. `GET /api/harness-sessions/{session}/transcript`
+takes `before=<offset>` (the page ending there) or `from=<offset>` (from there to the end) and answers `earlier`; the
+socket's `transcript` frame carries `earlier` beside `truncatedBefore`, and after its first read the socket keeps reading
+from where that read started, so the turns it sends only grow and pages read back before them stay contiguous. A fork's
+`from` (`HarnessSessionForkRequest`) is the offset its `prompts` are counted from, the start of the turns the client
+holds; without it they count from the latest part, as before. Other harnesses read whole transcripts: `earlier` stays
+absent and a `before` read is empty.
+(107) Sessions keep their model and follow the terminal (Phil, 2026-11-01): a top-level Claude Code session's listing
+names the model of its last reply, read from the 64 KiB tail the listing already reads, and a live chat's own model
+(the one it started on or was switched to) wins over it. `GET /api/harness-sessions/{session}`, the harness session list
+and a fork's source name a recorded model the way the harness offers it: the offered id that is one of its parts
+(`claude-haiku-5-5` is `haiku`), when exactly one is; so a fork starts on its source's model and a client shows it by its
+label. The socket's replayed context count (the chat harness's last `context` frame) is dropped once the terminal starts
+a turn, which that harness never counts, and the transcript's count stands. After each transcript it reads the socket
+replays a `session-updated` with `blocked` true while the session waits on you, as it replays approvals, context and
+driver, so a client opened then shows the wait rather than a running turn.
 
 ## 4. Gaps to close before building the affected slice
 

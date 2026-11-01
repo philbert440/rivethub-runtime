@@ -4,6 +4,7 @@ use std::time::Duration;
 use axum::extract::ws::{Message, WebSocket};
 use axum::extract::{FromRequestParts, RawQuery, State, WebSocketUpgrade};
 use axum::response::{IntoResponse, Response};
+use kernel::transcript::TranscriptWindow;
 use tokio::sync::broadcast;
 use tokio::time::{Instant, MissedTickBehavior};
 use wire::gateway::sessions::HarnessTranscriptTurn;
@@ -78,6 +79,7 @@ async fn attach(
         resolved: &resolved,
         rev: 0,
         last: None,
+        window: TranscriptWindow::Latest,
     }
     .stream(events)
     .await;
@@ -121,6 +123,7 @@ struct Attached<'a> {
     resolved: &'a Resolved,
     rev: u64,
     last: Option<Vec<HarnessTranscriptTurn>>,
+    window: TranscriptWindow,
 }
 
 struct Follow {
@@ -253,7 +256,7 @@ impl Attached<'_> {
         let read = match self
             .gateway
             .history()
-            .transcript(self.gateway, resolved)
+            .transcript(self.gateway, resolved, self.window)
             .await
         {
             Ok(read) => read,
@@ -282,6 +285,9 @@ impl Attached<'_> {
                 return Ok(false);
             }
         };
+        if let Some(start) = read.read.earlier {
+            self.window = TranscriptWindow::From(start);
+        }
         let turns = crate::history::body::turns(read.read.turns);
         if follow && self.last.as_ref() == Some(&turns) {
             return Ok(false);
@@ -302,7 +308,8 @@ impl Attached<'_> {
                 total: turns.len() as u64,
                 turns,
                 command: RosterCommand::from(resolved.harness),
-                truncated_before: read.read.truncated.then_some(true),
+                truncated_before: read.read.earlier.map(|_| true),
+                earlier: read.read.earlier,
                 context_window: Some(read.stamp.window),
                 compact_at: Some(read.stamp.compact_at),
                 context_source: Some(read.stamp.source),
