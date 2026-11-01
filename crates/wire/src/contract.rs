@@ -238,6 +238,7 @@ const ROOTS: &[Root] = &[
     SchemaGenerator::subschema_for::<crate::gateway::tidy::TidyBatch>,
     SchemaGenerator::subschema_for::<crate::gateway::tidy::TidyPending>,
     SchemaGenerator::subschema_for::<crate::gateway::tidy::TidyFailure>,
+    SchemaGenerator::subschema_for::<crate::gateway::tidy::TidySkipped>,
     SchemaGenerator::subschema_for::<crate::gateway::tidy::TidyBatchDecision>,
     SchemaGenerator::subschema_for::<crate::gateway::tidy::FilingUpkeep>,
     SchemaGenerator::subschema_for::<crate::gateway::tidy::EntityTypeCount>,

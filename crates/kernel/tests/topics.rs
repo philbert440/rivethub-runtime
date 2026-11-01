@@ -253,10 +253,10 @@ fn merging_redirects_the_slug_and_moves_aliases_that_do_not_clash() -> TestResul
         }
     );
     let moved: Vec<&str> = plan.aliases.iter().map(Alias::as_str).collect();
-    assert_eq!(moved, ["electron"]);
+    assert_eq!(moved, ["Desktop App", "electron"]);
     let merged = plan.merged(into, at(9));
     let aliases: Vec<&str> = merged.aliases.iter().map(Alias::as_str).collect();
-    assert_eq!(aliases, ["electron", "tauri"]);
+    assert_eq!(aliases, ["Desktop App", "electron", "tauri"]);
     assert_eq!(merged.updated_at, at(9));
     assert!(matches!(
         MergePlan::new(&source, &source, &tree),
