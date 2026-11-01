@@ -44,6 +44,7 @@ pub(crate) fn transcript(root: &Path, id: &str) -> Result<StoreTranscript, Trans
     Ok(StoreTranscript {
         turns: folder.turns,
         earlier: None,
+        context: None,
     })
 }
 

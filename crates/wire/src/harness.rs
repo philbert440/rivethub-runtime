@@ -358,6 +358,7 @@ pub enum HarnessEvent {
         command: RosterCommand,
         truncated_before: Option<bool>,
         earlier: Option<u64>,
+        context_used: Option<u64>,
         context_window: Option<u64>,
         compact_at: Option<u64>,
         context_source: Option<ContextSource>,

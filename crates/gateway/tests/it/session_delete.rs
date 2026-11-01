@@ -89,6 +89,7 @@ impl SessionLister for Stores {
         Ok(TranscriptRead::Read(StoreTranscript {
             turns: self.transcripts.get(native).cloned().unwrap_or_default(),
             earlier: None,
+            context: None,
         }))
     }
 

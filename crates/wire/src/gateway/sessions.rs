@@ -105,6 +105,7 @@ pub struct HarnessSessionTranscriptResponse {
     pub context_source: ContextSource,
     pub redirected_to: Option<SessionId>,
     pub earlier: Option<u64>,
+    pub context_used: Option<u64>,
 }
 
 #[serde_with::skip_serializing_none]

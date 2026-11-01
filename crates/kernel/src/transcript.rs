@@ -190,6 +190,7 @@ impl LeadingInteger {
 pub struct StoreTranscript {
     pub turns: Vec<HarnessTranscriptTurn>,
     pub earlier: Option<u64>,
+    pub context: Option<u64>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]

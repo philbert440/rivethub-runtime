@@ -68,9 +68,11 @@ pub(crate) fn transcript(
         };
         if let Some(first) = first {
             let start = offsets.get(first).copied().unwrap_or(window.start);
+            let (turns, context) = fold(records.get(first..).unwrap_or_default(), sidechains);
             return Ok(StoreTranscript {
-                turns: fold(records.get(first..).unwrap_or_default(), sidechains),
+                turns,
                 earlier: (start > 0).then_some(start),
+                context,
             });
         }
         span = span.widened();
@@ -168,6 +170,7 @@ impl Record {
 
 #[derive(Debug, Deserialize)]
 struct Body {
+    id: Option<Field>,
     content: Option<Field>,
     stop_reason: Option<Field>,
     usage: Option<Field>,
@@ -240,6 +243,8 @@ struct Draft {
     tools: Vec<HarnessTranscriptTool>,
     usage: Option<MessageUsage>,
     output: u64,
+    call: Option<String>,
+    context: u64,
     model: Option<String>,
     stop_reason: Option<String>,
     last_block: Option<TranscriptBlock>,
@@ -290,9 +295,10 @@ impl Draft {
 struct Folder {
     turns: Vec<HarnessTranscriptTurn>,
     pending: Option<Draft>,
+    context: Option<u64>,
 }
 
-fn fold(records: &[Record], sidechains: bool) -> Vec<HarnessTranscriptTurn> {
+fn fold(records: &[Record], sidechains: bool) -> (Vec<HarnessTranscriptTurn>, Option<u64>) {
     let mut folder = Folder::default();
     for record in records {
         if (record.sidechain() && !sidechains) || record.skipped() {
@@ -306,11 +312,14 @@ fn fold(records: &[Record], sidechains: bool) -> Vec<HarnessTranscriptTurn> {
         }
     }
     folder.flush();
-    folder.turns
+    (folder.turns, folder.context)
 }
 
 impl Folder {
     fn flush(&mut self) {
+        if let Some(pending) = self.pending.as_ref().filter(|pending| pending.context > 0) {
+            self.context = Some(pending.context);
+        }
         if let Some(turn) = self.pending.take().and_then(Draft::close) {
             self.turns.push(turn);
         }
@@ -425,7 +434,7 @@ impl Folder {
             };
         }
         if let Some(usage) = body.usage.as_ref().and_then(Field::object::<Usage>) {
-            pending.count(&usage);
+            pending.count(&usage, text_of(body.id.as_ref()));
         }
         if let Some(model) = text_of(body.model.as_ref())
             .map(|model| model.trim().to_owned())
@@ -488,7 +497,7 @@ impl Draft {
         false
     }
 
-    fn count(&mut self, usage: &Usage) {
+    fn count(&mut self, usage: &Usage, call: Option<String>) {
         let input = tokens(usage.input.as_ref());
         let cached = tokens(usage.cache_read.as_ref());
         let prompt = input
@@ -502,7 +511,14 @@ impl Draft {
                 cached_tokens: cached,
             });
         }
-        self.output = self.output.saturating_add(output);
+        self.context = self
+            .usage
+            .as_ref()
+            .map_or(0, |usage| usage.prompt_tokens.saturating_add(output));
+        if call.is_none() || call != self.call {
+            self.output = self.output.saturating_add(output);
+            self.call = call;
+        }
     }
 }
 

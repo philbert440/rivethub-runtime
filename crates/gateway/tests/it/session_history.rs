@@ -101,6 +101,7 @@ impl SessionLister for Stores {
                 .or_else(|| self.later.lock().get(native).cloned())
                 .unwrap_or_default(),
             earlier: None,
+            context: None,
         }))
     }
 

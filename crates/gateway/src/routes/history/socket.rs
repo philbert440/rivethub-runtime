@@ -306,6 +306,7 @@ impl Attached<'_> {
                 command: RosterCommand::from(resolved.harness),
                 truncated_before: read.read.earlier.map(|_| true),
                 earlier: read.read.earlier,
+                context_used: read.read.context,
                 context_window: Some(read.stamp.window),
                 compact_at: Some(read.stamp.compact_at),
                 context_source: Some(read.stamp.source),

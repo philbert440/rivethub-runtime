@@ -5298,6 +5298,14 @@
           ],
           "format": "uint64",
           "minimum": 0
+        },
+        "contextUsed": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
         }
       },
       "required": [
@@ -11834,6 +11842,14 @@
               ]
             },
             "earlier": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "contextUsed": {
               "type": [
                 "integer",
                 "null"

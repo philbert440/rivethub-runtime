@@ -277,6 +277,7 @@ async fn transcript(
         context_source: read.stamp.source,
         redirected_to: resolved.redirected_to,
         earlier: read.read.earlier,
+        context_used: read.read.context,
     }))
 }
 
