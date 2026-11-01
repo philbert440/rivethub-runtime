@@ -294,11 +294,7 @@ impl Attached<'_> {
         }
         self.rev += 1;
         self.last = Some(turns.clone());
-        let waiting = self
-            .gateway
-            .terminal()
-            .map(|terminal| terminal.pending_approvals(&resolved.native))
-            .unwrap_or_default();
+        let held = self.held();
         send(
             &mut self.socket,
             &HarnessEvent::Transcript {
@@ -316,24 +312,22 @@ impl Attached<'_> {
             },
         )
         .await?;
-        for approval in &waiting {
-            send(&mut self.socket, approval).await?;
-        }
-        let held = self.gateway.terminal().map(|terminal| {
-            (
-                terminal.held_context(&resolved.native),
-                terminal.held_driver(&resolved.native),
-            )
-        });
-        if let Some((context, driver)) = held {
-            for event in context.iter().chain(driver.iter()) {
-                send(&mut self.socket, event).await?;
-            }
-        }
-        if let Some(waiting) = self.waiting() {
-            send(&mut self.socket, &waiting).await?;
+        for event in &held {
+            send(&mut self.socket, event).await?;
         }
         Ok(true)
+    }
+
+    fn held(&self) -> Vec<HarnessEvent> {
+        let native = &self.resolved.native;
+        let Some(terminal) = self.gateway.terminal() else {
+            return Vec::new();
+        };
+        let mut held = terminal.pending_approvals(native);
+        held.extend(terminal.held_context(native));
+        held.extend(terminal.held_driver(native));
+        held.extend(self.waiting());
+        held
     }
 
     fn waiting(&self) -> Option<HarnessEvent> {
