@@ -415,6 +415,31 @@ fn a_currently_swap_archives_nothing() -> TestResult {
 }
 
 #[test]
+fn a_section_lead_keeps_its_wording_until_its_facts_change() {
+    use kernel::wiki::page::lead::steady_lead;
+    let section =
+        "Rivethub is the desktop app. Currently, round 30 is deployed to every node.\n\nOld news.";
+    let reworded =
+        "RivetHub is the native desktop client. Currently, every node runs round 30.\n\nNew news.";
+    assert_eq!(
+        steady_lead(section, reworded),
+        "Rivethub is the desktop app. Currently, round 30 is deployed to every node.\n\nNew news."
+    );
+    let moved = "RivetHub is the desktop client. Currently, round 31 is deployed to every node.";
+    assert_eq!(
+        steady_lead(section, moved),
+        "Rivethub is the desktop app. Currently, round 31 is deployed to every node."
+    );
+    assert_eq!(steady_lead("### Note\n\nText.", reworded), reworded);
+    let doubled = "Rivethub is the desktop app for workspace and memory.\n\nRivethub is the desktop \
+        app for workspace, memory and chat. Currently, round 30 is out.";
+    assert_eq!(
+        kernel::wiki::page::lead::stable_summary(doubled, "Currently, round 31 is out."),
+        "Rivethub is the desktop app for workspace and memory. Currently, round 31 is out."
+    );
+}
+
+#[test]
 fn a_currently_sentence_that_does_not_fit_is_left_out() {
     use kernel::wiki::page::lead::stable_summary;
     let lead = format!("AcmeKit is the deploy tool. {}", "It deploys. ".repeat(196));

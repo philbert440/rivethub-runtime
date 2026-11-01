@@ -1978,6 +1978,12 @@
             "null"
           ]
         },
+        "title": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "fallback": {
           "anyOf": [
             {
@@ -7536,6 +7542,21 @@
         "error"
       ]
     },
+    "TidySkipped": {
+      "type": "object",
+      "properties": {
+        "proposalId": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "proposalId",
+        "reason"
+      ]
+    },
     "TidyBatchDecision": {
       "type": "object",
       "properties": {
@@ -7544,6 +7565,13 @@
           "items": {
             "$ref": "#/$defs/TidyProposal"
           }
+        },
+        "skipped": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/TidySkipped"
+          },
+          "default": []
         },
         "failed": {
           "type": "array",

@@ -29,12 +29,15 @@ pub(crate) struct ExportParams {
     since: Option<SinceParam>,
 }
 
+const LATEST_MAX: usize = 50;
+
 #[derive(Debug, Default, Deserialize)]
 pub(crate) struct DagParams {
     outline: Option<bool>,
     tree: Option<bool>,
     offset: Option<usize>,
     limit: Option<usize>,
+    latest: Option<usize>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -56,7 +59,11 @@ async fn read_dag(
     params: &DagParams,
 ) -> Result<SummaryDag, ApiError> {
     let store = gateway.store();
-    Ok(if params.outline == Some(true) {
+    Ok(if let Some(latest) = params.latest {
+        store
+            .summary_latest(owner, latest.clamp(1, LATEST_MAX))
+            .await?
+    } else if params.outline == Some(true) {
         store.summary_outline(owner).await?
     } else {
         store.summary_dag(owner).await?
@@ -88,7 +95,7 @@ pub(crate) async fn summaries(
     Query(params): Query<DagParams>,
 ) -> Result<Json<MemorySummaryDagResponse>, ApiError> {
     let owner = SummaryOwner::Session(session.clone());
-    if params.tree == Some(true) {
+    if params.tree == Some(true) && params.latest.is_none() {
         let tree = gateway
             .store()
             .summary_tree(&owner, None, window(params.offset, params.limit))

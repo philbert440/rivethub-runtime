@@ -1,5 +1,6 @@
 mod leaf;
 mod llm;
+mod opening;
 mod prompt;
 mod rollup;
 mod settings;

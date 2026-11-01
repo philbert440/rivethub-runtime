@@ -207,6 +207,19 @@ async fn an_outline_previews_each_summary_and_one_summary_reads_whole(pool: PgPo
             .await?,
         None
     );
+    let latest = memory.summary_latest(&owner, 1).await?;
+    let [newest] = latest.summaries.as_slice() else {
+        return Err("one summary".into());
+    };
+    assert_eq!(newest.id, "00000000-0000-4000-8000-000000000012");
+    assert_eq!(newest.content, "second");
+    assert_eq!(
+        full.latest(1)
+            .summaries
+            .first()
+            .map(|node| node.id.as_str()),
+        Some(newest.id.as_str())
+    );
     Ok(())
 }
 

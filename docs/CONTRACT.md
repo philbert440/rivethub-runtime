@@ -1337,7 +1337,17 @@ never a description of the batch: no batch, leaf or message numbers, ids, channe
 tallies. The leaf summarizer's input shows each tool call's input (first 600 bytes) and output (first 300 bytes) under
 its "[tool call] <name>" line, so a batch of tool calls is summarized by what they did. A branch or root summary cut off
 at its token limit is retried over half as many children, and a summarize job whose conversation was deleted while it
-waited completes without a summary. Stores without concurrent writers (SQLite) take the lease at once.
+waited completes without a summary. Stores without concurrent writers (SQLite) take the lease at once. Leads stay put (QA pass 2): a sub-topic section's first paragraph is
+written the way a page summary is, keeping its existing description and replacing only its closing "Currently"
+sentence; a lead holds one paragraph (a later paragraph that 60% restates the first is dropped), and a "Currently"
+sentence that restates the one already there (80% of its words, every number among them) is kept as it was. On
+Postgres an update without a merge base no longer appends its summary to the page's (`merge_summary_text`); it goes
+through the same stable lead, as SQLite already did. Extraction and merge prompts keep durable knowledge (what was
+decided, built, changed, found, broken or fixed, and why) and leave out how a session went about it: clicks and screen
+coordinates, screenshot and scratch file names, test-run and wait-loop mechanics, single-run timings, temporary ports,
+throwaway hosts and credentials, and session, run, job or batch ids. A leaf summary that still opens with the batch
+("The batch began…", "In this batch, …") is reworded before it is stored: the agent's name becomes the subject, or "The
+work" when the batch is described rather than acting.
 
 (109) Search hits that hold the match (Phil, 2026-11-01; QA memory sweep): `GET /api/memory/search` with
 `scope=messages` and no `mode` is a transcript search and searches text (mode `fts`): every hit is a message that holds
@@ -1368,6 +1378,32 @@ re-date all of them to the sweep's time, newest conversation first, and the olde
 job keeps its attempts, so it reaches the flagged list instead of being reset by the next sweep. SQLite keeps a waiting
 row's `run_at` and raises its `rh_job_priorities` entry the same way. A compaction with nothing to take (fewer messages
 than its trigger's floor, too few leaves or branches to roll up) makes no model call, as before.
+(114) Tidy keeps old names and skips what is moot (Phil, 2026-11-01; QA pass 2): a merge keeps the source's name, with
+its aliases, as aliases of the topic it merges into, and a rename keeps the former name as an alias unless the same
+change sets the aliases outright (or the two names differ only in case), on Postgres and SQLite alike, so an entity or
+topic search, and the wiki's entity matching, still find it by the old name ("TVRT" finds gpubox after "Merge TVRT into
+gpubox"). Approving a proposal whose change has nothing left to do sets it aside instead of approving it: a merge whose
+topic is gone or whose target is gone, a delete of a topic already gone, a rename to the name it has, a move to the
+parent it has, a close of a closed topic, and a type that already exists. A set-aside proposal is stored rejected, so it
+is not proposed again, and is not listed as pending. `POST /api/tidy/batches/{batch}/approve` answers
+`{ decided, skipped: [{ proposalId, reason }], failed: [{ proposalId, error }] }` (`wire::gateway::tidy::TidySkipped`):
+`skipped` holds each set-aside proposal with why in plain words ("the topic it changes is already gone", "it is already
+named “g9”", "it is already there", "it is already closed", "the topic it merges into is gone", "the type already
+exists"); a proposal approved alone that has nothing left to do answers `409` with the same reason. An approval that
+stopped part way is finished by approving again: the changes it already made are skipped as done, the rest applied.
+(115) Search hits name their session; catch-up reads one summary (Phil, 2026-11-01; QA pass 2): every hit of
+`GET /api/memory/search` (and of the agent and MCP searches, which read the same store) carries `title`, the title of
+the hit's session: the conversation's title when it names the session (not a placeholder), else, for a conversation
+with no title, the title read from its newest summary, else from its first user message; absent when none names it.
+On Postgres the titles are read in one query beside the hits' text; SQLite answers no `title` yet. To open a hit at its
+match, a client opens `sessionId` and shows the transcript turn whose `startedAtMs`..`endedAtMs` holds the hit's
+`createdAt` (a message hit's `id` is its stored message id); when the transcript read answers `earlier` and the hit is
+older than its first turn, the client reads back with `before=<earlier>` (note 106) until a turn holds it.
+`GET /api/memory/summaries/{session}?latest=<n>` (`n` from 1 to 50; it takes precedence over `tree` and `outline`)
+answers the session's `n` summaries that end last, newest first and a leaf ahead of a rollup ending at the same time,
+each whole and without source message ids, with `messages` all zero (no tally is counted). It reads only those rows, so
+a session of 5,355 summaries answers in 11 to 26 ms where its outline took 376 to 583 ms and 3.5 MB; a topic's
+catch-up reads `latest=1` for each session it shows.
 
 (112) Sessions after QA pass 2 (Phil, 2026-11-01): a terminal that resumes a session (`POST /term` with `resume`, no
 agent) starts in the session's working directory, the live chat's or else the one its harness recorded, when that folder

@@ -116,6 +116,25 @@ async fn a_rewrite_archives_what_it_dropped_behind_one_history_line() -> TestRes
     Ok(())
 }
 
+#[tokio::test]
+async fn an_unmerged_update_keeps_one_lead() -> TestResult {
+    let directory = tempfile::tempdir()?;
+    let root = directory.path().join("wiki");
+    apply(&root, patch("acmekit", "Ships on Fridays.")?).await?;
+    let restated = PagePatch {
+        summary_delta: Some(
+            "AcmeKit ships on Fridays from the build box. Currently, 2.0 is out.".to_owned(),
+        ),
+        ..patch("acmekit", "Ships on Fridays.")?
+    };
+    let page = apply(&root, restated).await?.page;
+    assert_eq!(
+        page.current_state,
+        "AcmeKit ships on Fridays. Currently, 2.0 is out."
+    );
+    Ok(())
+}
+
 fn facts(count: usize) -> String {
     (0..count)
         .map(|index| {

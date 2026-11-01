@@ -225,6 +225,11 @@ impl Since {
     }
 }
 
+pub(super) fn prose(block: &str) -> bool {
+    !block.starts_with(['#', '-', '*', '|', '>', '`'])
+        && !block.starts_with(|letter: char| letter.is_ascii_digit())
+}
+
 pub(super) fn words(text: &str) -> BTreeSet<String> {
     text.split(|letter: char| !letter.is_alphanumeric() && !"_.#/-".contains(letter))
         .map(|word| word.trim_matches(|letter: char| !letter.is_alphanumeric()))
@@ -239,7 +244,7 @@ pub(super) fn covered(found: &BTreeSet<String>, pool: &BTreeSet<String>) -> bool
     overlaps(found, pool, COVERED_PERCENT)
 }
 
-fn overlaps(found: &BTreeSet<String>, pool: &BTreeSet<String>, percent: usize) -> bool {
+pub(super) fn overlaps(found: &BTreeSet<String>, pool: &BTreeSet<String>, percent: usize) -> bool {
     let shared = found.iter().filter(|word| pool.contains(*word)).count();
     shared.saturating_mul(100) >= found.len().saturating_mul(percent)
 }
@@ -372,9 +377,7 @@ impl Repeats {
         if !self.exact.insert(normal(block)) {
             return true;
         }
-        if block.starts_with(['-', '*', '|', '>', '`'])
-            || block.starts_with(|c: char| c.is_ascii_digit())
-        {
+        if !prose(block) {
             return false;
         }
         let found = words(block);
