@@ -326,6 +326,39 @@ pub(crate) async fn store_summary(
     summary
 }
 
+pub(crate) async fn running_elsewhere(
+    gateway: &Gateway,
+    session: &SessionId,
+) -> Result<Option<u32>, ApiError> {
+    if gateway
+        .terminal()
+        .is_some_and(|terminal| terminal.holds(session.as_str()))
+    {
+        return Ok(None);
+    }
+    match gateway.session_lister() {
+        Some(lister) => Ok(lister
+            .running_elsewhere(session.harness(), session.native())
+            .await?),
+        None => Ok(None),
+    }
+}
+
+pub(crate) async fn refuse_elsewhere(
+    gateway: &Gateway,
+    session: &SessionId,
+) -> Result<(), ApiError> {
+    match running_elsewhere(gateway, session).await? {
+        Some(pid) => Err(ApiError::Code(
+            HarnessCode::SessionRunningElsewhere,
+            format!(
+                "This session is running in another terminal (process {pid}), so it can't be resumed here until that one ends"
+            ),
+        )),
+        None => Ok(()),
+    }
+}
+
 pub(crate) async fn working_dir(gateway: &Gateway, session: &SessionId) -> Option<PathBuf> {
     let live = live_summary(gateway, session.native()).and_then(|live| live.cwd);
     let recorded = if let Some(cwd) = live {

@@ -5541,6 +5541,12 @@
               "type": "null"
             }
           ]
+        },
+        "runningElsewhere": {
+          "type": [
+            "boolean",
+            "null"
+          ]
         }
       },
       "required": [
@@ -12861,7 +12867,8 @@
         "capability_unsupported",
         "unknown_approval",
         "unknown_prompt",
-        "turn_failed"
+        "turn_failed",
+        "session_running_elsewhere"
       ]
     },
     "HarnessStoreSession": {

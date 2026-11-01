@@ -162,6 +162,11 @@ impl Follow {
         left
     }
 
+    fn elsewhere(&mut self) {
+        self.terminal = true;
+        self.busy = true;
+    }
+
     fn read(&mut self, changed: bool) {
         let slowest = if self.busy { FOLLOW_BUSY } else { FOLLOW_SLOW };
         self.gap = if changed {
@@ -197,6 +202,11 @@ impl Attached<'_> {
                 .and_then(|terminal| terminal.held_driver(&self.resolved.native))
                 .as_ref(),
         );
+        if let Ok(Some(_)) =
+            crate::history::running_elsewhere(self.gateway, &self.resolved.session).await
+        {
+            follow.elsewhere();
+        }
         loop {
             tokio::select! {
                 () = self.gateway.sessions().shutdown.cancelled() => {

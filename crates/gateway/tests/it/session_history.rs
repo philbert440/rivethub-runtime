@@ -46,6 +46,7 @@ struct Stores {
     cwd: BTreeMap<String, String>,
     limits: Mutex<Vec<usize>>,
     later: Mutex<BTreeMap<String, Vec<HarnessTranscriptTurn>>>,
+    elsewhere: BTreeMap<String, u32>,
 }
 
 #[async_trait]
@@ -82,6 +83,14 @@ impl SessionLister for Stores {
         native: &str,
     ) -> Result<Option<String>, TranscriptReaderError> {
         Ok(self.cwd.get(native).cloned())
+    }
+
+    async fn running_elsewhere(
+        &self,
+        _harness: HarnessId,
+        native: &str,
+    ) -> Result<Option<u32>, TranscriptReaderError> {
+        Ok(self.elsewhere.get(native).copied())
     }
 
     async fn transcript(
@@ -465,6 +474,42 @@ async fn b4_1_and_t0_9_a_bare_uuid_resolves_to_its_store_and_redirects() {
         refused.error,
         format!("no registered harness owns bare session id {U2}")
     );
+}
+
+#[tokio::test]
+async fn a_session_running_in_another_terminal_is_read_but_never_resumed() {
+    let setup = setup(
+        "{}",
+        Stores {
+            elsewhere: BTreeMap::from([(U1.to_owned(), 4242)]),
+            ..one_claude_row()
+        },
+    )
+    .await;
+    let segment = enc(&format!("claude-code:{U1}"));
+    let (status, body) = get(&setup, &format!("/api/harness-sessions/{segment}"), None).await;
+    assert_eq!(status, 200, "{}", String::from_utf8_lossy(&body));
+    let described: HarnessSessionResponse = parsed(&body);
+    assert_eq!(described.running_elsewhere, Some(true));
+    for (path, body) in [
+        (
+            format!("/api/harness-sessions/claude-code:{U1}/turn"),
+            r#"{"text":"hi"}"#.to_owned(),
+        ),
+        (
+            "/term".to_owned(),
+            format!(
+                r#"{{"command":"claude","session":"claude-code:{U1}","resume":"claude-code:{U1}"}}"#
+            ),
+        ),
+    ] {
+        let (status, refused) = http(&setup.fixture.gateway, "POST", &path, body, None).await;
+        assert_eq!(status, 409, "{path}: {}", String::from_utf8_lossy(&refused));
+        assert_eq!(
+            error(&refused).code.as_deref(),
+            Some("session_running_elsewhere")
+        );
+    }
 }
 
 #[tokio::test]

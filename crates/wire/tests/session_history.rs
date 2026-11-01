@@ -245,6 +245,12 @@ fn harness_codes_carry_status_and_retryable() {
         (HarnessCode::UnknownApproval, "unknown_approval", 404, false),
         (HarnessCode::UnknownPrompt, "unknown_prompt", 404, false),
         (HarnessCode::TurnFailed, "turn_failed", 502, false),
+        (
+            HarnessCode::SessionRunningElsewhere,
+            "session_running_elsewhere",
+            409,
+            false,
+        ),
     ];
     assert_eq!(table.len(), HarnessCode::iter().count());
     for (code, name, status, retryable) in table {

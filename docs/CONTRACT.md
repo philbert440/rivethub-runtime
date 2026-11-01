@@ -1432,6 +1432,14 @@ as the server comes back, spending no attempt and counting no failure, where bef
 a datahub network drop on 2026-10-31 failed and flagged 30 jobs (20 wiki extractions in one minute). A call that
 connected and then broke stays a transport failure and fails the job as before.
 
+(117) A session live in another process is never resumed (Phil, 2026-11-01): before rh resumes a Claude Code session it
+does not hold (a turn sent to `POST /api/harness-sessions/{session}/turn` with no live chat, or `POST /term` with
+`resume`), it reads Claude's process files (`<claude config>/sessions/<pid>.json`: `pid`, `sessionId`, `procStart`) and
+treats the session as running elsewhere when a file names it and its pid is alive with the same start time. Such a
+request is refused with 409 `session_running_elsewhere` ("This session is running in another terminal…") and starts no
+process. `GET /api/harness-sessions/{session}` answers `runningElsewhere: true` for it, and its socket follows the
+transcript as it does a terminal rh runs, so a client shows it read-only and live. A session rh holds (a live chat or
+its own terminal) is unaffected.
 ## 4. Gaps to close before building the affected slice
 
 - MCP `tools/list` and sample-call recording (B7); CLI golden transcripts (B9); ACP conformance runs against installed
