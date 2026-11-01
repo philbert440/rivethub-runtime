@@ -1378,6 +1378,19 @@ re-date all of them to the sweep's time, newest conversation first, and the olde
 job keeps its attempts, so it reaches the flagged list instead of being reset by the next sweep. SQLite keeps a waiting
 row's `run_at` and raises its `rh_job_priorities` entry the same way. A compaction with nothing to take (fewer messages
 than its trigger's floor, too few leaves or branches to roll up) makes no model call, as before.
+(114) Tidy keeps old names and skips what is moot (Phil, 2026-11-01; QA pass 2): a merge keeps the source's name, with
+its aliases, as aliases of the topic it merges into, and a rename keeps the former name as an alias unless the same
+change sets the aliases outright (or the two names differ only in case), on Postgres and SQLite alike, so an entity or
+topic search, and the wiki's entity matching, still find it by the old name ("TVRT" finds gpubox after "Merge TVRT into
+gpubox"). Approving a proposal whose change has nothing left to do sets it aside instead of approving it: a merge whose
+topic is gone or whose target is gone, a delete of a topic already gone, a rename to the name it has, a move to the
+parent it has, a close of a closed topic, and a type that already exists. A set-aside proposal is stored rejected, so it
+is not proposed again, and is not listed as pending. `POST /api/tidy/batches/{batch}/approve` answers
+`{ decided, skipped: [{ proposalId, reason }], failed: [{ proposalId, error }] }` (`wire::gateway::tidy::TidySkipped`):
+`skipped` holds each set-aside proposal with why in plain words ("the topic it changes is already gone", "it is already
+named “g9”", "it is already there", "it is already closed", "the topic it merges into is gone", "the type already
+exists"); a proposal approved alone that has nothing left to do answers `409` with the same reason. An approval that
+stopped part way is finished by approving again: the changes it already made are skipped as done, the rest applied.
 
 ## 4. Gaps to close before building the affected slice
 
