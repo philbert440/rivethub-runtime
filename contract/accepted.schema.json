@@ -12804,6 +12804,18 @@
             "null"
           ]
         },
+        "agent": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "error": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "ts": {
           "type": "integer",
           "format": "int64"
