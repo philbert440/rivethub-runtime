@@ -177,7 +177,11 @@ pub async fn handle_extract_wiki(
         WikiWork::Complete { topics } => topics,
         WikiWork::Pending(summary) => match extract_and_apply(env, &job, &summary).await {
             Ok(topics) => topics,
-            Err(error @ (WorkerError::Cancelled | WorkerError::ProviderOutage { .. })) => {
+            Err(
+                error @ (WorkerError::Cancelled
+                | WorkerError::ProviderOutage { .. }
+                | WorkerError::RouteBusy),
+            ) => {
                 return Err(error);
             }
             Err(error) => {
@@ -224,21 +228,25 @@ async fn extract_and_apply(
         merger: Some(&merger),
         now: env.now,
     };
-    let topic = match router.target(summary).await {
-        Ok(topic) => topic,
+    let route = match router.route(summary).await {
+        Ok(route) => route,
         Err(TopicPageError::ParentPlacement(error)) => {
             tracing::warn!("extract-wiki: {} routed as unplaced: {error}", summary.id);
             None
         }
         Err(error) => return Err(error.into()),
     };
-    let gathered = match &topic {
-        Some(target) => coalesce::gather(env, &router, summary, target).await?,
-        None => coalesce::Gathered::default(),
+    let Some(route) = route else {
+        return extract_coalesced(env, &router, job, summary, Vec::new(), None).await;
     };
-    let applied =
-        extract_coalesced(env, &router, job, summary, gathered.also, topic.as_ref()).await;
+    let Some(lease) = env.store.lease_route(&route.route_key()).await? else {
+        return Err(WorkerError::RouteBusy);
+    };
+    let target = router.current(summary, route).await?;
+    let gathered = coalesce::gather(env, &router, summary, &target).await?;
+    let applied = extract_coalesced(env, &router, job, summary, gathered.also, Some(&target)).await;
     coalesce::settle(env, &gathered.claimed, applied.is_ok()).await;
+    drop(lease);
     applied
 }
 

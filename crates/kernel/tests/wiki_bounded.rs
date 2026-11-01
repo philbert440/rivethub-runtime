@@ -97,6 +97,20 @@ fn rebase_keeps_a_concurrent_writers_text_and_ours() {
 }
 
 #[test]
+fn rebase_keeps_one_lead_when_a_concurrent_writer_reworded_it() {
+    let base = "Rivethub is the desktop app.\n\nRound 29 is deployed.";
+    let theirs = "Rivethub is the desktop app. Currently, round 30 with its six fixes in commit \
+        a65f94dc is deployed and QA is underway.\n\nRound 30 is deployed.";
+    let ours = "Rivethub is the desktop app. Currently, round 30 is deployed with six fixes in \
+        commit a65f94dc and QA is underway.\n\nRound 30 is deployed.\n\nHeadless QA started.";
+    let merged = rebase(base, ours, theirs);
+    assert_eq!(merged.matches("Rivethub is the desktop app").count(), 1);
+    assert_eq!(merged, ours);
+    let unrelated = format!("{theirs}\n\nThe Android build moved to the build box.");
+    assert!(rebase(base, ours, &unrelated).ends_with("The Android build moved to the build box."));
+}
+
+#[test]
 fn history_line_keeps_one_short_line() {
     let long = format!("{}. {}", "First sentence".repeat(10), "y".repeat(400));
     let line = history_line(&long);

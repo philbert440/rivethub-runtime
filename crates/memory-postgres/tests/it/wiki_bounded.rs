@@ -3,7 +3,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use chrono::{DateTime, Utc};
 use kernel::memory::MemoryStore as _;
-use kernel::wiki::builder::WikiWriteError;
+use kernel::wiki::builder::{WikiBuilderStore as _, WikiWriteError};
 use kernel::wiki::merge::{MergeInput, Merged, PageMerger};
 use kernel::wiki::page::bound::{ARCHIVED_TITLE, ARTICLE_BUDGET};
 use kernel::wiki::page::{
@@ -360,5 +360,27 @@ async fn a_recompile_rebases_onto_a_write_that_landed_meanwhile(pool: PgPool) ->
     assert_eq!(memory.wiki_archive(&slug, None).await?, Some(month));
     assert_eq!(memory.wiki_archive(&slug, Some("2026-09")).await?, None);
     assert_eq!(memory.wiki_archive(&slug, Some("../x")).await?, None);
+    Ok(())
+}
+
+#[sqlx::test(migrator = "migrate::POSTGRES")]
+async fn one_writer_at_a_time_holds_a_page_route(pool: PgPool) -> TestResult {
+    let store = PostgresMemory::new(pool);
+    let lease = store
+        .lease_route("rivethub#desktop")
+        .await?
+        .ok_or("a free route is leased")?;
+    assert!(store.lease_route("rivethub#desktop").await?.is_none());
+    assert!(store.lease_route("rivethub").await?.is_some());
+    drop(lease);
+    let freed = tokio::time::timeout(std::time::Duration::from_secs(10), async {
+        loop {
+            if let Some(lease) = store.lease_route("rivethub#desktop").await? {
+                return Ok::<_, Box<dyn std::error::Error>>(lease);
+            }
+        }
+    })
+    .await??;
+    drop(freed);
     Ok(())
 }

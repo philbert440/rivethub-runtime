@@ -5,7 +5,7 @@ pub(crate) const CLAIM: &str = "WITH available AS MATERIALIZED (
       AND ($2::bigint IS NULL OR j.id = $2)
       AND ($4::smallint IS NULL OR j.priority <= $4)
       AND j.is_available = true
-      AND j.run_at <= now()
+      AND (j.run_at <= now() OR $2::bigint IS NOT NULL)
       AND (j.job_queue_id IS NULL OR EXISTS (
           SELECT 1 FROM graphile_worker._private_job_queues q
           WHERE q.id = j.job_queue_id
@@ -75,7 +75,8 @@ pub(crate) const RELEASE: &str = "WITH owned AS MATERIALIZED (
 ), released AS (
     UPDATE graphile_worker._private_jobs j
     SET attempts = GREATEST(j.attempts - 1, 0),
-        locked_at = NULL, locked_by = NULL, updated_at = now()
+        locked_at = NULL, locked_by = NULL, updated_at = now(),
+        run_at = coalesce(now() + make_interval(secs => $3::float8), j.run_at)
     FROM owned WHERE j.id = owned.id
     RETURNING owned.job_queue_id, owned.locked_by
 ), unlocked AS (

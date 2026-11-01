@@ -13,6 +13,7 @@ const SECTION_FLOOR: usize = 512;
 pub const ENTITIES: usize = 64;
 pub const ARCHIVED_TITLE: &str = "Archived";
 const ELLIPSIS: char = '…';
+const COVERED_PERCENT: usize = 60;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Archived {
@@ -171,15 +172,12 @@ pub fn rebase(base: &str, ours: &str, current: &str) -> String {
     if normal(base) == normal(current) {
         return ours.trim().to_owned();
     }
-    let base_blocks: BTreeSet<String> = blocks(base).iter().map(|block| normal(block)).collect();
+    let since = Since::new(base, ours);
     let ours_blocks = blocks(ours);
     let ours_normal: BTreeSet<String> = ours_blocks.iter().map(|block| normal(block)).collect();
     let mut merged: Vec<String> = blocks(current)
         .into_iter()
-        .filter(|block| {
-            let key = normal(block);
-            !base_blocks.contains(&key) || ours_normal.contains(&key)
-        })
+        .filter(|block| ours_normal.contains(&normal(block)) || since.fresh(block))
         .collect();
     let mut anchor: Option<String> = None;
     for block in &ours_blocks {
@@ -194,6 +192,49 @@ pub fn rebase(base: &str, ours: &str, current: &str) -> String {
         anchor = Some(key);
     }
     merged.join("\n\n")
+}
+
+#[must_use]
+pub fn added_since(base: &str, current: &str, ours: &str) -> String {
+    let since = Since::new(base, ours);
+    blocks(current)
+        .into_iter()
+        .filter(|block| since.fresh(block))
+        .collect::<Vec<_>>()
+        .join("\n\n")
+}
+
+struct Since {
+    base: BTreeSet<String>,
+    said: BTreeSet<String>,
+}
+
+impl Since {
+    fn new(base: &str, ours: &str) -> Self {
+        Self {
+            base: blocks(base).iter().map(|block| normal(block)).collect(),
+            said: words(ours),
+        }
+    }
+
+    fn fresh(&self, block: &str) -> bool {
+        !self.base.contains(&normal(block)) && !covered(&words(block), &self.said)
+    }
+}
+
+pub(super) fn words(text: &str) -> BTreeSet<String> {
+    text.split(|letter: char| !letter.is_alphanumeric() && !"_.#/-".contains(letter))
+        .map(|word| word.trim_matches(|letter: char| !letter.is_alphanumeric()))
+        .filter(|word| {
+            word.chars().count() >= 4 || word.chars().any(|letter| letter.is_ascii_digit())
+        })
+        .map(str::to_lowercase)
+        .collect()
+}
+
+pub(super) fn covered(found: &BTreeSet<String>, pool: &BTreeSet<String>) -> bool {
+    let shared = found.iter().filter(|word| pool.contains(*word)).count();
+    shared.saturating_mul(100) >= found.len().saturating_mul(COVERED_PERCENT)
 }
 
 #[must_use]

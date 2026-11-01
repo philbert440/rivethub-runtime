@@ -1272,6 +1272,21 @@ it use that index only when `jsonb_object_field_text` (the `->>` operator) is LE
 runs as a superuser and otherwise refuses with the statement a superuser runs once per database (as 0044 does for the
 text-search operators). On a large store the index can be built first with `CREATE INDEX CONCURRENTLY` under the same
 name and definition; the migration then leaves it as it is.
+(108) One writer per page route (Phil, 2026-11-01; QA memory sweep): an extract-wiki job whose summary routes to a
+topic page leases its route, the page or one sub-topic's section on it, before it reads the route's current text, and
+holds the lease through the extraction call and the write. On Postgres the lease is a session advisory lock (key pair
+`0x77696b69`, `hashtext(<page slug>[#<topic id>])`) on a connection that is closed when the lease ends, so a worker
+that dies frees it. A job whose route another writer holds goes back to the queue without spending an attempt, to run
+no sooner than 30 s later; while it waits it can join the next batch for its route, because note 101's coalescing
+takes queued jobs whatever their `run_at`, and claiming a job by id ignores `run_at`. A route's queued summaries are
+so extracted one batch at a time, each reading what the last one wrote, instead of several writers rewriting one
+section from the same text and rebasing onto each other. Rebase (note 100): a block the other write added is kept only
+when fewer than 60% of its words (the archive rule's words) are already in this rewrite, so another writer's rewording
+of a paragraph this rewrite also rewrote is replaced, not kept beside it; recompile's "their new blocks first" follows
+the same rule. Summaries: the summarizer's prompts ask for the work itself (the leaf prompt in the third person) and
+never a description of the batch: no batch, leaf or message numbers, ids, channel names, timestamps or tool-call
+tallies. Stores without concurrent writers (SQLite) take the lease at once.
+
 (105) Fresh installs (Phil, 2026-11-01): a new Postgres database needs only the superuser steps and
 `rivethub-migrate postgres`. Migration 0052 creates the job queue when the `graphile_worker` schema is absent: the
 schema graphile-worker 0.17.3 installs with `--schema-only` (the `job_spec` type; `_private_jobs`, `_private_job_queues`,

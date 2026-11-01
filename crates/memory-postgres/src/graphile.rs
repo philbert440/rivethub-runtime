@@ -191,10 +191,15 @@ impl GraphileQueue {
         count(removed.removed)
     }
 
-    pub(crate) async fn release(&self, id: JobId) -> Result<u64, Error> {
+    pub(crate) async fn release(
+        &self,
+        id: JobId,
+        delay: Option<std::time::Duration>,
+    ) -> Result<u64, Error> {
         let released: i64 = sqlx::query_scalar(crate::graphile_sql::RELEASE)
             .bind(i64::from(id))
             .bind(format!("{}-", self.worker))
+            .bind(delay.map(|delay| delay.as_secs_f64()))
             .fetch_one(&self.pool)
             .await
             .map_err(|source| Error::operation("release", source))?;

@@ -247,6 +247,11 @@ pub trait JobQueue: std::fmt::Debug + Send + Sync {
 
     async fn release(&self, id: JobId) -> Result<(), JobQueueError>;
 
+    async fn postpone(&self, id: JobId, delay: std::time::Duration) -> Result<(), JobQueueError> {
+        let _: std::time::Duration = delay;
+        self.release(id).await
+    }
+
     async fn flag_stuck(&self) -> Result<u64, JobQueueError>;
 
     async fn read(&self, id: JobId) -> Result<Option<StoredJob>, JobQueueError>;

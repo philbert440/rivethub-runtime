@@ -150,6 +150,29 @@ async fn enqueue_claims_and_completes_through_the_public_api(pool: PgPool) -> Te
 }
 
 #[sqlx::test(migrator = "migrate::POSTGRES")]
+async fn a_postponed_job_waits_its_turn_unless_claimed_by_id(pool: PgPool) -> TestResult {
+    common::install_graphile(&pool).await?;
+    let jobs = queue(&pool).await?;
+    let any = kernel::queue::ClaimSelector::matching(jobs.task_names(WorkerRole::Embedder));
+    jobs.enqueue(embed_job()).await?;
+    let claimed = jobs.claim(&any).await?.ok_or("the only job is claimable")?;
+    jobs.postpone(claimed.id, std::time::Duration::from_secs(60))
+        .await?;
+    assert!(jobs.claim(&any).await?.is_none(), "a postponed job waits");
+    let by_id = kernel::queue::ClaimSelector {
+        only_id: Some(claimed.id),
+        ..any
+    };
+    let joined = jobs
+        .claim(&by_id)
+        .await?
+        .ok_or("a coalescing lead claims a postponed job by id")?;
+    assert_eq!(joined.attempt, 1, "postponing gave the attempt back");
+    jobs.complete(joined.id).await?;
+    Ok(())
+}
+
+#[sqlx::test(migrator = "migrate::POSTGRES")]
 async fn job_keys_replace_preserve_and_revive(pool: PgPool) -> TestResult {
     common::install_graphile(&pool).await?;
     let jobs = queue(&pool).await?;
