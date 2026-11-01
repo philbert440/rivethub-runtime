@@ -120,15 +120,11 @@ fn stream_event_error(source: EventStreamError<reqwest::Error>) -> ModelProvider
     } else {
         format!("the model server stream failed: {source}")
     };
-    if malformed {
-        stream_error(message, source)
-    } else {
-        stream_error(
-            message,
-            kernel::model::ModelCallFailure::Transport {
-                source: Box::new(source),
-            },
-        )
+    match source {
+        EventStreamError::Transport(lost) => stream_error(message, crate::transport_failure(lost)),
+        malformed @ (EventStreamError::Parser(_) | EventStreamError::Utf8(_)) => {
+            stream_error(message, malformed)
+        }
     }
 }
 

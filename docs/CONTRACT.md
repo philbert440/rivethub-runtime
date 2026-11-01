@@ -1440,7 +1440,10 @@ fails to connect at all (refused, no route to host, the name not resolving, the 
 `ModelCallFailure::Unreachable`, and every worker treats it as note 97's retry-later answer: the job is held and retried
 as the server comes back, spending no attempt and counting no failure, where before only a refused connection did and
 a datahub network drop on 2026-10-31 failed and flagged 30 jobs (20 wiki extractions in one minute). A call that
-connected and then broke stays a transport failure and fails the job as before.
+connected and then broke stays a transport failure and fails the job as before. Amended after the DS41 restarts
+of 2026-11-01, which flagged 5 compactions mid-stream: a call whose connection is lost before its answer is complete
+(reset or closed by the server, the request or the streamed body cut off) is unreachable too, so it is held the same
+way; a timeout, an HTTP error status and a malformed answer (an unparsable stream event or reply) still fail the job.
 (119) A description the sources contradict is replaced (Phil, 2026-11-01; QA): a page summary, a sub-topic section's
 first paragraph and an entity merge keep their description word for word (note 108) unless the extraction or merge
 answer sets `replaces_description` (the extraction schema's patch and the merge answer must give it; a patch without it reads as false), which

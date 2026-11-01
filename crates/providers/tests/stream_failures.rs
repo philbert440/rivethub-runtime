@@ -58,7 +58,7 @@ async fn missing_tool_indices_report_the_translation_error() {
 }
 
 #[tokio::test]
-async fn transport_failure_preserves_the_source_and_terminates_the_stream() {
+async fn a_connection_lost_mid_stream_is_unreachable_and_ends_the_stream() {
     let fail = Arc::new(Notify::new());
     let routes = axum::Router::new()
         .fallback(broken_body)
@@ -87,15 +87,12 @@ async fn transport_failure_preserves_the_source_and_terminates_the_stream() {
     let ModelProviderError::Stream { source, message } = error else {
         panic!("body transport is a stream error");
     };
-    let Some(kernel::model::ModelCallFailure::Transport { source }) =
+    let Some(kernel::model::ModelCallFailure::Unreachable { source }) =
         source.downcast_ref::<kernel::model::ModelCallFailure>()
     else {
-        panic!("transport classification retains its source");
+        panic!("a connection lost mid-stream is an unreachable server");
     };
-    assert!(matches!(
-        source.downcast_ref::<eventsource_stream::EventStreamError<reqwest::Error>>(),
-        Some(eventsource_stream::EventStreamError::Transport(_))
-    ));
+    assert!(source.downcast_ref::<reqwest::Error>().is_some());
     assert!(message.starts_with("the model server stream failed:"));
     assert!(
         tokio::time::timeout(Duration::from_secs(5), stream.recv())
