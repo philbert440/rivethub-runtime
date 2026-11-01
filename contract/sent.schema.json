@@ -591,6 +591,21 @@
       "minimum": 0,
       "maximum": 255
     },
+    "topic.changed": {
+      "type": "object",
+      "properties": {
+        "v": {
+          "$ref": "#/$defs/ProtocolVersion"
+        },
+        "topic": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "v",
+        "topic"
+      ]
+    },
     "HarnessDescriptor": {
       "type": "object",
       "properties": {
@@ -1980,6 +1995,12 @@
             "null"
           ]
         },
+        "title": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "fallback": {
           "anyOf": [
             {
@@ -2925,6 +2946,17 @@
         },
         "vector": {
           "$ref": "#/$defs/VectorState"
+        },
+        "truncated": {
+          "type": "boolean"
+        },
+        "children": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
         }
       },
       "required": [
@@ -3013,12 +3045,79 @@
         },
         "messages": {
           "$ref": "#/$defs/MemoryMessageTally"
+        },
+        "counts": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MemorySummaryCounts"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "required": [
         "sessionId",
         "summaries",
         "messages"
+      ]
+    },
+    "MemorySummaryCounts": {
+      "type": "object",
+      "properties": {
+        "leaves": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "branches": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "roots": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "embedded": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "top": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "leaves",
+        "branches",
+        "roots",
+        "embedded",
+        "top"
+      ]
+    },
+    "MemorySummaryChildren": {
+      "type": "object",
+      "properties": {
+        "summaries": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/MemorySummaryNode"
+          }
+        },
+        "total": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "summaries",
+        "total"
       ]
     },
     "TopTool": {
@@ -5221,6 +5320,22 @@
               "type": "null"
             }
           ]
+        },
+        "earlier": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "contextUsed": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
         }
       },
       "required": [
@@ -5426,6 +5541,12 @@
               "type": "null"
             }
           ]
+        },
+        "runningElsewhere": {
+          "type": [
+            "boolean",
+            "null"
+          ]
         }
       },
       "required": [
@@ -5589,6 +5710,14 @@
         "prompts": {
           "type": "integer",
           "format": "uint32",
+          "minimum": 0
+        },
+        "from": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
           "minimum": 0
         }
       },
@@ -7458,6 +7587,21 @@
         "error"
       ]
     },
+    "TidySkipped": {
+      "type": "object",
+      "properties": {
+        "proposalId": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "proposalId",
+        "reason"
+      ]
+    },
     "TidyBatchDecision": {
       "type": "object",
       "properties": {
@@ -7466,6 +7610,13 @@
           "items": {
             "$ref": "#/$defs/TidyProposal"
           }
+        },
+        "skipped": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/TidySkipped"
+          },
+          "default": []
         },
         "failed": {
           "type": "array",
@@ -7477,6 +7628,7 @@
       },
       "required": [
         "decided",
+        "skipped",
         "failed"
       ]
     },
@@ -7643,6 +7795,12 @@
           "type": "string"
         },
         "key": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "subject": {
           "type": [
             "string",
             "null"
@@ -9528,6 +9686,9 @@
         },
         {
           "$ref": "#/$defs/plugin.views"
+        },
+        {
+          "$ref": "#/$defs/topic.changed"
         },
         {
           "$ref": "#/$defs/AgentEvent"
@@ -11829,6 +11990,22 @@
                 "null"
               ]
             },
+            "earlier": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "contextUsed": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
             "contextWindow": {
               "type": [
                 "integer",
@@ -12690,7 +12867,8 @@
         "capability_unsupported",
         "unknown_approval",
         "unknown_prompt",
-        "turn_failed"
+        "turn_failed",
+        "session_running_elsewhere"
       ]
     },
     "HarnessStoreSession": {
@@ -12771,6 +12949,18 @@
           ]
         },
         "childSessionId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "agent": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "error": {
           "type": [
             "string",
             "null"
