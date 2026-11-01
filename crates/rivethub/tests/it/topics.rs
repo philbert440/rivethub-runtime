@@ -76,6 +76,7 @@ fn settings(root: &Path) -> Settings {
 
 struct Api {
     router: axum::Router,
+    sessions: Arc<SessionRegistry>,
     root: tempfile::TempDir,
     store: Arc<SqliteStore>,
 }
@@ -96,8 +97,10 @@ impl Api {
                 .with_startup_memory(store.clone(), store.clone())
                 .with_tidy(store.clone(), store.clone());
         }
+        let gateway = Arc::new(gateway);
         Ok(Self {
-            router: Arc::new(gateway).router(false),
+            sessions: Arc::clone(gateway.sessions()),
+            router: gateway.router(false),
             root,
             store,
         })
@@ -136,8 +139,10 @@ impl Api {
             .with_terminal(Arc::new(terminal))
             .with_topics(store.clone(), store.clone())
             .with_startup_memory(store.clone(), store.clone());
+        let gateway = Arc::new(gateway);
         Ok(Self {
-            router: Arc::new(gateway).router(false),
+            sessions: Arc::clone(gateway.sessions()),
+            router: gateway.router(false),
             root,
             store,
         })
