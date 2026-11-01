@@ -1337,7 +1337,17 @@ never a description of the batch: no batch, leaf or message numbers, ids, channe
 tallies. The leaf summarizer's input shows each tool call's input (first 600 bytes) and output (first 300 bytes) under
 its "[tool call] <name>" line, so a batch of tool calls is summarized by what they did. A branch or root summary cut off
 at its token limit is retried over half as many children, and a summarize job whose conversation was deleted while it
-waited completes without a summary. Stores without concurrent writers (SQLite) take the lease at once.
+waited completes without a summary. Stores without concurrent writers (SQLite) take the lease at once. Leads stay put (QA pass 2): a sub-topic section's first paragraph is
+written the way a page summary is, keeping its existing description and replacing only its closing "Currently"
+sentence; a lead holds one paragraph (a later paragraph that 60% restates the first is dropped), and a "Currently"
+sentence that restates the one already there (80% of its words, every number among them) is kept as it was. On
+Postgres an update without a merge base no longer appends its summary to the page's (`merge_summary_text`); it goes
+through the same stable lead, as SQLite already did. Extraction and merge prompts keep durable knowledge (what was
+decided, built, changed, found, broken or fixed, and why) and leave out how a session went about it: clicks and screen
+coordinates, screenshot and scratch file names, test-run and wait-loop mechanics, single-run timings, temporary ports,
+throwaway hosts and credentials, and session, run, job or batch ids. A leaf summary that still opens with the batch
+("The batch began…", "In this batch, …") is reworded before it is stored: the agent's name becomes the subject, or "The
+work" when the batch is described rather than acting.
 
 (109) Search hits that hold the match (Phil, 2026-11-01; QA memory sweep): `GET /api/memory/search` with
 `scope=messages` and no `mode` is a transcript search and searches text (mode `fts`): every hit is a message that holds
