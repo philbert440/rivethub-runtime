@@ -59,7 +59,7 @@ async fn apply(
     Ok(())
 }
 
-pub async fn a_sub_topic_rewrite_replaces_its_section(
+pub async fn a_sub_topic_rewrite_keeps_its_lead(
     stores: RouteStores<'_>,
     first: &ExtractWiki,
     second: &ExtractWiki,
@@ -70,7 +70,7 @@ pub async fn a_sub_topic_rewrite_replaces_its_section(
         .create(new_topic("Certificates", &[], Some(infra.id))?)
         .await?;
     stores.place(&certificates).await?;
-    let old = "Certificates renew every week.";
+    let old = "Certificates are issued by step-ca. Currently they renew every week.";
     stores
         .route(first, vec![patch("infra", "Certificates", old)?])
         .await?;
@@ -81,7 +81,7 @@ pub async fn a_sub_topic_rewrite_replaces_its_section(
         .and_then(|topic| topic.current.as_ref())
         .and_then(|current| current.section.clone());
     same("the model sees the section", current.as_deref(), Some(old))?;
-    let new = "Certificates renew every day since the step-ca move.";
+    let new = "Certificates come from the mesh CA. Currently they renew every day since the move.";
     apply(
         &stores.router(),
         second,
@@ -91,12 +91,12 @@ pub async fn a_sub_topic_rewrite_replaces_its_section(
     .await?;
     let page = stores.pages.page(&infra).await?;
     same(
-        "section rewritten, not appended",
+        "the lead keeps its description and takes the new Currently sentence",
         page.sections
             .iter()
             .map(|section| section.body.as_str())
             .collect::<Vec<_>>(),
-        vec![new],
+        vec!["Certificates are issued by step-ca. Currently they renew every day since the move."],
     )?;
     Ok(())
 }

@@ -203,15 +203,11 @@ async fn a_sub_topic_summary_lands_in_its_section(pool: PgPool) -> TestResult {
 }
 
 #[sqlx::test(migrator = "migrate::POSTGRES")]
-async fn a_sub_topic_rewrite_replaces_its_section(pool: PgPool) -> TestResult {
+async fn a_sub_topic_rewrite_keeps_its_lead(pool: PgPool) -> TestResult {
     let seeded = Seeded::new(pool.clone()).await?;
     let second = another(&pool, &seeded.job).await?;
-    testkit::wiki_bounded::a_sub_topic_rewrite_replaces_its_section(
-        seeded.stores(),
-        &seeded.job,
-        &second,
-    )
-    .await
+    testkit::wiki_bounded::a_sub_topic_rewrite_keeps_its_lead(seeded.stores(), &seeded.job, &second)
+        .await
 }
 
 #[sqlx::test(migrator = "migrate::POSTGRES")]
