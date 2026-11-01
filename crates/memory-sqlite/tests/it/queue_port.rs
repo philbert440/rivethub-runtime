@@ -151,6 +151,48 @@ async fn the_store_implements_the_job_queue_port() -> TestResult {
 }
 
 #[tokio::test]
+async fn arming_keeps_a_waiting_job_in_line_and_only_raises_it() -> TestResult {
+    let opened = open()?;
+    let store = &opened.store;
+    let arm = |target: &str, priority: i16| -> TestResult<Job> {
+        Ok(Job {
+            priority,
+            run_at: Some(chrono::Utc::now()),
+            ..keyed(target, "compact-c1", JobKeyMode::Arm)?
+        })
+    };
+    store.enqueue(arm("first", 10)?).await?;
+    let queued_at = cell(jobs(store).await?.first().ok_or("armed job")?, "run_at").clone();
+    store.enqueue(arm("later", 10)?).await?;
+    store.enqueue(arm("urgent", 0)?).await?;
+    store.enqueue(arm("demoted", 10)?).await?;
+    let rows = jobs(store).await?;
+    let [row] = rows.as_slice() else {
+        return Err("one armed job".into());
+    };
+    assert_eq!(cell(row, "run_at"), &queued_at);
+    assert!(
+        cell(row, "payload")
+            .as_str()
+            .is_some_and(|text| text.contains("urgent"))
+    );
+    let priority = store
+        .with_conn(|conn| {
+            Ok(testkit::query_json(
+                conn,
+                "SELECT COALESCE((SELECT priority FROM rh_job_priorities), 0) AS priority",
+                &[],
+            ))
+        })
+        .await??;
+    assert_eq!(
+        priority.first().map(|row| cell(row, "priority").clone()),
+        Some(Json::from(0_i64))
+    );
+    Ok(())
+}
+
+#[tokio::test]
 async fn complete_of_a_finished_claim_does_not_take_the_next_job() -> TestResult {
     let opened = open()?;
     let store = &opened.store;

@@ -1357,6 +1357,17 @@ or working directory), send `{type: "topic.changed", v: 1, topic}` to every unfi
 socket on that node, `topic` being the topic's id. It names no content: a client reads the topic or its decisions again
 through the routes, under their own rules. Writes through another node's gateway to a shared database send nothing
 here. The body is `wire::gateway::topics::TopicChangedNotice` in `contract/sent.schema.json`.
+(111) Summary jobs keep their place in line (Phil, 2026-11-01; queue review): the idle and stale sweeps, which run when
+a summarizer starts and every 5 and 15 minutes, and a compaction that queues its own follow-up, arm
+`compact-<conversationId>` instead of replacing it (`JobKeyMode::Arm`). A waiting job is kept as it is: its `run_at`,
+attempts and last error stay, and its priority only rises, taking the new trigger with it, when the new arm is more urgent
+(an idle sweep lifts a stale job from 10 to 0 or -20; a stale sweep no longer drops an idle job to 10). A job that is
+running gets one queued behind it, and a dead one is revived, as before. A conversation queued since an older sweep
+therefore keeps its original `run_at` and is compacted before newer ones of the same priority, where every sweep used to
+re-date all of them to the sweep's time, newest conversation first, and the oldest never reached the front. A failing
+job keeps its attempts, so it reaches the flagged list instead of being reset by the next sweep. SQLite keeps a waiting
+row's `run_at` and raises its `rh_job_priorities` entry the same way. A compaction with nothing to take (fewer messages
+than its trigger's floor, too few leaves or branches to roll up) makes no model call, as before.
 
 ## 4. Gaps to close before building the affected slice
 

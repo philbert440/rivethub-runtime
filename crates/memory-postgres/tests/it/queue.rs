@@ -32,6 +32,13 @@ struct SummarizeConversationPayload<'a> {
 }
 
 #[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CompactPayload<'a> {
+    conversation_id: &'a str,
+    trigger_type: &'a str,
+}
+
+#[derive(serde::Serialize)]
 struct ExtractWikiPayload<'a> {
     #[serde(rename = "summaryId")]
     summary_id: &'a str,
@@ -169,6 +176,54 @@ async fn a_postponed_job_waits_its_turn_unless_claimed_by_id(pool: PgPool) -> Te
         .ok_or("a coalescing lead claims a postponed job by id")?;
     assert_eq!(joined.attempt, 1, "postponing gave the attempt back");
     jobs.complete(joined.id).await?;
+    Ok(())
+}
+
+#[sqlx::test(migrator = "migrate::POSTGRES")]
+async fn arming_keeps_a_waiting_job_in_line_and_only_raises_it(pool: PgPool) -> TestResult {
+    common::install_graphile(&pool).await?;
+    let jobs = queue(&pool).await?;
+    let arm = |priority: i16, trigger: &str| Job {
+        name: JobName::Fixed(FixedJob::SummarizeConversation),
+        payload: object(&CompactPayload {
+            conversation_id: "c1",
+            trigger_type: trigger,
+        }),
+        key: Some("compact-c1".to_owned()),
+        key_mode: JobKeyMode::Arm,
+        priority,
+        run_at: Some(chrono::Utc::now()),
+        max_attempts: Some(3),
+    };
+    let state = || {
+        sqlx::query_as::<_, (i16, bool, Option<String>)>(
+            "SELECT priority, run_at < now() - interval '6 days', payload->>'triggerType'
+               FROM graphile_worker._private_jobs WHERE key = 'compact-c1'",
+        )
+        .fetch_one(&pool)
+    };
+    jobs.enqueue(arm(10, "session_stale")).await?;
+    sqlx::query("UPDATE graphile_worker._private_jobs SET run_at = now() - interval '7 days'")
+        .execute(&pool)
+        .await?;
+    jobs.enqueue(arm(10, "session_stale")).await?;
+    assert_eq!(state().await?, (10, true, Some("session_stale".to_owned())));
+    jobs.enqueue(arm(0, "session_idle")).await?;
+    assert_eq!(state().await?, (0, true, Some("session_idle".to_owned())));
+    jobs.enqueue(arm(10, "session_stale")).await?;
+    assert_eq!(state().await?, (0, true, Some("session_idle".to_owned())));
+    let running = jobs
+        .claim(&kernel::queue::ClaimSelector::matching(
+            jobs.task_names(WorkerRole::Summarizer),
+        ))
+        .await?
+        .ok_or("the armed job runs first")?;
+    jobs.enqueue(arm(0, "session_idle")).await?;
+    let queued: i64 = sqlx::query_scalar("SELECT count(*) FROM graphile_worker._private_jobs")
+        .fetch_one(&pool)
+        .await?;
+    assert_eq!(queued, 2, "arming a running job queues one behind it");
+    jobs.complete(running.id).await?;
     Ok(())
 }
 

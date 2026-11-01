@@ -173,6 +173,7 @@ pub const MAINTENANCE_PRIORITY: i16 = -100;
 pub enum JobKeyMode {
     KeepRunAt,
     Replace,
+    Arm,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, strum::Display)]
