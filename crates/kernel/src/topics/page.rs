@@ -26,7 +26,7 @@ use crate::wiki::builder::WikiWriteError;
 use crate::wiki::page::FoldMark;
 use crate::wiki::page::WikiSlug;
 use crate::wiki::page::bound::rebase;
-use crate::wiki::page::lead::steady_lead;
+use crate::wiki::page::lead::{steady_lead, under_lead};
 use crate::wiki::page::normalize_slug;
 
 const SLUG_ATTEMPTS: u32 = 1000;
@@ -73,16 +73,14 @@ impl TopicPage {
             .iter_mut()
             .find(|section| section.topic == Some(topic))
         {
-            prepend(&mut section.body, body);
+            section.body = under_lead(&section.body, body);
             return;
         }
-        let mut section = PageSection {
+        self.sections.push(PageSection {
             topic: Some(topic),
             heading: heading.to_owned(),
-            body: String::new(),
-        };
-        prepend(&mut section.body, body);
-        self.sections.push(section);
+            body: body.trim().to_owned(),
+        });
     }
 
     pub(crate) fn merge_section(

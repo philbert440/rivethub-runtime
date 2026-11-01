@@ -458,6 +458,10 @@ fn newer_sources_that_contradict_a_description_replace_it() {
     let section = "Rivethub is the rivetOS desktop app (`apps/rivethub-web`).\n\nOld news.";
     let native = "Rivethub is the native Rust desktop app in rivethub-desktop.\n\nNew news.";
     assert_eq!(steady_lead(section, native, true), native);
+    assert_eq!(
+        kernel::wiki::page::lead::under_lead(native, "### Release\n\nShipped."),
+        "Rivethub is the native Rust desktop app in rivethub-desktop.\n\n### Release\n\nShipped.\n\nNew news."
+    );
 }
 
 #[test]

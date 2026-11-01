@@ -100,6 +100,18 @@ pub fn steady_lead(existing: &str, proposed: &str, replaces: bool) -> String {
     }
 }
 
+#[must_use]
+pub fn under_lead(body: &str, note: &str) -> String {
+    let note = note.trim();
+    let mut parts = blocks(body);
+    if note.is_empty() || body.contains(note) {
+        return body.trim().to_owned();
+    }
+    let at = usize::from(parts.first().is_some_and(|first| prose(first)));
+    parts.insert(at, note.to_owned());
+    parts.join("\n\n")
+}
+
 fn one_lead(text: &str) -> String {
     let mut paragraphs = blocks(text).into_iter();
     let Some(first) = paragraphs.next() else {

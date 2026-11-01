@@ -1452,7 +1452,9 @@ change in the "Currently" sentence), the wiki builder asks the model once more w
 summaries (`{description, summaries}` in, `{description}` out) to correct what they contradict, and that description
 replaces the old one under the same rule; a failed or empty answer keeps the extraction's text.
 The replaced description is archived on Postgres under "Description", the summaries that changed it are cited as for
-any write, and SQLite applies the same rule to its stored summary.
+any write, and SQLite applies the same rule to its stored summary. A note for a sub-topic section (a patch that is not the topic's
+own, a deferred note, an absorbed page) goes right after the section's lead paragraph, first only when the section has
+none, where note 100 put it first; a section therefore keeps its lead on top.
 
 ## 4. Gaps to close before building the affected slice
 
