@@ -576,14 +576,14 @@ before the route sees it, so a plug-in cannot write into another conversation.
 at enable (note 55), and any later increase is approved again before the process runs with it. rh checks the B1
 permissions on every plug-in API call: `memory.read` (`GET /api/memory/*`, `POST /api/memory/tool/memory_search`,
 `memory_browse`, `memory_stats` and `memory_get_full`, `GET /api/wiki*`), `memory.write` (`POST
-/api/memory/tool/memory_append`, `POST /api/capture`), `sessions.read` (`GET` on `/api/harness-sessions*`,
-`/api/harnesses/*` and `/api/catalog`), `sessions.control` (`POST`, `PATCH` and `DELETE` on `/api/harness-sessions*`:
+/api/memory/tool/memory_append`, `POST /api/capture`), `sessions.read` (`GET` on `/api/harness-sessions*` and
+`/api/harnesses/*`), `sessions.control` (`POST`, `PATCH` and `DELETE` on `/api/harness-sessions*`:
 create, turn, steer, cancel, answer an approval, retitle, delete; and `POST /api/sessions/{session}/messages`, which
 sends a turn and can start a session), `topics.read` (`GET /api/topics*`, `GET /api/sessions/history`, `GET
 /api/sessions/suggestions` and `GET /api/sessions/{session}/placement`), `topics.write` (the other methods on `/api/topics*`, and `PUT` and `DELETE` on
 `/api/sessions/{session}/placement` and `/api/sessions/{session}/history`; no other `/api/sessions` route is open to
 a plug-in), `tasks.read` (`GET /api/tasks*`), `tasks.delegate`
-(`POST /api/tasks`), `agents.read` (`GET /api/agents*`) and `notifications.send` (`POST /api/plugin/notify`). Events
+(`POST /api/tasks`), `agents.read` (`GET /api/agents*` and `GET /api/catalog/agents`, note 116) and `notifications.send` (`POST /api/plugin/notify`). Events
 need the permission of what they reveal (note 56). On Linux the process is confined (note 50): it reads and writes its
 own `data/` and `run/` folders; reads its install directory, the program it runs (and the `lib` folder beside the `bin`
 folder it sits in, if it does), `/usr`, `/bin`, `/sbin`, `/lib`, `/lib32`, `/lib64`, `/etc`, `/proc`, `/sys`,
@@ -1378,6 +1378,22 @@ re-date all of them to the sweep's time, newest conversation first, and the olde
 job keeps its attempts, so it reaches the flagged list instead of being reset by the next sweep. SQLite keeps a waiting
 row's `run_at` and raises its `rh_job_priorities` entry the same way. A compaction with nothing to take (fewer messages
 than its trigger's floor, too few leaves or branches to roll up) makes no model call, as before.
+
+(112) Sessions after QA pass 2 (Phil, 2026-11-01): a terminal that resumes a session (`POST /term` with `resume`, no
+agent) starts in the session's working directory, the live chat's or else the one its harness recorded, when that folder
+still exists; an agent launch keeps its agent's folder. The Claude Code capture hook captures only a transcript named
+for its session (`<session>.jsonl`, as Claude names them): Grok Build runs the hooks in Claude's settings too, and its
+sessions no longer leave a second `claude-code:` conversation of prompts and tool rows. rh's harness discovery starts
+each agent with `RIVETHUB_MODEL_RUN=1`, so its probe sessions capture nothing. A Claude turn's usage counts each model
+call's output once (Claude repeats a call's usage on every record of its content blocks), and a transcript read carries
+`contextUsed`, the context its last model call left (that call's prompt and reply), on the socket's `transcript` frame
+and the transcript route; a client's context meter shows it, falling back to the newest turn's prompt and reply.
+
+(113) Failed tasks are told (Phil, 2026-11-01): the `task.done` notification on `/api/notifications/ws` carries the
+task's `agent` and, when it has one, its `error`. A client following each node's notifications tells the person when a
+delegated task fails or runs out of time, with the agent and the reason, which shows even for a task that never
+started a session.
+
 (114) Tidy keeps old names and skips what is moot (Phil, 2026-11-01; QA pass 2): a merge keeps the source's name, with
 its aliases, as aliases of the topic it merges into, and a rename keeps the former name as an alias unless the same
 change sets the aliases outright (or the two names differ only in case), on Postgres and SQLite alike, so an entity or
@@ -1391,6 +1407,7 @@ is not proposed again, and is not listed as pending. `POST /api/tidy/batches/{ba
 named “g9”", "it is already there", "it is already closed", "the topic it merges into is gone", "the type already
 exists"); a proposal approved alone that has nothing left to do answers `409` with the same reason. An approval that
 stopped part way is finished by approving again: the changes it already made are skipped as done, the rest applied.
+
 (115) Search hits name their session; catch-up reads one summary (Phil, 2026-11-01; QA pass 2): every hit of
 `GET /api/memory/search` (and of the agent and MCP searches, which read the same store) carries `title`, the title of
 the hit's session: the conversation's title when it names the session (not a placeholder), else, for a conversation
@@ -1405,19 +1422,10 @@ each whole and without source message ids, with `messages` all zero (no tally is
 a session of 5,355 summaries answers in 11 to 26 ms where its outline took 376 to 583 ms and 3.5 MB; a topic's
 catch-up reads `latest=1` for each session it shows.
 
-(112) Sessions after QA pass 2 (Phil, 2026-11-01): a terminal that resumes a session (`POST /term` with `resume`, no
-agent) starts in the session's working directory, the live chat's or else the one its harness recorded, when that folder
-still exists; an agent launch keeps its agent's folder. The Claude Code capture hook captures only a transcript named
-for its session (`<session>.jsonl`, as Claude names them): Grok Build runs the hooks in Claude's settings too, and its
-sessions no longer leave a second `claude-code:` conversation of prompts and tool rows. rh's harness discovery starts
-each agent with `RIVETHUB_MODEL_RUN=1`, so its probe sessions capture nothing. A Claude turn's usage counts each model
-call's output once (Claude repeats a call's usage on every record of its content blocks), and a transcript read carries
-`contextUsed`, the context its last model call left (that call's prompt and reply), on the socket's `transcript` frame
-and the transcript route; a client's context meter shows it, falling back to the newest turn's prompt and reply.
-(113) Failed tasks are told (Phil, 2026-11-01): the `task.done` notification on `/api/notifications/ws` carries the
-task's `agent` and, when it has one, its `error`. A client following each node's notifications tells the person when a
-delegated task fails or runs out of time, with the agent and the reason, which shows even for a task that never
-started a session.
+(116) The agent catalog for plug-ins (Phil, 2026-11-01; plug-in QA): `GET /api/catalog/agents`, every agent a task can
+be delegated to (note 74), is open to a plug-in holding `agents.read`, so a plug-in that delegates can check an agent name
+before it runs. `sessions.read` no longer names `/api/catalog`, which note 74 removed; the bare `/api/catalog` is refused.
+
 ## 4. Gaps to close before building the affected slice
 
 - MCP `tools/list` and sample-call recording (B7); CLI golden transcripts (B9); ACP conformance runs against installed
