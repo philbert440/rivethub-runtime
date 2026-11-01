@@ -1318,13 +1318,6 @@ a turn, which that harness never counts, and the transcript's count stands. Afte
 replays a `session-updated` with `blocked` true while the session waits on you, as it replays approvals, context and
 driver, so a client opened then shows the wait rather than a running turn.
 
-(110) Topic changes on the event stream (Phil, 2026-11-01; desktop QA): a decision added, edited or superseded
-through `/api/topics/{id}/decisions…`, and a topic changed through `PATCH /api/topics/{id}` (its name, aliases, parent
-or working directory), send `{type: "topic.changed", v: 1, topic}` to every unfiltered `/ws` and `/api/events/ws`
-socket on that node, `topic` being the topic's id. It names no content: a client reads the topic or its decisions again
-through the routes, under their own rules. Writes through another node's gateway to a shared database send nothing
-here. The body is `wire::gateway::topics::TopicChangedNotice` in `contract/sent.schema.json`.
-
 (108) One writer per page route (Phil, 2026-11-01; QA memory sweep): an extract-wiki job whose summary routes to a
 topic page leases its route, the page or one sub-topic's section on it, before it reads the route's current text, and
 holds the lease through the extraction call and the write. On Postgres the lease is a session advisory lock (key pair
@@ -1357,6 +1350,13 @@ rows (`exclude_roles` holding `tool`, or a `role` other than `tool`) looks in me
 result, and the few older rows that carry one repeat it in their text. A literal with no letters is matched with
 `LIKE`, the same match without case folding. Each search arm reads only a hit's identity and ranking columns; the hits
 answered read their text afterwards, one query per table. SQLite is unchanged.
+
+(110) Topic changes on the event stream (Phil, 2026-11-01; desktop QA): a decision added, edited or superseded
+through `/api/topics/{id}/decisions…`, and a topic changed through `PATCH /api/topics/{id}` (its name, aliases, parent
+or working directory), send `{type: "topic.changed", v: 1, topic}` to every unfiltered `/ws` and `/api/events/ws`
+socket on that node, `topic` being the topic's id. It names no content: a client reads the topic or its decisions again
+through the routes, under their own rules. Writes through another node's gateway to a shared database send nothing
+here. The body is `wire::gateway::topics::TopicChangedNotice` in `contract/sent.schema.json`.
 
 ## 4. Gaps to close before building the affected slice
 
