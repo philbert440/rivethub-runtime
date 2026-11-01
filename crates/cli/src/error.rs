@@ -38,9 +38,13 @@ pub enum Error {
     Crypto(#[from] rcgen::Error),
     #[error(transparent)]
     StepCa(#[from] stepca::Error),
-    #[error("No config found. Run: rh config init")]
+    #[error(
+        "No config found. Write ~/.rivethub/config.yaml (rh local writes a standalone one) or set RIVETHUB_CONFIG"
+    )]
     NoConfig,
-    #[error("No config found. Run `rh config init` or use --config <path>")]
+    #[error(
+        "No config found. Write ~/.rivethub/config.yaml (rh local writes a standalone one) or use --config <path>"
+    )]
     StartConfig,
     #[error(transparent)]
     State(#[from] config::StateError),
@@ -78,6 +82,14 @@ pub enum Error {
     LocalDatabase,
     #[error("rh local --port must be between 1 and 65535")]
     GatewayPort,
+    #[error(
+        "{} binds the gateway to {host}, which needs TLS. Run `rh local --no-lan` to serve on 127.0.0.1 only, set gateway.host in that file to 127.0.0.1, or set gateway.tls_cert and gateway.tls_key (or RIVETHUB_TLS_CERT and RIVETHUB_TLS_KEY) to the node's certificate",
+        path.display()
+    )]
+    LanNeedsTls {
+        path: std::path::PathBuf,
+        host: String,
+    },
     #[error(
         "RivetHub local node did not answer at {origin} within {seconds}s; its output is in {}",
         log.display()

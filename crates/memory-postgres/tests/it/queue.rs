@@ -312,7 +312,27 @@ async fn queue_health_reports_buckets(pool: PgPool) -> TestResult {
 }
 
 #[sqlx::test(migrator = "migrate::POSTGRES")]
-async fn the_store_reports_the_queue_as_unavailable(pool: PgPool) -> TestResult {
+async fn the_migrations_create_the_queue(pool: PgPool) -> TestResult {
+    let jobs = queue(&pool).await?;
+    jobs.enqueue(embed_job()).await?;
+    let claimed = jobs
+        .claim(&kernel::queue::ClaimSelector::matching(
+            jobs.task_names(WorkerRole::Embedder),
+        ))
+        .await?;
+    assert_eq!(
+        claimed.map(|job| job.name),
+        Some(JobName::Fixed(FixedJob::EmbedTarget))
+    );
+    assert!(store(&pool).queue_available().await?);
+    Ok(())
+}
+
+#[sqlx::test(migrator = "migrate::POSTGRES")]
+async fn the_store_reports_a_missing_queue_as_unavailable(pool: PgPool) -> TestResult {
+    sqlx::query("DROP SCHEMA graphile_worker CASCADE")
+        .execute(&pool)
+        .await?;
     assert!(matches!(
         PostgresQueue::connect(pool.clone()).await,
         Err(memory_postgres::Error::QueueAbsent)
