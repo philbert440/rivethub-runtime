@@ -208,7 +208,7 @@ async fn recompile_restores_pushed_out_history_and_archives_copies(pool: PgPool)
     page.extra_sections = vec![kernel::wiki::page::ArticleSection {
         heading: "Desktop".to_owned(),
         body: (0..80)
-            .map(|index| format!("### Note {index}\n\n{}", "y".repeat(120)))
+            .map(|index| format!("### Note {index}\n\n{index} {}", "y".repeat(120)))
             .collect::<Vec<_>>()
             .join("\n\n"),
     }];

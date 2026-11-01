@@ -6,7 +6,7 @@ use kernel::wiki::page::archive::{
 };
 use kernel::wiki::page::bound::{
     ARCHIVED_TITLE, ARTICLE_BUDGET, Archived, HISTORY_LINE, SECTION_BUDGET, SECTIONS_BUDGET,
-    bound_page, dropped, fit, history_line, rebase, tail,
+    bound_page, bound_parts, dropped, fit, history_line, rebase, tail,
 };
 use kernel::wiki::page::{ArticleSection, WikiHistoryEntry, WikiPage, WikiSlug};
 use kernel::wiki::recompile::{rebase_recompiled, restore_history};
@@ -108,6 +108,23 @@ fn rebase_keeps_one_lead_when_a_concurrent_writer_reworded_it() {
     assert_eq!(merged, ours);
     let unrelated = format!("{theirs}\n\nThe Android build moved to the build box.");
     assert!(rebase(base, ours, &unrelated).ends_with("The Android build moved to the build box."));
+}
+
+#[test]
+fn a_write_keeps_one_copy_of_a_repeated_paragraph() {
+    let repeated = "The gateway cutover covers the mesh TLS client and the certificate authority.";
+    let mut summary = String::new();
+    let mut article = format!("{repeated}\n\n### Status\n\nShipped.\n\n{repeated}");
+    let mut sections = vec![ArticleSection {
+        heading: "Gateway".to_owned(),
+        body: format!("{repeated}\n\n  {repeated}"),
+    }];
+    bound_parts(&mut summary, &mut article, &mut sections, &[]);
+    assert_eq!(article, format!("{repeated}\n\n### Status\n\nShipped."));
+    assert_eq!(
+        sections.first().map(|section| section.body.as_str()),
+        Some(repeated)
+    );
 }
 
 #[test]

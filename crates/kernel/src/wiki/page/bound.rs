@@ -14,6 +14,7 @@ pub const ENTITIES: usize = 64;
 pub const ARCHIVED_TITLE: &str = "Archived";
 const ELLIPSIS: char = '…';
 const COVERED_PERCENT: usize = 60;
+const REPEAT_FLOOR: usize = 40;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Archived {
@@ -321,6 +322,10 @@ pub fn bound_parts(
     let capped = cap_summary(summary, SUMMARY_LIMIT);
     *summary = capped.kept;
     keep(&mut archived, "Summary", &capped.overflow);
+    drop_repeats(article);
+    for section in sections.iter_mut() {
+        drop_repeats(&mut section.body);
+    }
     let fitted = fit(article, ARTICLE_BUDGET);
     *article = fitted.kept;
     keep(&mut archived, "Article", &fitted.overflow);
@@ -332,6 +337,21 @@ pub fn bound_parts(
         &mut archived,
     );
     archived
+}
+
+fn drop_repeats(text: &mut String) {
+    let found = blocks(text);
+    let mut seen = BTreeSet::new();
+    let kept: Vec<&str> = found
+        .iter()
+        .filter(|block| {
+            block.starts_with('#') || block.len() < REPEAT_FLOOR || seen.insert(normal(block))
+        })
+        .map(String::as_str)
+        .collect();
+    if kept.len() < found.len() {
+        *text = kept.join("\n\n");
+    }
 }
 
 pub fn bound_sections(
