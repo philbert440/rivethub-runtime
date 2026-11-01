@@ -30,6 +30,7 @@ pub(super) fn claim_names(conn: &Connection, topic: &Topic) -> Result<(), TopicE
     if slug_taken.is_some() {
         return Err(TopicError::SlugTaken {
             slug: topic.slug.clone(),
+            name: topic.name.as_str().to_owned(),
         });
     }
     for alias in &topic.aliases {

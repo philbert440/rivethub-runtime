@@ -577,6 +577,21 @@
       "minimum": 0,
       "maximum": 255
     },
+    "topic.changed": {
+      "type": "object",
+      "properties": {
+        "v": {
+          "$ref": "#/$defs/ProtocolVersion"
+        },
+        "topic": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "v",
+        "topic"
+      ]
+    },
     "HarnessDescriptor": {
       "type": "object",
       "properties": {

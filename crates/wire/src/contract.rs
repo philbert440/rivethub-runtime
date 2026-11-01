@@ -22,6 +22,7 @@ const ROOTS: &[Root] = &[
     SchemaGenerator::subschema_for::<crate::gateway::hub_state::HubStateResponse>,
     SchemaGenerator::subschema_for::<crate::gateway::hub_state::HubStatePutRequest>,
     SchemaGenerator::subschema_for::<crate::gateway::hub_state::HubStateChanged>,
+    SchemaGenerator::subschema_for::<crate::gateway::topics::TopicChangedNotice>,
     SchemaGenerator::subschema_for::<crate::gateway::agents::HarnessDescriptor>,
     SchemaGenerator::subschema_for::<crate::gateway::agents::DelegatedSessionLink>,
     SchemaGenerator::subschema_for::<crate::gateway::agents::UserTurnAttachment>,
