@@ -227,6 +227,29 @@ async fn an_ended_session_walks_its_summary_dag_and_tallies_its_messages() -> Te
 }
 
 #[tokio::test]
+async fn the_latest_summary_reads_whole_without_sources_or_tally() -> TestResult {
+    let fresh = seeded().await?;
+    let owner = SummaryOwner::Session("cli:dag".to_owned());
+    let dag = fresh.store.summary_dag(&owner).await?;
+    let latest = fresh.store.summary_latest(&owner, 1).await?;
+    let [newest] = latest.summaries.as_slice() else {
+        return Err("one summary".into());
+    };
+    let expected = dag
+        .summaries
+        .iter()
+        .max_by_key(|node| (node.latest_at, node.kind == SummaryKind::Leaf))
+        .ok_or("summaries")?;
+    assert_eq!(
+        (&newest.id, &newest.content),
+        (&expected.id, &expected.content)
+    );
+    assert_eq!(newest.source_message_ids, Vec::<String>::new());
+    assert_eq!(latest.messages, MemoryMessageTally::default());
+    Ok(())
+}
+
+#[tokio::test]
 async fn the_summary_dag_is_empty_for_a_session_without_a_conversation() -> TestResult {
     let fresh = seeded().await?;
     assert_eq!(

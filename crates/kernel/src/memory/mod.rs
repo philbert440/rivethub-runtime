@@ -293,6 +293,10 @@ impl SummaryDag {
                 .then_with(|| right.id.cmp(&left.id))
         });
         self.summaries.truncate(limit);
+        for node in &mut self.summaries {
+            node.source_message_ids.clear();
+        }
+        self.messages = MemoryMessageTally::default();
         self
     }
 }

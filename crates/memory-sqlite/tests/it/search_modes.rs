@@ -77,6 +77,52 @@ async fn embedding_failure_is_visible_and_keyword_results_survive() -> TestResul
 }
 
 #[tokio::test]
+async fn a_hit_names_its_session() -> TestResult {
+    let (_dir, store) = store(None)?;
+    store.with_conn(|conn| {
+        conn.execute_batch("INSERT INTO ros_conversations(id,session_key,agent,channel,created_at,updated_at) VALUES ('c','s','agent','cli','2026-10-10T00:00:00.000Z','2026-10-10T00:00:00.000Z');
+            INSERT INTO ros_messages(id,conversation_id,role,content,agent,channel,created_at) VALUES
+            ('a','c','user','alpha search content with enough words to enter the lexical arm','agent','cli','2026-10-10T00:00:00.000Z');
+            INSERT INTO ros_summaries(id,conversation_id,content,kind,created_at,latest_at) VALUES
+            ('s','c','## Release checks\n\nThe gate passed.','leaf','2026-10-10T00:00:00.000Z','2026-10-10T00:00:00.000Z');").map_err(failed)?;
+        Ok(())
+    }).await?;
+    let now = Utc.with_ymd_and_hms(2026, 10, 10, 0, 0, 0).unwrap();
+    let named = |outcome: &kernel::memory::SearchOutcome| {
+        outcome
+            .results
+            .iter()
+            .map(|hit| (hit.id.clone(), hit.title.clone()))
+            .collect::<Vec<_>>()
+    };
+    let untitled = store
+        .search_at(query("alpha", SearchMode::Fts), now, &Utc)
+        .await?;
+    assert_eq!(
+        named(&untitled),
+        [("a".to_owned(), Some("Release checks".to_owned()))]
+    );
+    store
+        .with_conn(|conn| {
+            conn.execute(
+                "UPDATE ros_conversations SET title = 'Release safety review'",
+                [],
+            )
+            .map_err(failed)?;
+            Ok(())
+        })
+        .await?;
+    let titled = store
+        .search_at(query("alpha", SearchMode::Hybrid), now, &Utc)
+        .await?;
+    assert_eq!(
+        named(&titled),
+        [("a".to_owned(), Some("Release safety review".to_owned()))]
+    );
+    Ok(())
+}
+
+#[tokio::test]
 async fn corrupt_vectors_are_errors() -> TestResult {
     for bytes in [
         vec![0u8; 3],
