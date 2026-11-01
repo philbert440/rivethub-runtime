@@ -9,7 +9,7 @@ rh connects as an ordinary role that owns the database and its tables, never as 
 forced on the owned tables (CONTRACT note 89), so the owner is subject to it like any other role; rh sets `rh.principal`,
 `rh.spaces` and `rh.maintenance` on each connection from the work it is doing.
 
-A new database needs four things before its first migration. The first two need a superuser, once per database:
+A new database needs two superuser steps, once per database, and then its migrations:
 
 1. **Extensions:** `vector` and `pg_trgm`. pgvector 0.8 or later lets vector search scan on until a viewer who can see
    only some rows still gets a full page of results.
@@ -30,31 +30,32 @@ A new database needs four things before its first migration. The first two need 
 
    A migration that runs as a superuser marks the operators itself; one that does not refuses at 0044 or 0051,
    naming the statements.
-3. **The job queue.** The workers and tasks use graphile-worker's `graphile_worker` schema, which rh does not create.
-   Install it as the owner role; without it every worker exits with "the graphile_worker schema is absent on this
-   database":
-
-   ```sh
-   npx graphile-worker@0.17 --schema-only -c "$RIVETHUB_PG_URL"
-   ```
-
-4. **The schema:** `rivethub-migrate postgres` (next section).
+3. **The schema:** `rivethub-migrate postgres` (next section). It also creates the job queue the workers and tasks
+   use: graphile-worker's `graphile_worker` schema at the version every existing install carries (0.17.3), created by
+   migration 0052 when the database has none and left alone when it has one.
 
 ## Migrations
 
 ```sh
-rivethub-migrate postgres --url "$RIVETHUB_PG_URL"     # or --config FILE, or RIVETHUB_PG_URL alone
+rivethub-migrate postgres --url "$RIVETHUB_PG_URL"     # or --config FILE (its connection_string, else RIVETHUB_PG_URL)
 rivethub-migrate status postgres                       # current, required, pending; read-only
 ```
 
 Run it before starting any service on a new database and after every upgrade; `rh update` runs the new release's
 `rivethub-migrate` itself before swapping binaries. Services never migrate: each verifies the schema version it needs
-(51 at 0.7.0) and refuses to start behind it. `rh doctor` and `rh db status --url <url>` report the same status.
+(52 at 0.7.0) and refuses to start behind it. `rh doctor` and `rh db status --url <url>` report the same status.
 Migrations run as maintenance, so they see and change every row. They are forward-only: rolling back a binary does not
 undo them.
 
-When a migration fails, `rivethub-migrate` prints only "applying the postgres migrations failed"; the reason, including
-any statement a superuser has to run, is in the Postgres server log.
+When a migration fails, `rivethub-migrate` names it and prints the database's message, detail and hint, including any
+statement a superuser has to run:
+
+```text
+rivethub-migrate: applying the postgres migrations failed at 0044: migration 0044 turns on row-level security, and
+search keeps its text indexes under it only when these operators are LEAKPROOF: … A superuser marks them once per
+database, for example: ALTER FUNCTION ts_match_vq(tsvector, tsquery) LEAKPROOF; and the same for each listed
+function. Then run the migration again.
+```
 
 **Store owner (0042).** Every row has an owner. On an existing store whose conversations already have more than one
 owner, 0042 refuses until the connection names the owner of the older, unowned rows:

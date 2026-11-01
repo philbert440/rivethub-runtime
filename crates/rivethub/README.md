@@ -77,7 +77,8 @@ retain the locks through rename. `--check` never performs the move.
 ## Current checkout limits
 
 The SQLite store implements the kernel memory ports, and `rh local` composes it. The
-gateway, worker and MCP roots open Postgres only. An explicit SQLite or PGlite
+gateway and worker roots open Postgres only; `rh mcp` opens the SQLite file of a
+SQLite config and serves stdio. An explicit SQLite or PGlite
 selection fails with a typed startup error and is never redirected to Postgres.
 
 `rh gateway` connects the step-ca client (`pki::Authority`) when
@@ -111,8 +112,9 @@ SQLite embeddings run with chunking disabled. A config or migrate error exits 1.
 SIGTERM and SIGINT cancel the process. It exits 0 when the gateway, workers, and
 sidecar finish inside the same 10 second grace, and exits non-zero, naming the
 work still entered, when they do not. The default bind is
-`0.0.0.0:5174`; pass `--no-lan` for `127.0.0.1`. An off-loopback bind still
-requires TLS. `--port` and `--no-lan` override an existing file in memory and
+`127.0.0.1:5174` when `rh local` writes the config, or `0.0.0.0:5174` when TLS
+for that bind already resolves; `--no-lan` forces `127.0.0.1`. An off-loopback
+bind without TLS stops before the node starts, naming the config file. `--port` and `--no-lan` override an existing file in memory and
 do not rewrite it. Migrate runs in the CLI before the store opens, because the
 runtime does not depend on the migrate crate.
 
