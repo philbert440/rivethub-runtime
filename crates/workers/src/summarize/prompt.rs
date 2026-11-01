@@ -8,11 +8,11 @@ use kernel::memory::WindowMessage;
 
 use crate::error::WorkerError;
 
-pub const LEAF_SYSTEM_PROMPT: &str = "You summarize one batch of a conversation into a leaf summary. Keep the decisions, the names, and the constraints. Write prose.";
+pub const LEAF_SYSTEM_PROMPT: &str = "You summarize one batch of a conversation into a leaf summary. Write in the third person about the work: what was asked, done, found and decided. Keep the decisions, the names, and the constraints. Start with the work itself and never describe the batch: no batch or message numbers, ids, channel names, timestamps or tallies of tool calls. Write prose.";
 
-pub const BRANCH_SYSTEM_PROMPT: &str = "You summarize leaf summaries into one branch summary. Keep the decisions, the names, and the constraints. Write prose.";
+pub const BRANCH_SYSTEM_PROMPT: &str = "You summarize leaf summaries into one branch summary. Keep the decisions, the names, and the constraints. Start with the work itself and never describe the batches or the conversation: no batch, leaf or message numbers, ids, channel names or timestamps. Write prose.";
 
-pub const ROOT_SYSTEM_PROMPT: &str = "You summarize branch summaries into one root summary of the whole conversation. Keep the decisions, the names, and the constraints. Write prose.";
+pub const ROOT_SYSTEM_PROMPT: &str = "You summarize branch summaries into one root summary of the whole conversation. Keep the decisions, the names, and the constraints. Start with the work itself and never describe the batches or the conversation: no batch, branch or message numbers, ids, channel names or timestamps. Write prose.";
 
 const VALUE_COLUMN: usize = 13;
 
