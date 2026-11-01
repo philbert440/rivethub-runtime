@@ -43,6 +43,7 @@ impl kernel::wiki::merge::PageMerger for Recorder {
                 newest
             },
             history: None,
+            replaces_description: false,
         })
     }
 }

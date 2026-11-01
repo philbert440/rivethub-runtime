@@ -8,7 +8,7 @@ use kernel::wiki::page::WikiAction;
 use kernel::wiki::page::WikiPatch;
 use kernel::wiki::page::WikiSlug;
 use kernel::wiki::page::bound::{MergeBase, rebase};
-use kernel::wiki::page::lead::stable_summary;
+use kernel::wiki::page::lead::revised_summary;
 use kernel::wiki::page::topic_identity;
 use rusqlite::Connection;
 use rusqlite::OptionalExtension as _;
@@ -218,7 +218,11 @@ pub(crate) fn rebase_merged(
     let Some(row) = load(conn, patch.slug.as_ref())? else {
         return Ok(());
     };
-    patch.summary = stable_summary(&row.current_state, &patch.summary);
+    patch.summary = revised_summary(
+        &row.current_state,
+        &patch.summary,
+        patch.replaces_description,
+    );
     patch.article = patch
         .article
         .take()

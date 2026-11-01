@@ -41,6 +41,7 @@ use crate::transcript::TranscriptReaderError;
 use crate::transcript::linked_parent;
 use crate::transcript::session_parent;
 
+mod correct;
 mod current;
 
 const DEFERRALS_PER_SWEEP: u32 = 50;
@@ -205,6 +206,7 @@ impl WikiRouter<'_> {
         let mut entities = None;
         for patch in patches {
             if let Some(topic) = target.filter(|topic| topic.claims(&patch)) {
+                let patch = self.corrected(topic, patch, summary, &also).await;
                 self.route_to_topic(topic, patch, &mut routed).await?;
             } else if patch.entity_type.is_some() {
                 let known = match entities.take() {
@@ -389,9 +391,9 @@ impl WikiRouter<'_> {
             .current
             .as_ref()
             .and_then(|current| current.section.clone());
-        let topic = route.topic;
+        let (topic, replaces) = (route.topic, patch.replaces_description);
         self.edit_page(route, move |page| match &base {
-            Some(base) => page.merge_section(topic, heading, &text, base),
+            Some(base) => page.merge_section(topic, heading, &text, base, replaces),
             None => page.add_to_section(topic, heading, &text),
         })
         .await

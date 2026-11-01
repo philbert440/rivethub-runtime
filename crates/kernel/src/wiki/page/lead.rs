@@ -60,7 +60,7 @@ pub fn stable_summary(existing: &str, proposed: &str) -> String {
         one_lead(&old.lead)
     };
     let currently = match (new.currently, old.currently) {
-        (Some(new), Some(old)) if restates(&old, &new) => Some(old),
+        (Some(new), Some(old)) if rewords(&old, &new) => Some(old),
         (new, old) => new.or(old),
     };
     match currently {
@@ -71,7 +71,21 @@ pub fn stable_summary(existing: &str, proposed: &str) -> String {
 }
 
 #[must_use]
-pub fn steady_lead(existing: &str, proposed: &str) -> String {
+pub fn revised_summary(existing: &str, proposed: &str, replaces: bool) -> String {
+    let old = split_lead(existing);
+    let new = split_lead(proposed);
+    if !replaces || old.lead.is_empty() || new.lead.is_empty() || rewords(&old.lead, &new.lead) {
+        return stable_summary(existing, proposed);
+    }
+    let lead = one_lead(&new.lead);
+    match new.currently {
+        Some(currently) if fits(&lead, &currently) => format!("{lead} {currently}"),
+        Some(_) | None => lead,
+    }
+}
+
+#[must_use]
+pub fn steady_lead(existing: &str, proposed: &str, replaces: bool) -> String {
     let mut parts = blocks(proposed);
     let old = blocks(existing)
         .into_iter()
@@ -79,7 +93,7 @@ pub fn steady_lead(existing: &str, proposed: &str) -> String {
         .filter(|block| prose(block));
     match (old, parts.first_mut()) {
         (Some(old), Some(new)) if prose(new) => {
-            *new = stable_summary(&old, new);
+            *new = revised_summary(&old, new, replaces);
             parts.join("\n\n")
         }
         _ => proposed.trim().to_owned(),
@@ -98,7 +112,8 @@ fn one_lead(text: &str) -> String {
         .join("\n\n")
 }
 
-fn restates(old: &str, new: &str) -> bool {
+#[must_use]
+pub fn rewords(old: &str, new: &str) -> bool {
     let before = words(old);
     let after = words(new);
     overlaps(&after, &before, RESTATED_PERCENT)

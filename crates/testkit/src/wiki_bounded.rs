@@ -3,6 +3,7 @@ use kernel::BoxError;
 use kernel::topics::TopicKind;
 use kernel::wiki::builder::ExtractWiki;
 use kernel::wiki::builder::WikiWork;
+use kernel::wiki::merge::Correction;
 use kernel::wiki::merge::MergeInput;
 use kernel::wiki::merge::Merged;
 use kernel::wiki::merge::PageMerger;
@@ -24,6 +25,7 @@ type Found<T> = Result<T, Box<dyn std::error::Error>>;
 #[derive(Debug, Default)]
 pub struct RecordingMerger {
     pub seen: Mutex<Vec<MergeInput>>,
+    pub correction: Option<String>,
 }
 
 #[async_trait]
@@ -34,7 +36,12 @@ impl PageMerger for RecordingMerger {
             summary: format!("{} Merged.", input.summary),
             article: format!("{}\n\n{}", input.article, input.material.join("\n\n")),
             history: Some("Merged the new mention.".to_owned()),
+            replaces_description: false,
         })
+    }
+
+    async fn correct(&self, _correction: &Correction) -> Result<Option<String>, BoxError> {
+        Ok(self.correction.clone())
     }
 }
 
@@ -97,6 +104,30 @@ pub async fn a_sub_topic_rewrite_keeps_its_lead(
             .map(|section| section.body.as_str())
             .collect::<Vec<_>>(),
         vec!["Certificates are issued by step-ca. Currently they renew every day since the move."],
+    )?;
+    let corrector = RecordingMerger {
+        correction: Some("Certificates come from the mesh CA.".to_owned()),
+        ..RecordingMerger::default()
+    };
+    let router = stores.router_with(&corrector);
+    let fresh = (read.0.clone(), router.target(&read.0).await?);
+    let flagged = WikiPatch {
+        replaces_description: true,
+        ..patch(
+            "infra",
+            "Certificates",
+            "Certificates are issued by step-ca. Currently they renew every day since the move.",
+        )?
+    };
+    apply(&router, second, &fresh, vec![flagged]).await?;
+    let page = stores.pages.page(&infra).await?;
+    same(
+        "a description the summaries contradict is corrected",
+        page.sections
+            .iter()
+            .map(|section| section.body.as_str())
+            .collect::<Vec<_>>(),
+        vec!["Certificates come from the mesh CA. Currently they renew every day since the move."],
     )?;
     Ok(())
 }

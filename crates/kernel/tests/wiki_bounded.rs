@@ -422,21 +422,42 @@ fn a_section_lead_keeps_its_wording_until_its_facts_change() {
     let reworded =
         "RivetHub is the native desktop client. Currently, every node runs round 30.\n\nNew news.";
     assert_eq!(
-        steady_lead(section, reworded),
+        steady_lead(section, reworded, false),
         "Rivethub is the desktop app. Currently, round 30 is deployed to every node.\n\nNew news."
     );
     let moved = "RivetHub is the desktop client. Currently, round 31 is deployed to every node.";
     assert_eq!(
-        steady_lead(section, moved),
+        steady_lead(section, moved, false),
         "Rivethub is the desktop app. Currently, round 31 is deployed to every node."
     );
-    assert_eq!(steady_lead("### Note\n\nText.", reworded), reworded);
+    assert_eq!(steady_lead("### Note\n\nText.", reworded, false), reworded);
     let doubled = "Rivethub is the desktop app for workspace and memory.\n\nRivethub is the desktop \
         app for workspace, memory and chat. Currently, round 30 is out.";
     assert_eq!(
         kernel::wiki::page::lead::stable_summary(doubled, "Currently, round 31 is out."),
         "Rivethub is the desktop app for workspace and memory. Currently, round 31 is out."
     );
+}
+
+#[test]
+fn newer_sources_that_contradict_a_description_replace_it() {
+    use kernel::wiki::page::lead::{revised_summary, steady_lead};
+    let page = "The mesh CA is step-ca on datahub, issuing seven-day node certificates. \
+        Currently, renewals run nightly.";
+    let corrected = "The mesh CA is rh's built-in certificate authority, issuing seven-day node \
+        certificates. Currently, step-ca is retired.";
+    assert_eq!(revised_summary(page, corrected, true), corrected);
+    assert_eq!(
+        revised_summary(page, corrected, false),
+        "The mesh CA is step-ca on datahub, issuing seven-day node certificates. Currently, \
+        step-ca is retired."
+    );
+    let reworded = "On datahub, step-ca is the mesh CA and issues seven-day node certificates. \
+        Currently, renewals run nightly.";
+    assert_eq!(revised_summary(page, reworded, true), page);
+    let section = "Rivethub is the rivetOS desktop app (`apps/rivethub-web`).\n\nOld news.";
+    let native = "Rivethub is the native Rust desktop app in rivethub-desktop.\n\nNew news.";
+    assert_eq!(steady_lead(section, native, true), native);
 }
 
 #[test]

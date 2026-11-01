@@ -42,6 +42,7 @@ fn patch(slug: &str, article: &str) -> Result<PagePatch, chrono::ParseError> {
         add_citations: Vec::new(),
         add_sources: Vec::new(),
         allow_shrink: false,
+        replaces_description: false,
     })
 }
 
@@ -132,6 +133,28 @@ async fn an_unmerged_update_keeps_one_lead() -> TestResult {
         page.current_state,
         "AcmeKit ships on Fridays. Currently, 2.0 is out."
     );
+    let issued = PagePatch {
+        summary_delta: Some(
+            "AcmeKit certificates come from step-ca on datahub with nightly renewals.".to_owned(),
+        ),
+        ..patch("acmekit-ca", "Ships on Fridays.")?
+    };
+    apply(&root, issued).await?;
+    let corrected = PagePatch {
+        summary_delta: Some(
+            "AcmeKit certificates come from the built-in mesh authority. Currently, 2.1 is out."
+                .to_owned(),
+        ),
+        replaces_description: true,
+        ..patch("acmekit-ca", "Ships on Fridays.")?
+    };
+    let page = apply(&root, corrected).await?.page;
+    assert_eq!(
+        page.current_state,
+        "AcmeKit certificates come from the built-in mesh authority. Currently, 2.1 is out."
+    );
+    let archive = tokio::fs::read_to_string(root.join("archive/acmekit-ca/2026-10.1.md")).await?;
+    assert!(archive.contains("step-ca on datahub"));
     Ok(())
 }
 

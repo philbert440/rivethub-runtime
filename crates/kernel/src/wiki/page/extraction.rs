@@ -27,6 +27,8 @@ pub struct WikiPatch {
     pub history_entry: Option<WikiHistoryEntry>,
     #[serde(rename = "type")]
     pub entity_type: Option<String>,
+    #[serde(default)]
+    pub replaces_description: bool,
 }
 
 impl WikiPatch {

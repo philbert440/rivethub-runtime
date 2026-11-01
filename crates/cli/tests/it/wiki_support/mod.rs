@@ -49,6 +49,7 @@ pub(crate) fn patch() -> WikiPatch {
             body: "Decided to deploy blue-green.".to_owned(),
         }),
         entity_type: None,
+        replaces_description: false,
     }
 }
 

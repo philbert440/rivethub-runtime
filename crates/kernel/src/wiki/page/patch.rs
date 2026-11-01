@@ -45,6 +45,8 @@ pub struct PagePatch {
     pub add_sources: Vec<PageSource>,
     #[serde(default)]
     pub allow_shrink: bool,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub replaces_description: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, strum::Display, strum::EnumString)]

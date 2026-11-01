@@ -59,7 +59,27 @@ pub fn extraction_schema() -> schemars::Schema {
             object.insert(keyword.to_owned(), value.into());
         }
     }
+    require(&mut schema, "/$defs/WikiPatch", REPLACES_DESCRIPTION);
     schema
+}
+
+pub(crate) const REPLACES_DESCRIPTION: &str = "replaces_description";
+
+pub(crate) fn require(schema: &mut schemars::Schema, pointer: &str, field: &str) {
+    let required = schema
+        .pointer_mut(pointer)
+        .and_then(|value| value.as_object_mut())
+        .map(|object| {
+            object
+                .entry("required")
+                .or_insert_with(|| Vec::<String>::new().into())
+        })
+        .and_then(|value| value.as_array_mut());
+    if let Some(required) = required
+        && !required.iter().any(|known| known == field)
+    {
+        required.push(field.into());
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]

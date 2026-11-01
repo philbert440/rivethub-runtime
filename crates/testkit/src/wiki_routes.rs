@@ -225,6 +225,7 @@ pub(crate) fn patch(slug: &str, title: &str, summary: &str) -> Found<WikiPatch> 
         related: None,
         history_entry: None,
         entity_type: None,
+        replaces_description: false,
     })
 }
 

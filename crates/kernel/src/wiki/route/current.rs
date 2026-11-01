@@ -154,6 +154,7 @@ fn combined(patches: &[WikiPatch], merged: Merged, today: NaiveDate) -> Option<W
         .rev()
         .find_map(|patch| patch.history_entry.clone());
     merged.summary.trim().clone_into(&mut patch.summary);
+    patch.replaces_description = merged.replaces_description;
     patch.article = Some(merged.article.trim().to_owned()).filter(|article| !article.is_empty());
     patch.history_entry = merged
         .history

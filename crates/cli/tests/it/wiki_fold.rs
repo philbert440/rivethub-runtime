@@ -60,6 +60,7 @@ async fn seed_topic(
                     }],
                     add_sources: Vec::new(),
                     allow_shrink: false,
+                    replaces_description: false,
                 },
                 &summary_id,
                 None,

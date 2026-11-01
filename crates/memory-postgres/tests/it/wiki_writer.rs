@@ -51,6 +51,7 @@ fn patch(slug: &str) -> PagePatch {
             extra: wire::Extra::default(),
         }],
         allow_shrink: false,
+        replaces_description: false,
     }
 }
 

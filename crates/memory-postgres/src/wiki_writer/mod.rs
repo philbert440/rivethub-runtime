@@ -8,13 +8,15 @@ use chrono::{DateTime, Utc};
 use kernel::wiki::builder::WikiWriteError;
 use kernel::wiki::page::WikiSlug;
 use kernel::wiki::page::bound::{Archived, MergeBase, rebase};
-use kernel::wiki::page::lead::stable_summary;
+use kernel::wiki::page::lead::{revised_summary, split_lead};
 use kernel::wiki::page::{
     PagePatch, WikiPage, apply_patch, normalize_slug, parse_wiki_page, serialize_wiki_page,
 };
 use tokio::process::Command;
 
 use lock::WriterLock;
+
+const DESCRIPTION: &str = "Description";
 
 #[derive(Debug, Clone)]
 pub struct WikiRepository {
@@ -173,10 +175,11 @@ async fn apply_locked(
     let slug = WikiSlug::try_from(normalize_slug(&patch.slug))?;
     sync(root).await?;
     let previous = read_page(root, &slug).await?;
+    let replaces = patch.replaces_description;
     if let (Some(base), Some(current)) = (merge, previous.as_ref()) {
         patch.current_state = patch
             .current_state
-            .map(|state| stable_summary(&current.current_state, &state));
+            .map(|state| revised_summary(&current.current_state, &state, replaces));
         patch.article = patch
             .article
             .map(|article| rebase(&base.article, &article, &current.article));
@@ -185,7 +188,7 @@ async fn apply_locked(
         .filter(|page| !page.current_state.trim().is_empty())
         && let Some(delta) = patch.summary_delta.take()
     {
-        patch.current_state = Some(stable_summary(&current.current_state, &delta));
+        patch.current_state = Some(revised_summary(&current.current_state, &delta, replaces));
         patch.allow_shrink = true;
     }
     let at = patch.verified_at;
@@ -196,10 +199,25 @@ async fn apply_locked(
         patch.action
     );
     let mut page = apply_patch(previous.clone(), patch)?;
-    let mut paths = archive::bound(root, previous.as_ref(), &mut page, at, Vec::new()).await?;
+    let corrected = previous
+        .as_ref()
+        .and_then(|previous| replaced_description(&previous.current_state, &page.current_state))
+        .into_iter()
+        .collect();
+    let mut paths = archive::bound(root, previous.as_ref(), &mut page, at, corrected).await?;
     paths.insert(0, store_page(root, &page).await?);
     let git_sha = commit(root, &paths, &message).await?;
     Ok(AppliedPage { page, git_sha })
+}
+
+fn replaced_description(before: &str, after: &str) -> Option<Archived> {
+    let before = split_lead(before).lead;
+    let after = split_lead(after).lead;
+    (!before.is_empty() && before != after).then(|| Archived {
+        label: DESCRIPTION.to_owned(),
+        text: before,
+        notice: true,
+    })
 }
 
 async fn fold_locked(

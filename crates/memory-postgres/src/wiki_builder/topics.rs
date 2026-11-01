@@ -73,6 +73,7 @@ pub(super) async fn apply(
         add_citations,
         add_sources,
         allow_shrink: false,
+        replaces_description: patch.replaces_description,
     };
     let merge = merge_base(source.merged, &key, note_entry.is_some(), &mut page_patch);
     if let Some(entry) = note_entry {
@@ -307,6 +308,7 @@ mod tests {
             related: None,
             history_entry: None,
             entity_type: None,
+            replaces_description: false,
         })
     }
 

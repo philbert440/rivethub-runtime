@@ -1441,6 +1441,18 @@ fails to connect at all (refused, no route to host, the name not resolving, the 
 as the server comes back, spending no attempt and counting no failure, where before only a refused connection did and
 a datahub network drop on 2026-10-31 failed and flagged 30 jobs (20 wiki extractions in one minute). A call that
 connected and then broke stays a transport failure and fails the job as before.
+(119) A description the sources contradict is replaced (Phil, 2026-11-01; QA): a page summary, a sub-topic section's
+first paragraph and an entity merge keep their description word for word (note 108) unless the extraction or merge
+answer sets `replaces_description` (the extraction schema's patch and the merge answer must give it; a patch without it reads as false), which
+the prompts allow only when newer summaries show the description is wrong: something it names was replaced, renamed,
+moved or retired. Even then the description changes only when the new one is not a rewording of the old (80% of its
+words, every number among them, already there); a rewording keeps the old text, so a careless flag causes no churn.
+When a topic's patch is flagged but its description only rewords the old one (models tend to keep the lead and put the
+change in the "Currently" sentence), the wiki builder asks the model once more with just the old description and the
+summaries (`{description, summaries}` in, `{description}` out) to correct what they contradict, and that description
+replaces the old one under the same rule; a failed or empty answer keeps the extraction's text.
+The replaced description is archived on Postgres under "Description", the summaries that changed it are cited as for
+any write, and SQLite applies the same rule to its stored summary.
 
 ## 4. Gaps to close before building the affected slice
 

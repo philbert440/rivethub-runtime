@@ -85,13 +85,20 @@ impl TopicPage {
         self.sections.push(section);
     }
 
-    pub(crate) fn merge_section(&mut self, topic: TopicId, heading: &str, body: &str, base: &str) {
+    pub(crate) fn merge_section(
+        &mut self,
+        topic: TopicId,
+        heading: &str,
+        body: &str,
+        base: &str,
+        replaces: bool,
+    ) {
         if let Some(section) = self
             .sections
             .iter_mut()
             .find(|section| section.topic == Some(topic))
         {
-            let steady = steady_lead(&section.body, body);
+            let steady = steady_lead(&section.body, body, replaces);
             section.body = rebase(base, &steady, &section.body);
             return;
         }
