@@ -15,7 +15,7 @@ use wire::harness::{HarnessCode, HarnessEvent, RosterCommand, SessionDriver};
 use super::first_param;
 use crate::Gateway;
 use crate::error::ApiError;
-use crate::history::{Resolved, authorize};
+use crate::history::{Resolved, authorize, live_summary};
 use crate::routes::sessions::{SocketError, send};
 use crate::tenancy::UserId;
 
@@ -323,6 +323,20 @@ impl Attached<'_> {
                 send(&mut self.socket, event).await?;
             }
         }
+        if let Some(waiting) = self.waiting() {
+            send(&mut self.socket, &waiting).await?;
+        }
         Ok(true)
+    }
+
+    fn waiting(&self) -> Option<HarnessEvent> {
+        let live = live_summary(self.gateway, &self.resolved.native)?;
+        (live.blocked == Some(true)).then(|| HarnessEvent::SessionUpdated {
+            session_id: live.session_id,
+            status: live.status,
+            previous_session_id: None,
+            supersedes: None,
+            blocked: Some(true),
+        })
     }
 }
