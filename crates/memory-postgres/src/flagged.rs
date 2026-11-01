@@ -153,25 +153,34 @@ pub(crate) async fn flag_stuck(pool: &PgPool, after: u32) -> Result<u64, Error> 
 }
 
 const FLAGGED: &str = "
-    SELECT f.id, f.task, f.job_key, COALESCE(c.title, w.title) AS subject, f.payload,
-           f.last_error, f.failures, f.first_failed_at, f.last_failed_at, f.flagged_at
-      FROM rh_flagged_jobs f
-     CROSS JOIN LATERAL (
-           SELECT CASE WHEN named.message ~* '^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$'
-                       THEN named.message::uuid END AS message,
-                  CASE WHEN named.conversation ~* '^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$'
-                       THEN named.conversation::uuid END AS conversation
-             FROM (SELECT COALESCE(f.payload->>'messageId',
-                                   CASE WHEN f.payload->>'targetTable' = 'ros_messages'
-                                        THEN f.payload->>'targetId' END) AS message,
-                          f.payload->>'conversationId' AS conversation) AS named) AS target
-      LEFT JOIN ros_messages m ON m.id = target.message
-      LEFT JOIN ros_conversations c ON c.id = COALESCE(target.conversation, m.conversation_id)
-      LEFT JOIN ros_wiki_topics w
-             ON w.slug = CASE WHEN f.payload->>'targetTable' = 'ros_wiki_topics'
-                              THEN f.payload->>'targetId' END
-     WHERE f.dismissed_at IS NULL
-     ORDER BY f.last_failed_at DESC, f.id";
+    WITH open AS MATERIALIZED (
+        SELECT f.id, f.task, f.job_key, f.payload, f.last_error, f.failures, f.first_failed_at,
+               f.last_failed_at, f.flagged_at,
+               CASE WHEN target.message ~* '^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$'
+                    THEN target.message::uuid END AS message,
+               CASE WHEN target.conversation ~* '^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$'
+                    THEN target.conversation::uuid END AS conversation,
+               target.page
+          FROM rh_flagged_jobs f
+         CROSS JOIN LATERAL (
+               SELECT COALESCE(f.payload->>'messageId',
+                               CASE WHEN f.payload->>'targetTable' = 'ros_messages'
+                                    THEN f.payload->>'targetId' END) AS message,
+                      f.payload->>'conversationId' AS conversation,
+                      CASE WHEN f.payload->>'targetTable' = 'ros_wiki_topics'
+                           THEN f.payload->>'targetId' END AS page) AS target
+         WHERE f.dismissed_at IS NULL
+    ), placed AS MATERIALIZED (
+        SELECT o.*, COALESCE(o.conversation,
+                   (SELECT m.conversation_id FROM rh_messages m WHERE m.id = o.message)) AS owner
+          FROM open o
+    )
+    SELECT p.id, p.task, p.job_key,
+           COALESCE((SELECT c.title FROM rh_conversations c WHERE c.id = p.owner),
+                    (SELECT w.title FROM rh_wiki_topics w WHERE w.slug = p.page)) AS subject,
+           p.payload, p.last_error, p.failures, p.first_failed_at, p.last_failed_at, p.flagged_at
+      FROM placed p
+     ORDER BY p.last_failed_at DESC, p.id";
 
 #[async_trait]
 impl FlaggedJobs for PostgresMemory {

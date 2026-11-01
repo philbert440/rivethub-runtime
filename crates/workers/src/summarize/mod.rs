@@ -62,8 +62,13 @@ pub async fn handle_summarize(
     let request = sweep::read_summarize(payload)?;
     let trigger = sweep::effective_trigger(request.trigger_type);
     let Some(mut window) = env.store.conversation(request.conversation_id).await? else {
-        return Err(WorkerError::ConversationMissing {
-            id: request.conversation_id,
+        tracing::info!(
+            "conversation {} is gone — dropping its summary job",
+            id_prefix(request.conversation_id)
+        );
+        return Ok(SummarizeOutcome {
+            summaries: 0,
+            reenqueued: false,
         });
     };
     if window

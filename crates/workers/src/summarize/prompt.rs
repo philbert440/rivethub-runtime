@@ -96,13 +96,27 @@ fn header(head: &ConversationHead, tail: &[(&str, String)]) -> String {
 
 fn message_block(index: usize, message: &WindowMessage) -> Result<String, WorkerError> {
     let shown = display_index(index)?;
-    Ok(format!(
+    let mut block = format!(
         "[#{shown:02} {} {}/{}]\n{}",
         prompt_time(message.created_at),
         message.agent,
         message.role,
         message.content
-    ))
+    );
+    if let Some(tool) = &message.tool {
+        push_tool_line(&mut block, "input", &tool.input);
+        push_tool_line(&mut block, "result", &tool.result);
+    }
+    Ok(block)
+}
+
+fn push_tool_line(block: &mut String, label: &str, text: &str) {
+    if !text.is_empty() {
+        block.push('\n');
+        block.push_str(label);
+        block.push_str(": ");
+        block.push_str(text);
+    }
 }
 
 fn node_block(index: usize, kind: &str, node: &SummaryNode) -> Result<String, WorkerError> {
