@@ -88,6 +88,7 @@ pub use summary::SummaryStore;
 pub use summary::SummaryStoreError;
 pub use summary::SummaryWatch;
 pub use summary::SummaryWrite;
+pub use summary::ToolUse;
 pub use summary::WindowMessage;
 pub use summary::WrittenSummary;
 pub use tags::{

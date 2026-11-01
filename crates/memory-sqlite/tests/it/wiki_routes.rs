@@ -131,6 +131,17 @@ async fn an_entity_type_is_found_by_its_whole_path() -> TestResult {
 }
 
 #[tokio::test]
+async fn an_entity_goes_by_its_names_never_by_a_description() -> TestResult {
+    let (_directory, store, job) = seeded().await?;
+    testkit::wiki_mentions::an_entity_goes_by_its_names_never_by_a_description(
+        stores(&store),
+        &job,
+    )
+    .await?;
+    Ok(())
+}
+
+#[tokio::test]
 async fn an_unfiled_session_waits_until_it_is_filed() -> TestResult {
     let (_directory, store, job) = seeded().await?;
     wiki_routes::an_unfiled_session_waits_until_it_is_filed(stores(&store), &job).await?;

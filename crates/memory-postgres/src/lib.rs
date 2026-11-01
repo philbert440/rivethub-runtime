@@ -23,6 +23,7 @@ pub mod read;
 pub mod search;
 mod search_cap;
 mod search_complete;
+mod search_content;
 mod search_details;
 mod search_recent;
 mod search_sql;

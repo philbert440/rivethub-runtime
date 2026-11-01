@@ -361,7 +361,7 @@ the categorizer, they leave the old topic's page for the new one (and so does th
 also patched the old page itself), and taken out of a topic they wait until it is
 filed again; a child follows its parent, and a delegated task its parent unless you placed it; an entity named by one session waits as a candidate until
 a second session names it. A candidate is dropped only after its patch is written to the entity's page and its summary
-cited there, so a session that names an existing entity also writes and cites the candidates still held for it. `WikiPatch.kind` (person, host or tool) is replaced by `type`, and the extraction input lists
+cited there, so a session that names an existing entity also writes and cites the candidates still held for it. An entity goes by its name, never a description (QA sweep, 2026-11-01): a trailing qualifier in parentheses is dropped, and a title over four words or 40 characters, or holding a file name, a path, a hex id, a code symbol, prose punctuation or a joining word (and, on, for, of, via…), names no entity; a host's name is a hostname, a domain's a domain name and a repository's `name` or `owner/name`. A patch finds its entity by name, alias or former name, ignoring case and punctuation and preferring an entity of its own type; candidates held under any of its names count together, a new entity keeps the other valid names its candidates went by as aliases, and an existing entity learns a patch's other valid names unless another entity goes by them. `WikiPatch.kind` (person, host or tool) is replaced by `type`, and the extraction input lists
 the type paths as `types`. Postgres migration `0032_entities.sql` and SQLite schema 20 add the kind, the tombstones and the
 candidate and deferred tables; they make People and Hosts types, rename Tools to Software, turn the topics under them into
 entities (dropping the filings that pointed at them and unbinding the type pages), and seed the types Agents, Hardware,
@@ -1324,6 +1324,39 @@ or working directory), send `{type: "topic.changed", v: 1, topic}` to every unfi
 socket on that node, `topic` being the topic's id. It names no content: a client reads the topic or its decisions again
 through the routes, under their own rules. Writes through another node's gateway to a shared database send nothing
 here. The body is `wire::gateway::topics::TopicChangedNotice` in `contract/sent.schema.json`.
+
+(108) One writer per page route (Phil, 2026-11-01; QA memory sweep): an extract-wiki job whose summary routes to a
+topic page leases its route, the page or one sub-topic's section on it, before it reads the route's current text, and
+holds the lease through the extraction call and the write. On Postgres the lease is a session advisory lock (key pair
+`0x77696b69`, `hashtext(<page slug>[#<topic id>])`) on a connection that is closed when the lease ends, so a worker
+that dies frees it. A job whose route another writer holds goes back to the queue without spending an attempt, to run
+no sooner than 30 s later; while it waits it can join the next batch for its route, because note 101's coalescing
+takes queued jobs whatever their `run_at`, and claiming a job by id ignores `run_at`. A route's queued summaries are
+so extracted one batch at a time, each reading what the last one wrote, instead of several writers rewriting one
+section from the same text and rebasing onto each other. Rebase (note 100): a block the other write added is kept only
+when fewer than 60% of its words (the archive rule's words) are already in this rewrite, so another writer's rewording
+of a paragraph this rewrite also rewrote is replaced, not kept beside it; recompile's "their new blocks first" follows
+the same rule. Every page write (Postgres and SQLite) keeps one copy of a repeated paragraph in the article and in
+each section: a later exact repeat of 40 or more bytes is dropped, and so is a later prose paragraph of 12 or more words
+80% of whose words an earlier prose paragraph in the same part already holds (a lead repeated with another "Currently"
+sentence); headings are never dropped, and lists, tables, quotes and code only as exact repeats. Summaries: the summarizer's prompts ask for the work itself (the leaf prompt in the third person) and
+never a description of the batch: no batch, leaf or message numbers, ids, channel names, timestamps or tool-call
+tallies. The leaf summarizer's input shows each tool call's input (first 600 bytes) and output (first 300 bytes) under
+its "[tool call] <name>" line, so a batch of tool calls is summarized by what they did. A branch or root summary cut off
+at its token limit is retried over half as many children, and a summarize job whose conversation was deleted while it
+waited completes without a summary. Stores without concurrent writers (SQLite) take the lease at once.
+
+(109) Search hits that hold the match (Phil, 2026-11-01; QA memory sweep): `GET /api/memory/search` with
+`scope=messages` and no `mode` is a transcript search and searches text (mode `fts`): every hit is a message that holds
+the query (a full-text match, or a literal match when full text finds none), ranked with the query's meaning as
+before; a message found by meaning alone is no longer answered there. Other scopes without a mode stay hybrid, and an
+explicit `mode` is honoured. On Postgres a text search (`mode=fts`) answers a message whose text is only reasoning (it
+starts `[thinking]`) after every message that holds what was said, and ranks only the 5,000 newest matches when
+Postgres estimates more, as hybrid's text arm does (note 98). A literal (trigram) match in a search that leaves out tool
+rows (`exclude_roles` holding `tool`, or a `role` other than `tool`) looks in message text only: only tool rows carry a
+result, and the few older rows that carry one repeat it in their text. A literal with no letters is matched with
+`LIKE`, the same match without case folding. Each search arm reads only a hit's identity and ranking columns; the hits
+answered read their text afterwards, one query per table. SQLite is unchanged.
 
 ## 4. Gaps to close before building the affected slice
 
