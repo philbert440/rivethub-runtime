@@ -1298,6 +1298,18 @@ a config that binds off loopback without TLS stops before anything starts, namin
 embedder, and serves B7 on stdio only (`rh local` serves the network transports); delegation and plug-in tools reach
 the running `rh local` as they reach a gateway.
 
+(109) Search hits that hold the match (Phil, 2026-11-01; QA memory sweep): `GET /api/memory/search` with
+`scope=messages` and no `mode` is a transcript search and searches text (mode `fts`): every hit is a message that holds
+the query (a full-text match, or a literal match when full text finds none), ranked with the query's meaning as
+before; a message found by meaning alone is no longer answered there. Other scopes without a mode stay hybrid, and an
+explicit `mode` is honoured. On Postgres a text search (`mode=fts`) answers a message whose text is only reasoning (it
+starts `[thinking]`) after every message that holds what was said, and ranks only the 5,000 newest matches when
+Postgres estimates more, as hybrid's text arm does (note 98). A literal (trigram) match in a search that leaves out tool
+rows (`exclude_roles` holding `tool`, or a `role` other than `tool`) looks in message text only: only tool rows carry a
+result, and the few older rows that carry one repeat it in their text. A literal with no letters is matched with
+`LIKE`, the same match without case folding. Each search arm reads only a hit's identity and ranking columns; the hits
+answered read their text afterwards, one query per table. SQLite is unchanged.
+
 ## 4. Gaps to close before building the affected slice
 
 - MCP `tools/list` and sample-call recording (B7); CLI golden transcripts (B9); ACP conformance runs against installed

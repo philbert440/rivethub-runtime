@@ -199,10 +199,10 @@ async fn search(
         expand: params.expand,
         synthesize: params.synthesize,
         text: text.clone(),
-        mode: memory_body::search_mode(match params.mode {
-            Some(mode) => mode,
-            None => SearchMode::Hybrid,
-        }),
+        mode: memory_body::search_mode(params.mode.unwrap_or(match scope {
+            MemoryScope::Messages => SearchMode::Fts,
+            MemoryScope::Summaries | MemoryScope::Both => SearchMode::Hybrid,
+        })),
         scope: memory_body::memory_scope(scope),
         agent: params.agent,
         role: params.role.map(RoleParam::get),
