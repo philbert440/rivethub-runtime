@@ -331,6 +331,7 @@ fn messages(start: DateTime<Utc>, count: usize) -> Vec<WindowMessage> {
                 Role::Assistant
             },
             content: format!("message number {index} about deploying the AcmeKit service"),
+            tool: None,
             created_at: start
                 .checked_add_signed(Duration::minutes(i64::try_from(index).expect("index")))
                 .expect("message time"),
