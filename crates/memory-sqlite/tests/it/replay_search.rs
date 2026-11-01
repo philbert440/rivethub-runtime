@@ -405,6 +405,7 @@ fn expect_hits(
         .cloned()
         .map(|hit| MemorySearchResult {
             session_id: None,
+            title: None,
             ..hit
         })
         .collect();

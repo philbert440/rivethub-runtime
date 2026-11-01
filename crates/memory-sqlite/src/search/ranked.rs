@@ -85,10 +85,16 @@ pub(super) fn execute(
         .map(|(row, _)| row.candidate.clone())
         .collect();
     bump(conn, &reinforced, &crate::time::stamp(plan.now))?;
+    let titles = super::titles::session_titles(
+        conn,
+        selected
+            .iter()
+            .filter_map(|(row, _)| row.candidate.conversation()),
+    )?;
     let results = selected
         .into_iter()
         .map(|(row, score)| {
-            let mut result = row.candidate.into_result();
+            let mut result = row.candidate.into_result(&titles);
             result.relevance_score = score;
             result
         })

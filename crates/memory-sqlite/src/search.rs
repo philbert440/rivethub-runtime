@@ -28,6 +28,7 @@ pub(crate) mod embed;
 mod fts;
 pub(crate) mod functions;
 mod ranked;
+mod titles;
 pub(crate) use fts::fts_or;
 
 const KEYWORD_EFFECT: &str = "Keyword / FTS ranking only \u{2014} not meaning-based.";
@@ -260,7 +261,11 @@ fn execute(conn: &mut Connection, plan: &Plan) -> Result<SearchOutcome, SqliteEr
         selected.as_slice()
     };
     bump(conn, reinforced, &time::stamp(plan.now))?;
-    let results = selected.into_iter().map(Candidate::into_result).collect();
+    let titles = titles::session_titles(conn, selected.iter().filter_map(Candidate::conversation))?;
+    let results = selected
+        .into_iter()
+        .map(|row| row.into_result(&titles))
+        .collect();
     Ok(SearchOutcome {
         results,
         ..SearchOutcome::default()
@@ -422,8 +427,20 @@ impl Candidate {
         }
     }
 
-    fn into_result(self) -> MemorySearchResult {
+    fn conversation(&self) -> Option<&str> {
+        match &self.kind {
+            Kind::Message {
+                conversation_id, ..
+            } => Some(conversation_id),
+            Kind::Summary {
+                conversation_id, ..
+            } => conversation_id.as_deref(),
+        }
+    }
+
+    fn into_result(self, titles: &BTreeMap<String, String>) -> MemorySearchResult {
         let relevance_score = relevance(self.rank);
+        let title = self.conversation().and_then(|id| titles.get(id)).cloned();
         match self.kind {
             Kind::Message {
                 role,
@@ -440,7 +457,7 @@ impl Candidate {
                 relevance_score,
                 created_at: self.created_at,
                 session_id,
-                title: None,
+                title,
             },
             Kind::Summary { session_id, .. } => MemorySearchResult {
                 chunk: None,
@@ -452,7 +469,7 @@ impl Candidate {
                 relevance_score,
                 created_at: self.created_at,
                 session_id,
-                title: None,
+                title,
             },
         }
     }
