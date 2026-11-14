@@ -11,6 +11,7 @@ mod digest;
 pub mod dump;
 pub mod embed;
 mod embedding_store;
+mod entity_builder;
 pub mod error;
 mod facts;
 mod flagged;
@@ -85,7 +86,7 @@ pub use queue::PostgresQueue;
 use sqlx::PgPool;
 use sqlx::postgres::PgPoolOptions;
 
-pub const SCHEMA_VERSION: i64 = 62;
+pub const SCHEMA_VERSION: i64 = 71;
 pub(crate) const ACQUIRE_TIMEOUT: Duration = Duration::from_secs(3);
 
 #[derive(Debug)]
