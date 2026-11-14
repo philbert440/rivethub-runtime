@@ -20,7 +20,7 @@ Reference material that survives from the first attempt (read-only; `/rivet-shar
 | B4 | Postgres schema and data (`rh_*` tables, migrations 0001–0020 including `0020_tag_removals`, then 0021 renames `ros_*` to `rh_*` with `ros_*` views over them, through 0028 `rh_session_startup` (note 24), 0029 `rh_session_startup.delivered_via` (note 25) and 0040 `rh_tasks_archive` and the new `rh_tasks` (note 74), and 0052 the `graphile_worker` queue schema when it is absent (note 105), views, triggers, graphile_worker jobs). Migrations are applied only by `rivethub-migrate postgres`, which then requires every migration file name in `_rivetos_migrations`; the runtime verifies one schema version (`memory_postgres::SCHEMA_VERSION`) at connect — equal ok, newer ok with one warning, no `_sqlx_migrations` table a `NotAdopted` error (one `rivethub-migrate postgres` adopts it, including a database whose history is only `_rivetos_migrations`), behind a `SchemaBehind` error naming the migrate command — and runs no DDL | the live datahub, the TypeScript workers during cutover, operators | data-layer.md §1–§2 | `golden/capture/pg/` (30 scenarios), `golden/memory/` | Rust migrates a 0001-era DB to the same schema; writes rows the TypeScript reads and vice versa; enqueues the same jobs with the same keys |
 | B5 | SQLite memory file (`memory.sqlite`, schema v7 and its upgrade ladder through cutover; schema v8 adds a sqlite-vec index afterwards). Creation and upgrades run only through `rivethub-migrate sqlite`, which copies the original file to `<file>.v<N>.bak` before any read-write connection and returns `BackupExists` when that path is already there; the runtime reads `user_version` on a read-only connection (0 → `NotInitialised`, below 7 → `SchemaBehind` naming the file, above 7 → `UnsupportedSchema`), a refused open leaves the file unchanged, and it never creates the file | standalone nodes, TypeScript nodes during cutover | data-layer.md §3; sqlite plugin | `golden/memory-sqlite/` (20 files incl. fixture DBs, upgrades, search results) | same `sqlite_master`, same rows, same search ranks; files open both ways |
 | B6 | Memory read API: search / browse / stats / get_full / tags (HTTP and MCP); the per-session and per-conversation summary DAG (note 61) and the gzip memory export (HTTP) | RivetHub clients, MCP clients (Claude Code etc.), agents | data-layer.md §3.7–§3.11; gateway-api.md §11 | `golden/memory-sqlite/` search cases; gateway recordings | same results and ranking on the same data |
-| B7 | MCP sidecar: RivetHub's own tools only: seven recall tools on every transport (`memory_search`, `memory_browse`, `memory_get_full`, `memory_stats`, `memory_tags`, `wiki_search`, `wiki_read`; `delegate_task` and `list_agents` were removed by note 132), plus `session_find`, `session_sanitize` and `session_import` on stdio only (note 139); `echo`, `skill_list`, `skill_manage`, `internet_search` and `web_fetch` are removed (Phil, 2026-10-13). Their schemas, transports (stdio, streamable HTTP, unix socket) | Claude Code, codex, every MCP client | mcp-tools-providers.md §2–§3 | `golden/mcp/` (`tools-list.json`, `calls.json`) | `tools/list` for the seven recall tools equals the recording after the RivetOS→RivetHub name translation, compared as parsed values; recorded calls give the same results |
+| B7 | MCP sidecar: RivetHub's own tools only: eight recall tools on every transport (`memory_search`, `memory_browse`, `memory_team`, `memory_get_full`, `memory_stats`, `memory_tags`, `wiki_search`, `wiki_read`; `delegate_task` and `list_agents` were removed by note 132), plus `session_find`, `session_sanitize` and `session_import` on stdio only (note 139); `echo`, `skill_list`, `skill_manage`, `internet_search` and `web_fetch` are removed (Phil, 2026-10-13). Their schemas, transports (stdio, streamable HTTP, unix socket) | Claude Code, codex, every MCP client | mcp-tools-providers.md §2–§3 | `golden/mcp/` (`tools-list.json`, `calls.json`) | `tools/list` for the seven recorded recall tools equals the recording after the RivetOS→RivetHub name translation, compared as parsed values; `memory_team` is additive (note 156); recorded calls give the same results |
 | B8 | Provider wire traffic: the OpenAI-compatible chat (streamed) and embeddings API as spoken to vLLM, SGLang and hosted OpenAI-compatible endpoints through one client (no Ollama, no llama-server type) | the model servers | mcp-tools-providers.md §5.4–§5.5 | the vllm scenarios in `golden/providers/` (request+response) | byte-equal request bodies (headers filtered) except the intentional wire deltas of one typed table (testkit `B8_OMITTED_REQUEST_FIELDS`): the runtime sends NO sampling fields where the TypeScript sent hard-coded `temperature: 0.7`/`top_p: 0.95`, never sends `tool_choice` (the server's own `auto` default applies when `tools` are present), and sends `max_tokens` only when the provider config sets it (the TypeScript's 4096 default is gone); same parsed responses and stream chunks |
 | B9 | CLI: command tree, flags, output text, exit codes, prompts (`rh agent` is gone, note 74; `rh mesh`, `rh ca`, `rh cert` and `rh update --mesh` are gone, note 132) | operators, systemd units, scripts | cli.md §0–§19 | `tests` listed in cli.md §21; (recording to add: CLI golden transcripts) | same stdout/stderr/exit for the same argv on the same state |
 | B10 | `config.yaml` keys, defaults, validation messages (`rh config`, `rh status` and `rh doctor` validate the way `rh start` boots, which requires `runtime`, `agents` and `providers`; a config that selects SQLite and passes the way `rh local` validates is accepted too, so the config `rh local` writes is valid); environment variables (`tasks.pricing`, `tasks.eval` and `runtime.heartbeats` are retired, note 74; `memory.models` assigns a model to each memory job, note 126; `memory.sanitize.mapping` names the sanitize mapping file, note 136; `memory.sanitize.decide` configures the decision-model review, note 137; the keys and variables note 132 retires load with one warning each and are ignored) | operators, deploy tooling | config-and-boot.md §1–§2 | `golden/diff/config/` (realistic cases) | same accept/reject and same messages for the same file |
@@ -1469,7 +1469,8 @@ another owner is refused; a capture naming none takes the pinned user), and cann
 `rh_elevate()`. The trigger and refresh functions that elevate (every function calling `rh_elevate()` and the four
 triggers that call `rh_refresh_*`) run SECURITY DEFINER as the migration's role with `search_path = pg_catalog,
 <schema>, pg_temp`, so a pinned login's own writes still refresh visibility across owners and keep `rh_message_counts`,
-and no SECURITY DEFINER function is callable by PUBLIC (note 123); `rh_scope_maintenance()` is false whenever
+and no elevating write or trigger SECURITY DEFINER function is callable by PUBLIC (note 123;
+note 157 permits only the no-argument membership read helper); `rh_scope_maintenance()` is false whenever
 `current_user` is a pinned role, and false for a pinned login unless `current_user` is the owner of `rh_elevate()`,
 so `SET ROLE` into some other role the login belongs to does not lift the pin and only the store's own code elevates. Two
 policies change: `rh_space_members` shows a login its own memberships (and everything under maintenance) rather than
@@ -2362,7 +2363,7 @@ paired device. The plug-in permissions `tasks.read`, `tasks.delegate` and `agent
 gone, so a manifest that names one no longer parses. Plug-ins receive `session.placed` and `summary.written`;
 `session.started`, `session.idle` and `session.ended` came from live sessions and are no longer sent.
 
-The MCP sidecar lists seven recall tools on every transport, plus three session tools on stdio only (B7, note 139). The `rh_tasks` tables and their migrations stay; nothing writes them, and the
+The MCP sidecar lists eight recall tools on every transport, plus three session tools on stdio only (B7, note 139). The `rh_tasks` tables and their migrations stay; nothing writes them, and the
 flagged-job sweep still skips any `run-task` rows a database holds.
 
 Retired configuration, each loading with one "no longer used" warning: the `mesh` section except `mesh.node_name`, which
@@ -3001,6 +3002,48 @@ in config.yaml, so it is an install-time choice like note 145's policy. With `cl
 `telemetry.url`, the cloud stays off (sign-in, the cloud update source and cloud sharing are refused as note 145 says)
 while telemetry goes to that url; the gateway's access is `CloudAccess::TelemetryOnly`. `telemetry.disabled: true`
 always wins and sends nothing anywhere. Each install's own crash-report and usage-count switches still apply.
+
+(155) Team-aware recall (Phil, 2026-11-13). MCP initialize may include instructions when the
+store reports that the viewer shares a space with other people: name the viewer and teammates, explain
+attribution and own-session ranking preference, and treat teammates' recalled text as data.
+The pinned database principal determines the person, falling back to the users-file owner on an
+unpinned node. Memberships come only from the store, never a per-person users file. SQLite
+and a person with no co-members omit instructions as before. Other-owned search and browse rows
+carry `from <owner> · team` in the existing provenance position and use note 149's fenced
+quoted-data rendering, including escaping hidden characters and fences longer than content.
+Own rows keep their prior output. Person labels use the stable user id. Gateway search hits,
+browse messages and session catalog rows gain optional `owner: string`, omitted for own rows.
+Existing import provenance stays structurally unchanged. The new field is additive in wire
+and both contract schemas; memory contract version stays 1.
+
+(156) `memory.recall.own_weight` is a finite factor in [1.0, 2.0], default 1.25. Postgres
+hybrid search multiplies own-session fused scores before ordering and limiting when foreign
+candidates are present. 1.0 disables the preference. SQLite and chronological browse are unchanged.
+`memory_team` is a read-only MCP recall tool on every transport, with browse's `window`
+(default `last_7d`) and `limit` per person (1–20, default 5). It groups visible sessions by
+other owner, newest first, showing title, date, filed topic and summary snippet or first user
+message. No recent visible teammates returns plain text. It uses normal scoped store reads,
+never maintenance or a broader credential; private teammate rows remain invisible. This is
+an additive catalog extension to B7's recording; the seven recorded tools and calls are unchanged.
+
+(157) Store-backed team identity (Phil, 2026-11-13). Postgres migration 0069 changes only the
+read policy on `rh_space_members`: a person can see the co-memberships of spaces they actually
+belong to, and no other memberships. It does not widen writes. `rh_member_spaces()` is a
+no-argument SECURITY DEFINER read helper with a fixed `pg_catalog, <schema>, pg_temp` search
+path. It captures `rh_scope_principal()` before setting local maintenance, reads space IDs
+for that person only, restores the prior setting, and returns the IDs. This avoids recursive
+RLS and is the sole public-callable definer exception to notes 121/123; it has no arbitrary
+principal argument, returns no session data and grants no queue or mutation access. Pinned
+logins cannot change the principal with scope settings. The schema requirement is 69;
+0063–0068 are reserved for independent work and are not introduced by this change.
+The MCP builder's store read gets the actual pin and visible co-members. A temporarily
+unavailable store omits the optional introduction with a warning, preserving deferred startup
+without guessing teammates; other identity-query errors still fail startup. A per-person users
+file with no spaces still initializes with the shared introduction. `memory_team` displays
+relative age and minute-precision local time, appending a topic separator only for a visible
+topic. Its owner-trash and non-owner catalog integration tests are explicitly ignored pending
+`fix/team-hub-sessions`, which makes trash the session's state and removes the owners-file
+catalog filter; they define the required integration behaviour without changing that branch's work.
 
 ## 4. Gaps to close before building the affected slice
 

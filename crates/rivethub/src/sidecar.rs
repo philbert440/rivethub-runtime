@@ -215,7 +215,11 @@ async fn run_server(
     let folder = crate::composition::plugins::tools_folder(config, env)?;
     let plugins =
         mcp::plugins::SocketTools::new(folder.join("tools.sock"), folder.join("tools.token"))?;
+    let identity = crate::composition::identities::load(config, env).await?;
+    let viewer = identity.primary();
     let mut builder = mcp::Server::builder(memory, false, shutdown.child_token())
+        .store_identity(viewer.as_str())
+        .await?
         .display_zone(display_zone(env))
         .plugins(Arc::new(plugins));
     if let Some(sessions) = served.sessions {
